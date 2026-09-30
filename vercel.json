@@ -27,7 +27,7 @@
   "rewrites": [
     {
       "source": "/token",
-      "destination": "/launch/index.html"
+      "destination": "/launch/"
     }
   ]
 }
