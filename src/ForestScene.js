@@ -1,0 +1,979 @@
+/**
+ * Forest scene: the playable core.
+ *
+ * A hunter walks a real world. Walking over a dig node starts a hunt, the
+ * roll comes from the shared hunt engine (the same module the contract
+ * mirrors), and the find animates out of the ground. Nothing here touches a
+ * contract -- settlement is a separate concern, deliberately.
+ */
+import Phaser from 'phaser';
+import { buildAllTextures, PAL, rng } from './art.js';
+import { rollHunt, RARITY_NAME } from './engine.js';
+import {
+  newToolbelt, activeTool, consumeUse, claimTool, canClaim,
+  repairTool, canRepair, equip, toolCost, repairCost, durabilityOf,
+  huntCostWei, expectedHuntWei, roman, fmt, eth, MAX_TIER,
+} from './tools.js';
+import { DROP_TABLE, PRICE } from './engine.js';
+import {
+  newSeasonRecord, recordHunt, rank as rankSeason, topN, standing,
+  seasonClock, roiPct, eth as fmtEth, onRoiBoard, shortOfFloor,
+  TOP_N,
+} from './season.js';
+import {
+  initCommitment, commitSeason, verifySeason, seasonState, rollSeason,
+} from './commitment.js';
+import sha3 from 'js-sha3';
+
+const TILE = 32;
+const WORLD_W = 40, WORLD_H = 30;
+const MOVE_SPEED = 150;
+
+// World sprites y-sort by using their own y as depth, so any UI must sit
+// above WORLD_H * TILE. See openBelt().
+const UI_DEPTH = 100_000;
+
+/** Register the walk animations from the 4x4 hunter sheet. */
+export function registerAnimations(scene) {
+  const names = ['down', 'left', 'right', 'up'];
+  names.forEach((n, i) => {
+    if (scene.anims.exists(`walk-${i}`)) return;
+    scene.anims.create({
+      key: `walk-${i}`,
+      frames: scene.anims.generateFrameNumbers('hunter', { start: i * 4, end: i * 4 + 3 }),
+      frameRate: 8,
+      repeat: -1,
+    });
+  });
+}
+
+export class ForestScene extends Phaser.Scene {
+  constructor() {
+    super('forest');
+    this.huntIndex = 0;
+    this.seed = '0x5eed';
+    this.busy = false;
+    this.finds = [];
+    // Tool progression lives in a belt, not on the scene, so the same rules
+    // the contract enforces (sequential, one per tier, one active) apply
+    // here. See src/tools.js.
+    this.belt = newToolbelt();
+    // Season board. Off-chain: hunts are recorded here as they happen, and
+    // the same totals would come off the chain once hunts settle.
+    this.board = newSeasonRecord(1, Math.floor(Date.now() / 1000));
+    this.boardOpen = false;
+    this.leaderboardOpen = false;
+    this.lastStanding = 0;
+    // Commit-then-act: the season root is published BEFORE any hunt, so the
+    // engine cannot rewrite results once players have seen them.
+    this.seasonSeed = '0x5eed';
+    initCommitment(sha3.keccak256);
+    this.commitRoot = null;
+    this.huntsPerPlayer = 200; // planned ceiling, which is what the root covers
+  }
+
+  create() {
+    buildAllTextures(this, WORLD_W * TILE, WORLD_H * TILE);
+    // Animations can only be registered AFTER the generated spritesheet
+    // exists, so this must happen here. Skipping it makes every later
+    // anims.play() throw, and the scene renders a static frame with no error
+    // visible in the UI -- so it is asserted rather than assumed.
+    registerAnimations(this);
+    for (let i = 0; i < 4; i++) {
+      if (!this.anims.exists(`walk-${i}`)) throw new Error(`walk-${i} not registered`);
+    }
+
+    this.physics.world.setBounds(0, 0, WORLD_W * TILE, WORLD_H * TILE);
+
+    // --- ground
+    //
+    // One world-sized texture, not a TileSprite. TileSprite needs a texture
+    // the renderer can tile, and a runtime canvas texture (createCanvas)
+    // silently falls back to a blank UUID-keyed one -- the floor rendered as
+    // flat empty colour and, being added after the world, painted over
+    // everything. A 1:1 image has no such constraint.
+    this.bg = this.add.image(0, 0, 'ground').setOrigin(0).setDepth(0);
+
+    // Trees and props are added to the scene (not a container) so each can
+    // carry a depth used for y-sorting. A container would render its children
+    // in insertion order, which looks wrong the moment the player walks
+    // behind a tree.
+    this.sortables = [];
+
+    // --- static colliders: tree trunks
+    //
+    // Only the trunk blocks. A full 64px box would make the canopy feel like
+    // a wall; the player should brush past the leaves but not walk through
+    // the wood.
+    this.trunks = this.physics.add.staticGroup();
+
+    this.placeTrees(96);
+    this.placeProps(220);
+
+    // --- dig nodes: the huntable spots
+    this.nodes = [];
+    const spots = this.findSpots(24);
+    spots.forEach((s, i) => {
+      // additive glow underneath, so a node reads as "interactable" from
+      // across the clearing
+      const glow = this.add.image(s.x, s.y + 6, 'glow')
+        .setBlendMode(Phaser.BlendModes.ADD)
+        .setAlpha(0.5)
+        .setScale(0.75);
+      glow.setDepth(s.y - 1);
+      this.sortables.push(glow);
+
+      const marker = this.add.image(s.x, s.y, 'node');
+      marker.setOrigin(0.5, 0.85);
+      marker.setData('idx', i);
+      marker.setDepth(s.y);
+      this.sortables.push(marker);
+      this.nodes.push(marker);
+
+      // subtle idle bob so they read as interactable
+      this.tweens.add({
+        targets: marker, y: s.y - 3, duration: 900 + i * 37,
+        yoyo: true, repeat: -1, ease: 'Sine.inOut',
+      });
+
+      // slow pulse on the glow
+      this.tweens.add({
+        targets: glow, alpha: 0.32, duration: 1100 + i * 53,
+        yoyo: true, repeat: -1, ease: 'Sine.inOut',
+      });
+    });
+
+    // --- the hunter
+    // Position is set from a resolved frame, not from a bare texture key.
+    this.player = this.physics.add.sprite(WORLD_W * TILE / 2, WORLD_H * TILE / 2, 'hunter', 0);
+    // The generated sheet is 16 logical px at 4x = 64px. The world tile is
+    // 32px, so draw the character at 0.5 to keep it tile-sized.
+    this.player.setScale(0.5);
+    this.player.setCollideWorldBounds(true);
+    // Collision box at the character's feet. Offsets are in SOURCE pixels of
+    // the 64x64 sheet; the box is 10x8 source px, so it must sit at the
+    // bottom-centre, well inside the 64x64 bounds.
+    this.player.body.setSize(10, 8);
+    this.player.body.setOffset(27, 46);
+
+    // Trees block. Dig nodes and props deliberately do not -- a node you
+    // cannot step onto is a node you cannot hunt.
+    this.physics.add.collider(this.player, this.trunks);
+
+    // footstep dust
+    this.dust = this.add.particles(0, 0, 'spark', {
+      speed: { min: 5, max: 20 }, scale: { start: 0.15, end: 0 },
+      lifespan: 300, quantity: 1, emitting: false,
+    }).setDepth(1);
+
+    this.commitSeasonNow();
+    this.seedRivals();
+    this.setupInput();
+    this.setupCamera();
+    this.setupHud();
+
+    this.cameras.main.fadeIn(400, 0, 0, 0);
+    this.updateHud();
+  }
+
+  /**
+   * Publish the season commitment BEFORE any hunt is rolled.
+   *
+   * commit-then-act (SPEC section 9): the root covers every (player,
+   * huntIndex) leaf the season will ever settle, so the engine cannot
+   * rewrite the season after players have seen results. In a real
+   * deployment this root is what goes to commitSeason(bytes32) on-chain; here
+   * it is computed and displayed so the player can verify it locally, and
+   * verifySeason() re-derives it from the same inputs.
+   */
+  commitSeasonNow() {
+    const plan = [
+      { player: this.wallet ?? '0xplayer', hunts: this.huntsPerPlayer },
+      ...this.rivalNames().map((n) => ({ player: n, hunts: this.huntsPerPlayer })),
+    ];
+    const c = commitSeason(this.seasonSeed, plan);
+    this.commitRoot = c.root;
+    this.commitLeafCount = c.leafCount;
+    this.commitPlan = plan;
+    this.board.committed = true;
+    this.board.commitRoot = c.root;
+    return c;
+  }
+
+  /** The opponent list, shared with seedRivals() so both agree. */
+  rivalNames() {
+    return [
+      '0xMoss', '0xFern', '0xAlder', '0xBirch', '0xRowan', '0xYew',
+      '0xHazel', '0xLarch', '0xAspen', '0xWillow', '0xMaple', '0xElm',
+    ];
+  }
+
+  /**
+   * Player-side verification: recompute the root from the season seed and
+   * the published plan, and compare it against what was committed. This is
+   * the check that makes the commitment mean anything -- it does not trust
+   * the operator's word for it.
+   */
+  verifyCommitment() {
+    if (!this.commitRoot) return { ok: false, reason: 'no commitment published' };
+    return verifySeason(this.seasonSeed, this.commitPlan, this.commitRoot);
+  }
+
+  /**
+   * Simulated opponents, so the board shows a real ranking rather than one
+   * player at rank 1 of 1.
+   *
+   * These are LOCAL SIMULATIONS. They are deliberately generated with a
+   * spread of skill and spend, and deliberately NOT flattering: one of them
+   * beats the starting player, so the board has something to climb toward.
+   * A real deployment replaces this wholesale with settled chain data.
+   */
+  seedRivals() {
+    const now = Math.floor(Date.now() / 1000);
+    const names = this.rivalNames();
+    // (hunts, luck): more hunts AND luckier finds = higher ROI.
+    // Hunt counts must clear the 0.005 ETH splay floor for the player's
+    // tier: 50 tier-1, 25 tier-2, 13 tier-3 hunts. Below that the player is
+    // correctly EXCLUDED from the board, which would leave the demo board
+    // thin. A couple near the bottom are deliberately left just above it.
+    const shapes = [
+      [420, 0.55], [380, 0.50], [300, 0.62], [260, 0.45], [210, 0.58],
+      [180, 0.40], [150, 0.52], [120, 0.66], [95, 0.48], [70, 0.58],
+      [55, 0.61], [51, 0.50],
+    ];
+    const r = () => Math.random();
+    names.forEach((n, i) => {
+      const [hunts, luck] = shapes[i];
+      const tier = hunts > 300 ? 3 : hunts > 120 ? 2 : 1;
+      for (let h = 0; h < hunts; h++) {
+        // Roughly reproduce the drop table by rarity, nudged by luck.
+        const counts = [0, 0, 0, 0, 0];
+        const n2 = 3 + Math.floor(r() * 3);
+        for (let k = 0; k < n2; k++) {
+          let rar;
+          if (tier === 1) rar = r() < 0.85 ? 0 : 1;
+          else if (tier === 2) rar = r() < 0.68 ? 0 : r() < 0.92 ? 1 : 2;
+          else rar = r() < 0.5 ? 0 : r() < 0.78 ? 1 : r() < 0.96 ? 2 : r() < 0.995 ? 3 : 4;
+          if (r() > luck && rar > 0) rar -= 1; // unlucky finds lose a rarity
+          counts[rar]++;
+        }
+        recordHunt(this.board, n, counts, tier, now - 1000);
+      }
+    });
+  }
+
+  /* ---------------- world building ---------------- */
+
+  placeTrees(n) {
+    // deterministic layout -- same forest every load
+    const rnd = rng(987654321);
+
+    const cx = WORLD_W * TILE / 2, cy = WORLD_H * TILE / 2;
+    const nodes = this.findSpots(24);
+    let placed = 0, guard = 0;
+    const taken = [];
+    while (placed < n && guard++ < n * 60) {
+      const x = Math.floor(rnd() * WORLD_W) * TILE + TILE / 2;
+      const y = Math.floor(rnd() * WORLD_H) * TILE + TILE / 2;
+      // keep the spawn area and a ring around it clear
+      // 190px left a visibly bald ring around spawn; 150 still frames the
+      // start without leaving the player in a clearing.
+      if (Math.hypot(x - cx, y - cy) < 150) continue;
+      // never spawn a tree on a dig node, or the node is unhuntable
+      if (nodes.some((s) => Math.hypot(s.x - x, s.y - y) < 64)) continue;
+      // and keep trunks from stacking into an impassable clump
+      if (taken.some((t) => Math.hypot(t.x - x, t.y - y) < 52)) continue;
+
+      const v = Math.floor(rnd() * 4);
+      const t = this.add.image(x, y, `tree${v}`);
+      t.setOrigin(0.5, 0.9);
+      t.setDepth(y);
+      this.sortables.push(t);
+
+      // Trunk-only collider: a 20x14 box at the base. The canopy overhangs
+      // freely, which is what makes a forest feel walkable rather than a maze.
+      const body = this.add.rectangle(x, y - 4, 20, 14);
+      this.physics.add.existing(body, true);
+      this.trunks.add(body);
+
+      taken.push({ x, y });
+      placed++;
+    }
+  }
+
+  /** Bushes, rocks, grass tufts and flowers. Purely decorative. */
+  placeProps(n) {
+    const rnd = rng(13579246);
+    const cx = WORLD_W * TILE / 2, cy = WORLD_H * TILE / 2;
+    for (let i = 0; i < n; i++) {
+      const x = rnd() * WORLD_W * TILE;
+      const y = rnd() * WORLD_H * TILE;
+      if (Math.hypot(x - cx, y - cy) < 120) continue;
+      const k = Math.floor(rnd() * 4);
+      const p = this.add.image(x, y, `prop${k}`);
+      p.setOrigin(0.5, 0.9);
+      p.setDepth(y);
+      p.setAlpha(0.92);
+      this.sortables.push(p);
+    }
+  }
+
+  findSpots(n) {
+    let seed = 24680;
+    const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+    const cx = WORLD_W * TILE / 2, cy = WORLD_H * TILE / 2;
+    const out = [];
+    let guard = 0;
+    while (out.length < n && guard++ < n * 60) {
+      const x = 60 + rnd() * (WORLD_W * TILE - 120);
+      const y = 60 + rnd() * (WORLD_H * TILE - 120);
+      if (Math.hypot(x - cx, y - cy) < 130) continue;
+      if (out.some((s) => Math.hypot(s.x - x, s.y - y) < 70)) continue;
+      out.push({ x: Math.round(x), y: Math.round(y) });
+    }
+    return out;
+  }
+
+  setupCamera() {
+    const cam = this.cameras.main;
+    cam.setBounds(0, 0, WORLD_W * TILE, WORLD_H * TILE);
+    cam.startFollow(this.player, true, 0.12, 0.12);
+    cam.setDeadzone(120, 90);
+  }
+
+  setupInput() {
+    this.keys = this.input.keyboard.addKeys({
+      up: 'W', down: 'S', left: 'A', right: 'D',
+      up2: 'UP', down2: 'DOWN', left2: 'LEFT', right2: 'RIGHT',
+      interact: 'SPACE',
+      belt: 'TAB',
+      board: 'L',
+    });
+    // TAB moves focus in the browser and would leave the canvas unusable, so
+    // it is claimed here. preventDefault is what stops the page scrolling or
+    // tabbing away mid-hunt.
+    this.input.keyboard.addCapture('TAB');
+  }
+
+  /* ---------------- HUD ---------------- */
+
+  setupHud() {
+    const W = this.scale.width, H = this.scale.height;
+    this.hud = this.add.container(0, 0).setScrollFactor(0).setDepth(UI_DEPTH);
+
+    const panel = this.add.rectangle(10, 10, 250, 74, 0x0d1a10, 0.82)
+      .setOrigin(0).setStrokeStyle(2, 0x3f8a52);
+    this.hud.add(panel);
+
+    this.hudText = this.add.text(22, 20,
+      'DeepWood', { fontFamily: 'monospace', fontSize: '15px', color: '#e8f0e0' });
+    this.hud.add(this.hudText);
+
+    this.durBarBg = this.add.rectangle(22, 44, 200, 10, 0x1a2a1a).setOrigin(0);
+    this.durBar = this.add.rectangle(22, 44, 200, 10, 0x3f8a52).setOrigin(0);
+    this.hud.add([this.durBarBg, this.durBar]);
+
+    this.tierText = this.add.text(22, 60,
+      'Tool I  -  WASD move  -  SPACE hunt', {
+      fontFamily: 'monospace', fontSize: '11px', color: '#9fbc9f',
+    });
+    this.hud.add(this.tierText);
+
+    // find log, bottom left
+    this.logText = this.add.text(12, H - 96, '', {
+      fontFamily: 'monospace', fontSize: '12px', color: '#cfe0cf',
+      backgroundColor: '#0d1a10cc', padding: { x: 8, y: 6 },
+    });
+    this.hud.add(this.logText);
+
+    // prompt shown when near a node
+    this.prompt = this.add.text(W / 2, H - 70, '', {
+      fontFamily: 'monospace', fontSize: '14px', color: '#fff8d0',
+      backgroundColor: '#0d1a10cc', padding: { x: 10, y: 6 },
+    }).setOrigin(0.5).setVisible(false);
+    this.hud.add(this.prompt);
+  }
+
+  updateHud() {
+    const tool = activeTool(this.belt);
+    const pct = tool ? tool.left / tool.max : 0;
+    this.durBar.width = 200 * pct;
+    this.durBar.fillColor = pct > 0.4 ? 0x3f8a52 : pct > 0.15 ? 0xd9a441 : 0xd83a5a;
+
+    const tierName = tool ? `Tool ${roman(tool.tier)}` : 'TOOL BROKEN';
+    const uses = tool ? `${tool.left}/${tool.max}` : '--';
+    this.tierText.setText(
+      `${tierName}  ${uses} uses   ${fmt(this.belt.common)} Common   ` +
+      `WASD move  -  SPACE hunt  -  TAB toolbelt  -  L board`
+    );
+    this.tierText.setColor(tool ? '#9fbc9f' : '#d83a5a');
+
+    // Show every find, quartz included. Filtering quartz out made the log
+    // read "no finds yet" while the satchel held gems -- the two panels
+    // disagreed because only the log had the filter.
+    const lines = this.finds.slice(-5).map((f) => {
+      const name = RARITY_NAME[f.rarity] || 'Quartz';
+      return `found ${name} x${f.count}  =  ${(Number(f.valueWei) / 1e18).toFixed(5)} ETH`;
+    });
+    this.logText.setText(lines.length ? lines.join('\n') : 'no finds yet - walk to a glowing stone and press SPACE');
+  }
+
+  /* ---------------- season leaderboard ---------------- */
+
+  /**
+   * The season board (SPEC section 9).
+   *
+   * Ranks EFFICIENCY, not wealth: rarity-weight earned per ETH spent. The
+   * headline row deliberately leads with ROI, not value, because that is the
+   * design's whole claim -- a whale playing identically to a small player
+   * posts an identical number.
+   *
+   * Opens with L. Rivals are simulated locally; the real board would be
+   * assembled from settled chain data.
+   */
+  openLeaderboard() {
+    if (this.leaderboardOpen) return;
+    this.leaderboardOpen = true;
+
+    const W = this.scale.width, H = this.scale.height;
+    const pw = 430, ph = 396;
+    const cx = (W - pw) / 2, cy = (H - ph) / 2;
+
+    const c = this.add.container(0, 0).setScrollFactor(0).setDepth(UI_DEPTH);
+    c.add(this.add.rectangle(cx + 4, cy + 5, pw, ph, 0x000000, 0.5).setOrigin(0));
+    c.add(this.add.rectangle(cx, cy, pw, ph, 0x0b1710, 1).setOrigin(0)
+      .setStrokeStyle(2, 0x3f8a52));
+    c.add(this.add.rectangle(cx + 1, cy + 1, pw - 2, 28, 0x16281a, 1).setOrigin(0));
+
+    const now = Math.floor(Date.now() / 1000);
+
+    c.add(this.add.text(cx + 14, cy + 8, 'SEASON I  -  VERDANT HOLLOW', {
+      fontFamily: 'monospace', fontSize: '14px', color: '#e8f0e0',
+    }));
+    c.add(this.add.text(cx + 14, cy + 34, `ends in ${seasonClock(this.board, now)}`, {
+      fontFamily: 'monospace', fontSize: '12px', color: '#d9a441',
+    }));
+
+    // Explain the metric, because an unexplained ROI number means nothing.
+    c.add(this.add.text(cx + 14, cy + 52,
+      'ranked by EFFICIENCY: rarity-weight per ETH spent', {
+      fontFamily: 'monospace', fontSize: '11px', color: '#9fbc9f',
+    }));
+    c.add(this.add.text(cx + 14, cy + 66,
+      'not by wealth - a whale playing like you scores the same', {
+      fontFamily: 'monospace', fontSize: '11px', color: '#7a8a7a',
+    }));
+
+    // column header
+    const hdr = `${'#'.padEnd(4)}${'PLAYER'.padEnd(12)}${'ROI'.padStart(11)}${'BEST'.padStart(12)}`;
+    c.add(this.add.text(cx + 14, cy + 88, hdr, {
+      fontFamily: 'monospace', fontSize: '11px', color: '#7a8a7a',
+    }));
+
+    const me = this.wallet ?? '0xplayer';
+    const rows = rankSeason(this.board);
+    const list = rows.slice(0, TOP_N);
+    const iAmHere = list.some((r) => r.address === String(me).toLowerCase());
+    if (!iAmHere && rows.length) list.push(rows.find((r) => r.address === String(me).toLowerCase()));
+
+    let y = cy + 104;
+    for (const r of list) {
+      if (!r) continue;
+      const isMe = r.address === String(me).toLowerCase();
+      c.add(this.add.text(cx + 14, y,
+        `${String(r.rank).padEnd(4)}${(isMe ? 'YOU' : r.address.slice(0, 10)).padEnd(12)}` +
+        `${roiPct(r).padStart(11)}${fmtEth(r.bestWei).padStart(12)}`, {
+        fontFamily: 'monospace', fontSize: '12px',
+        color: isMe ? '#fff8d0' : r.rank <= 3 ? '#3f8a52' : '#cfe0cf',
+      }));
+      y += 16;
+    }
+
+    if (!rows.length) {
+      c.add(this.add.text(cx + 14, cy + 110, 'no hunts recorded this season', {
+        fontFamily: 'monospace', fontSize: '12px', color: '#7a8a7a',
+      }));
+    }
+
+    // my standing, stated plainly
+    const st = standing(this.board, me);
+    if (!st.ranked) {
+      const mine = this.board.players.get(String(me).toLowerCase());
+      if (mine && !onRoiBoard(mine)) {
+        // The floor excludes sub-floor players rather than damping their
+        // score -- a 0.0001 ETH spender scored 819,200x that way, which
+        // handed the top of the board to exactly the strategy the floor
+        // exists to stop. So say what is needed instead.
+        const short = shortOfFloor(mine);
+        c.add(this.add.text(cx + 14, cy + ph - 74,
+          'not on the board yet - 0.005 ETH splay floor', {
+          fontFamily: 'monospace', fontSize: '12px', color: '#d9a441',
+        }));
+        c.add(this.add.text(cx + 14, cy + 14 + ph - 74 + 14,
+          `${fmtEth(mine.ethSpent)} spent, need ${fmtEth(short)} more`, {
+          fontFamily: 'monospace', fontSize: '11px', color: '#7a8a7a',
+        }));
+      }
+    }
+    if (st.ranked) {
+      c.add(this.add.text(cx + 14, cy + ph - 44,
+        `you are #${st.rank} of ${st.of}` +
+        (st.inTopTen ? '  -  in the prize places' : ''), {
+        fontFamily: 'monospace', fontSize: '12px', color: '#fff8d0',
+      }));
+      if (st.needsToPass) {
+        c.add(this.add.text(cx + 14, cy + ph - 28,
+          `next rank needs more weight per ETH than ${st.needsToPass.slice(0, 10)}`, {
+          fontFamily: 'monospace', fontSize: '11px', color: '#7a8a7a',
+        }));
+      }
+    }
+
+    // Commit-then-act footer. The root is shown so a player can recompute
+    // it from the seed and confirm the season was not rewritten.
+    const v = this.verifyCommitment();
+    const root = this.commitRoot ? this.commitRoot.slice(0, 18) + '...' : 'none';
+    c.add(this.add.text(cx + 14, cy + ph - 30,
+      `committed root  ${root}  (${this.commitLeafCount} leaves)`, {
+      fontFamily: 'monospace', fontSize: '11px',
+      color: v.ok ? '#3f8a52' : '#d83a5a',
+    }));
+    c.add(this.add.text(cx + 14, cy + ph - 14,
+      v.ok ? 'root verified against the season seed' : 'VERIFICATION FAILED', {
+      fontFamily: 'monospace', fontSize: '11px',
+      color: v.ok ? '#7a8a7a' : '#d83a5a',
+    }));
+
+    this.lbClose = this.add.text(cx + pw - 30, cy + 8, 'X', {
+      fontFamily: 'monospace', fontSize: '14px', color: '#9fbc9f',
+    }).setInteractive({ useHandCursor: true });
+    c.add(this.lbClose);
+    this.lbClose.on('pointerdown', () => this.closeLeaderboard());
+
+    this.lbPanel = c;
+  }
+
+  closeLeaderboard() {
+    if (!this.lbPanel) return;
+    this.lbPanel.destroy(true);
+    this.lbPanel = null;
+    this.leaderboardOpen = false;
+  }
+
+  toggleLeaderboard() {
+    if (this.leaderboardOpen) this.closeLeaderboard();
+    else {
+      this.closeBelt();
+      this.openLeaderboard();
+    }
+  }
+
+  /* ---------------- toolbelt panel ---------------- */
+
+  /**
+   * The workshop. Claim the next tier, repair a broken tool, or swap which
+   * one is in hand. Opened with TAB, or automatically when a tool breaks.
+   *
+   * Every button runs the same canClaim/canRepair guards the contract uses,
+   * so an action that is disabled here would revert onchain.
+   */
+  openBelt() {
+    if (this.beltOpen) return;
+    this.beltOpen = true;
+    this.closeLeaderboard();
+
+    const W = this.scale.width, H = this.scale.height;
+    const pw = 340, ph = 300;
+    const px = W - pw - 16, py = 88;
+
+    // UI_DEPTH sits above EVERY world object. World sprites use their own y
+    // as depth for y-sorting, so the range runs 0..WORLD_H*TILE (0..960).
+    // A panel at depth 150 was in the middle of that range and trees below it
+    // drew over the text.
+    const c = this.add.container(0, 0).setScrollFactor(0).setDepth(UI_DEPTH);
+
+    // Drop shadow, then a fully opaque body. At 0.95 the forest still showed
+    // through the text and made the panel unreadable against bright foliage.
+    c.add(this.add.rectangle(px + 4, py + 5, pw, ph, 0x000000, 0.45).setOrigin(0));
+    c.add(this.add.rectangle(px, py, pw, ph, 0x0b1710, 1).setOrigin(0)
+      .setStrokeStyle(2, 0x3f8a52));
+    // header strip
+    c.add(this.add.rectangle(px + 1, py + 1, pw - 2, 26, 0x16281a, 1).setOrigin(0));
+
+    c.add(this.add.text(px + 14, py + 12, 'TOOLBELT', {
+      fontFamily: 'monospace', fontSize: '15px', color: '#e8f0e0',
+    }));
+
+    this.beltCommon = this.add.text(px + 14, py + 32, '', {
+      fontFamily: 'monospace', fontSize: '12px', color: '#9fbc9f',
+    });
+    c.add(this.beltCommon);
+
+    // --- owned tools
+    let y = py + 56;
+    this.beltRows = [];
+    this.belt.tools.forEach((t, i) => {
+      const row = this.add.text(px + 14, y, '', {
+        fontFamily: 'monospace', fontSize: '12px', color: '#cfe0cf',
+      });
+      c.add(row);
+      this.beltRows.push({ row, index: i });
+
+      // Equip / Repair button on the right of each row
+      const btn = this.add.text(px + pw - 90, y - 2, '', {
+        fontFamily: 'monospace', fontSize: '11px', color: '#fff8d0',
+        backgroundColor: '#2a4d38', padding: { x: 8, y: 4 },
+      }).setInteractive({ useHandCursor: true });
+      c.add(btn);
+      this.beltRows[i].btn = btn;
+
+      y += 22;
+    });
+
+    // --- claim the next tier
+    this.beltMsg = this.add.text(px + 14, y + 6, '', {
+      fontFamily: 'monospace', fontSize: '11px', color: '#d9a441',
+      wordWrap: { width: pw - 28 },
+    });
+    c.add(this.beltMsg);
+    y += 34;
+
+    this.claimBtn = this.add.text(px + 14, y, '', {
+      fontFamily: 'monospace', fontSize: '12px', color: '#fff8d0',
+      backgroundColor: '#2a4d38', padding: { x: 10, y: 6 },
+    }).setInteractive({ useHandCursor: true });
+    c.add(this.claimBtn);
+
+    this.claimBtn.on('pointerdown', () => {
+      const belt = this.belt;
+      const next = belt.tools.reduce((m, t) => Math.max(m, t.tier), 0) + 1;
+      if (next > MAX_TIER) {
+        this.beltMsg.setText('Every tier owned. Nothing left to claim.');
+        this.beltMsg.setColor('#9fbc9f');
+        return;
+      }
+      const check = canClaim(belt, next);
+      if (!check.ok) {
+        this.beltMsg.setText(check.reason);
+        this.beltMsg.setColor('#d83a5a');
+        return;
+      }
+      const res = claimTool(belt, next);
+      this.beltMsg.setText(`Claimed Tier ${roman(next)} - burned ${fmt(toolCost(next))} Common, ${res.fee} to treasury.`);
+      this.beltMsg.setColor('#3f8a52');
+      this.flash(`Tier ${roman(next)} tool claimed`);
+      this.refreshBelt();
+      this.updateHud();
+    });
+
+    // --- close
+    this.beltClose = this.add.text(px + pw - 30, py + 10, 'X', {
+      fontFamily: 'monospace', fontSize: '14px', color: '#9fbc9f',
+    }).setInteractive({ useHandCursor: true });
+    c.add(this.beltClose);
+    this.beltClose.on('pointerdown', () => this.closeBelt());
+
+    this.beltPanel = c;
+    this.refreshBelt();
+  }
+
+  refreshBelt() {
+    if (!this.beltPanel) return;
+    const belt = this.belt;
+
+    this.beltCommon.setText(
+      `Common ${fmt(belt.common)}   burned ${fmt(belt.burned)}   fees ${fmt(belt.feesPaid)}`
+    );
+
+    for (const { row, btn, index } of this.beltRows) {
+      const t = belt.tools[index];
+      const net = expectedHuntWei(DROP_TABLE[t.tier], PRICE) - huntCostWei(t.tier);
+      const state = t.left === 0 ? 'BROKEN' : t.active ? 'in hand' : 'stowed';
+      row.setText(
+        `Tier ${roman(t.tier)}  ${t.left}/${t.max}  ${state}\n` +
+        `   net ${eth(net)}/hunt`
+      );
+      row.setColor(t.left === 0 ? '#d83a5a' : t.active ? '#fff8d0' : '#9fbc9f');
+
+      if (t.left === 0) {
+        const cost = repairCost(t.tier);
+        const r = canRepair(belt, index);
+        btn.setText(`REPAIR ${fmt(cost)}`);
+        btn.setColor(r.ok ? '#fff8d0' : '#7a8a7a');
+        btn.setBackgroundColor(r.ok ? '#2a4d38' : '#1a2a1a');
+        btn.removeAllListeners('pointerdown');
+        if (r.ok) {
+          btn.on('pointerdown', () => {
+            const res = repairTool(belt, index);
+            this.beltMsg.setText(`Repaired Tier ${roman(t.tier)} - burned ${fmt(cost)} Common, ${res.fee} to treasury.`);
+            this.beltMsg.setColor('#3f8a52');
+            this.refreshBelt();
+            this.updateHud();
+          });
+        }
+      } else if (t.active) {
+        btn.setText('IN HAND');
+        btn.setColor('#9fbc9f');
+        btn.setBackgroundColor('#1a2a1a');
+        btn.removeAllListeners('pointerdown');
+      } else {
+        btn.setText('EQUIP');
+        btn.setColor('#fff8d0');
+        btn.setBackgroundColor('#2a4d38');
+        btn.removeAllListeners('pointerdown');
+        btn.on('pointerdown', () => {
+          const res = equip(belt, index);
+          if (!res.ok) {
+            this.beltMsg.setText(res.reason);
+            this.beltMsg.setColor('#d83a5a');
+            return;
+          }
+          this.beltMsg.setText(`Equipped Tier ${roman(t.tier)}.`);
+          this.beltMsg.setColor('#3f8a52');
+          this.refreshBelt();
+          this.updateHud();
+        });
+      }
+    }
+
+    // claim button
+    const next = belt.tools.reduce((m, t) => Math.max(m, t.tier), 0) + 1;
+    if (next > MAX_TIER) {
+      this.claimBtn.setText('ALL TIERS OWNED');
+      this.claimBtn.setColor('#7a8a7a');
+      this.claimBtn.setBackgroundColor('#1a2a1a');
+      this.claimBtn.removeAllListeners('pointerdown');
+    } else {
+      const cost = toolCost(next);
+      const c = canClaim(belt, next);
+      this.claimBtn.setText(`CLAIM TIER ${roman(next)}  -  ${fmt(cost)} COMMON`);
+      this.claimBtn.setColor(c.ok ? '#fff8d0' : '#7a8a7a');
+      this.claimBtn.setBackgroundColor(c.ok ? '#2a4d38' : '#1a2a1a');
+      this.claimBtn.removeAllListeners('pointerdown');
+      if (!c.ok) {
+        this.beltMsg.setText(c.reason);
+        this.beltMsg.setColor('#d9a441');
+      }
+    }
+  }
+
+  closeBelt() {
+    if (!this.beltPanel) return;
+    this.beltPanel.destroy(true);
+    this.beltPanel = null;
+    this.beltRows = [];
+    this.beltOpen = false;
+  }
+
+  toggleBelt() {
+    if (this.beltPanel) this.closeBelt(); else this.openBelt();
+  }
+
+  /* ---------------- the loop ---------------- */
+
+  update(time, delta) {
+    if (!this.player) return;
+
+    const k = this.keys;
+    let vx = 0, vy = 0;
+    if (k.left.isDown || k.left2.isDown) vx -= 1;
+    if (k.right.isDown || k.right2.isDown) vx += 1;
+    if (k.up.isDown || k.up2.isDown) vy -= 1;
+    if (k.down.isDown || k.down2.isDown) vy += 1;
+
+    const moving = vx !== 0 || vy !== 0;
+    this.player.setVelocity(moving ? vx * MOVE_SPEED : 0, moving ? vy * MOVE_SPEED : 0);
+
+    // y-sort: the player draws behind objects whose base is higher up the
+    // screen, so walking north puts them behind a tree and walking south
+    // puts them in front. Depth is the object's base y.
+    this.player.setDepth(this.player.y);
+
+    if (moving) {
+      // pick the dominant axis for the sprite direction
+      this.animatePlayer(vx, vy);
+      if (time - (this._lastStep || 0) > 180) {
+        this._lastStep = time;
+        this.dust.emitParticleAt(this.player.x, this.player.y + 14);
+      }
+    } else {
+      this.animateIdle(vx, vy);
+    }
+
+    // context prompt
+    const near = this.nearestNode();
+    if (near) {
+      this.prompt.setVisible(true);
+      this.prompt.setText(
+        !activeTool(this.belt) ? 'TOOL BROKEN - TAB to repair'
+          : this.busy ? 'hunting...'
+            : 'SPACE  hunt'
+      );
+      this.prompt.setPosition(this.cameras.main.scrollX + this.scale.width / 2,
+        this.cameras.main.scrollY + this.scale.height - 70);
+    } else {
+      this.prompt.setVisible(false);
+    }
+
+    if (Phaser.Input.Keyboard.JustDown(k.interact) && near && !this.busy) {
+      this.doHunt(near);
+    }
+
+    if (Phaser.Input.Keyboard.JustDown(k.belt)) {
+      this.closeLeaderboard();
+      this.toggleBelt();
+    }
+    if (Phaser.Input.Keyboard.JustDown(k.board)) {
+      this.toggleLeaderboard();
+    }
+  }
+
+  animatePlayer(vx, vy) {
+    let frame = 0;
+    if (Math.abs(vx) > Math.abs(vy)) frame = vx < 0 ? 1 : 2;
+    else frame = vy < 0 ? 3 : 0;
+
+    const key = `${frame}`;
+    if (this._animKey === key) return;
+    this._animKey = key;
+    this.player.anims.play(`walk-${frame}`, true);
+  }
+
+  animateIdle(vx, vy) {
+    // face the last direction, standing pose
+    let frame = 0;
+    if (this._face !== undefined) frame = this._face;
+    if (vx !== 0 || vy !== 0) {
+      frame = Math.abs(vx) > Math.abs(vy) ? (vx < 0 ? 1 : 2) : (vy < 0 ? 3 : 0);
+      this._face = frame;
+    }
+    this.player.anims.stop();
+    this.player.setFrame(frame * 4); // frame 0 of the walk cycle
+  }
+
+  /**
+   * Nearest dig node within interaction range.
+   *
+   * The radius is generous (56px) on purpose. At 40 a character could stand
+   * visually on top of a node and still be "too far" to hunt it, which reads
+   * as the game being broken -- the stone is under your feet and SPACE does
+   * nothing.
+   */
+  nearestNode() {
+    let best = null, bestD = 56;
+    for (const n of this.nodes) {
+      if (n.getData('used')) continue;
+      const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, n.x, n.y);
+      if (d < bestD) { bestD = d; best = n; }
+    }
+    return best;
+  }
+
+  doHunt(node) {
+    const tool = activeTool(this.belt);
+    if (!tool) {
+      // Every tool is broken. Send them to the belt panel rather than
+      // silently ignoring SPACE.
+      this.openBelt();
+      this.flash('Tool broken - repair it to hunt again.');
+      return;
+    }
+    this.busy = true;
+    node.setData('used', true);
+
+    // Brief dig: hold the current facing, pulse the node, then reveal.
+    this.player.anims.stop();
+    this.tweens.add({
+      targets: node, alpha: 0.2, scale: 0.45, duration: 220, yoyo: true,
+      onComplete: () => { this.reveal(node); },
+    });
+
+    const used = consumeUse(this.belt);
+    this.updateHud();
+
+    if (used.broke) {
+      this.time.delayedCall(500, () => {
+        this.flash(`Tier ${roman(used.tool.tier)} broke! It keeps its tier.`);
+        this.openBelt();
+      });
+    }
+  }
+
+  reveal(node) {
+    // Snapshot the tier BEFORE the reveal, so a tool that breaks on this
+    // hunt still rolls against the tier that swung the pick.
+    const tier = activeTool(this.belt)?.tier ?? 1;
+    const result = rollHunt(this.seed, this.wallet ?? '0xplayer', this.huntIndex, tier);
+    this.huntIndex += 1;
+
+    // Quartz is Common, and Common is what tool costs are paid in. Track the
+    // full haul too, so the satchel can show the rarer stones.
+    this.belt.common += result.counts[0];
+
+    // Season board. Recorded with the tier that swung the pick, since that
+    // is the tier whose cost belongs in this player's ROI denominator.
+    recordHunt(
+      this.board, this.wallet ?? '0xplayer', result.counts, tier,
+      Math.floor(Date.now() / 1000)
+    );
+
+    // find the most valuable gem in the haul -- that's the one that pops out
+    let topRarity = 0;
+    result.counts.forEach((c, r) => { if (c > 0 && r > topRarity) topRarity = r; });
+
+    // burst
+    const burst = this.add.particles(node.x, node.y, 'spark', {
+      speed: { min: 30, max: 90 }, scale: { start: 0.4, end: 0 },
+      lifespan: 500, quantity: 8, emitting: false,
+    });
+    burst.explode(8);
+
+    // the gem pops up and floats
+    const gem = this.add.image(node.x, node.y, `gem${topRarity}`).setDepth(10);
+    this.tweens.add({
+      targets: gem, y: node.y - 34, duration: 420, ease: 'Back.out',
+      onComplete: () => {
+        this.tweens.add({
+          targets: gem, y: node.y - 60, alpha: 0, duration: 420,
+          onComplete: () => gem.destroy(),
+        });
+      },
+    });
+
+    // collapse the spent node
+    this.tweens.add({
+      targets: node, scale: 0, duration: 500, delay: 350,
+      onComplete: () => node.destroy(),
+    });
+
+    const entry = {
+      rarity: topRarity,
+      count: result.total,
+      valueWei: result.valueWei,
+    };
+    this.finds.push(entry);
+
+    // Tell the DOM shell (satchel readout) what was found. The shell is the
+    // only place that knows about accounts and balances; the scene stays
+    // ignorant of them.
+    window.dispatchEvent(new CustomEvent('deepwood:find', {
+      detail: { counts: result.counts, valueWei: result.valueWei.toString() },
+    }));
+
+    if (topRarity >= 2) {
+      this.flash(`${RARITY_NAME[topRarity]}!  ${(Number(result.valueWei) / 1e18).toFixed(5)} ETH`);
+    }
+
+    this.updateHud();
+    this.busy = false;
+  }
+
+  flash(msg) {
+    const t = this.add.text(this.scale.width / 2, 90, msg, {
+      fontFamily: 'monospace', fontSize: '16px', color: '#fff8d0',
+      backgroundColor: '#0d1a10ee', padding: { x: 12, y: 8 },
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(UI_DEPTH + 1);
+    this.tweens.add({ targets: t, alpha: 0, delay: 1600, duration: 400, onComplete: () => t.destroy() });
+  }
+}
+

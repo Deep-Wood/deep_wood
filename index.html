@@ -1,241 +1,147 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>DeepWood — Adventure Gem Hunt</title>
-<meta name="description" content="DeepWood is a gem-hunting game set in a procedurally generated forest. Hunt gems, build tools, climb the seasonal efficiency board." />
-<meta property="og:title" content="DeepWood — Adventure Gem Hunt" />
-<meta property="og:description" content="A gem-hunting game in an endless forest. Rare gems are hunt-only. Ranked by efficiency, not wealth." />
-<meta property="og:image" content="/hero.jpg" />
-<meta name="twitter:card" content="summary_large_image" />
-<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-<style>
-  :root {
-    --ink: #e8f0e0;
-    --dim: #93ad93;
-    --panel: #0d1a10;
-    --edge: #2f6b40;
-    --gold: #d9a441;
-  }
-  * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
-  body {
-    margin: 0;
-    background: #07120a;
-    color: var(--ink);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    line-height: 1.65;
-    -webkit-font-smoothing: antialiased;
-  }
-  a { color: var(--gold); text-decoration: none; }
-  a:hover { text-decoration: underline; }
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DeepWood</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d1a10'/%3E%3Cpath d='M16 6l6 10-6 10-6-10z' fill='%234a7c59'/%3E%3C/svg%3E" />
+  <style>
+    :root { --ink: #e8f0e0; --dim: #9fbc9f; --panel: #0d1a10; --edge: #3f8a52; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: #07120a; overflow: hidden;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink); }
 
-  .wrap { max-width: 940px; margin: 0 auto; padding: 0 22px; }
+    #game { position: absolute; inset: 0; }
+    #game canvas { display: block; image-rendering: pixelated; }
 
-  /* ---- hero ---- */
-  header {
-    position: relative;
-    min-height: 100svh;
-    display: grid;
-    place-items: center;
-    text-align: center;
-    overflow: hidden;
-  }
-  .hero-bg {
-    position: absolute; inset: 0;
-    background: #07120a url('/hero.jpg') center/cover no-repeat;
-    filter: brightness(0.42) saturate(1.05);
-    transform: scale(1.04);
-  }
-  .hero-fade {
-    position: absolute; inset: 0;
-    background:
-      linear-gradient(to bottom, rgba(7,18,10,.75) 0%, rgba(7,18,10,.35) 40%, rgba(7,18,10,.96) 100%);
-  }
-  .hero-inner { position: relative; padding: 40px 0 60px; }
-  .eyebrow {
-    font-size: 12px; letter-spacing: .32em; text-transform: uppercase;
-    color: var(--gold); margin: 0 0 14px;
-  }
-  .wordmark {
-    font-size: clamp(44px, 11vw, 104px);
-    letter-spacing: .16em;
-    margin: 0 0 6px;
-    font-weight: 700;
-    text-shadow: 0 2px 30px rgba(0,0,0,.85);
-  }
-  .tagline {
-    font-size: clamp(14px, 2.3vw, 19px);
-    color: var(--dim); margin: 0 0 30px; letter-spacing: .06em;
-  }
-  .cta {
-    display: inline-block;
-    border: 1px solid var(--edge);
-    background: rgba(47,107,64,.22);
-    color: var(--ink);
-    padding: 13px 30px; border-radius: 8px;
-    font-size: 14px; letter-spacing: .1em;
-    transition: background .18s, transform .18s;
-  }
-  .cta:hover { background: rgba(47,107,64,.42); text-decoration: none; transform: translateY(-1px); }
-  .scroll-note {
-    position: absolute; bottom: 26px; left: 0; right: 0;
-    font-size: 11px; letter-spacing: .26em; color: #4d6b52; text-transform: uppercase;
-  }
+    /* Top bar: identity + wallet stub. Kept out of the canvas so Phaser
+       never has to know about accounts or balances. */
+    #topbar {
+      position: absolute; top: 0; right: 0; display: flex; gap: 8px;
+      align-items: center; padding: 10px; z-index: 10;
+    }
+    .chip {
+      background: rgba(13,26,16,.88); border: 1px solid var(--edge);
+      border-radius: 6px; padding: 6px 10px; font-size: 12px;
+    }
+    .chip b { color: #d9a441; font-weight: 600; }
+    button.chip { cursor: pointer; color: var(--ink); }
+    button.chip:hover { background: rgba(63,138,82,.25); }
 
-  /* ---- sections ---- */
-  section { padding: 68px 0; border-top: 1px solid rgba(47,107,64,.22); }
-  h2 {
-    font-size: clamp(20px, 3.4vw, 27px);
-    letter-spacing: .1em; margin: 0 0 24px; font-weight: 600;
-  }
-  h2 .n { color: var(--gold); margin-right: 12px; }
-  p { max-width: 68ch; }
-  .lede { color: var(--dim); }
+    /* Season panel, top-left. Reuses the v0 reference's season-progress idea
+       without adopting its static-mockup layout. */
+    #season {
+      position: absolute; top: 0; left: 0; margin: 10px; z-index: 9;
+      background: rgba(13,26,16,.88); border: 1px solid var(--edge);
+      border-radius: 8px; padding: 10px 12px; font-size: 12px; min-width: 210px;
+    }
+    #season h1 { font-size: 13px; margin: 0 0 6px; letter-spacing: .12em;
+      text-transform: uppercase; color: var(--dim); font-weight: 600; }
+    #season .row { display: flex; justify-content: space-between; gap: 12px;
+      margin-top: 4px; color: var(--dim); }
+    #season .row span:last-child { color: var(--ink); }
+    .bar { height: 6px; background: #1a2a1a; border-radius: 3px; margin-top: 8px; }
+    .bar > i { display: block; height: 100%; background: var(--edge);
+      border-radius: 3px; width: 0%; transition: width .3s; }
 
-  ul { padding-left: 20px; max-width: 68ch; }
-  li { margin-bottom: 9px; }
-  strong { color: var(--gold); font-weight: 600; }
-
-  .grid {
-    display: grid; gap: 16px;
-    grid-template-columns: repeat(auto-fit, minmax(232px, 1fr));
-    margin-top: 26px;
-  }
-  .card {
-    background: var(--panel);
-    border: 1px solid var(--edge);
-    border-radius: 10px; padding: 20px;
-  }
-  .card h3 {
-    margin: 0 0 8px; font-size: 14px; letter-spacing: .1em;
-    text-transform: uppercase; color: var(--gold); font-weight: 600;
-  }
-  .card p { margin: 0; color: var(--dim); font-size: 13.5px; }
-
-  .note {
-    border-left: 3px solid var(--gold);
-    background: rgba(217,164,65,.07);
-    padding: 16px 20px; border-radius: 0 8px 8px 0;
-    font-size: 13.5px; color: var(--dim);
-  }
-  .note strong { color: var(--gold); }
-
-  footer {
-    padding: 34px 0 46px; text-align: center;
-    color: #4d6b52; font-size: 12px;
-    border-top: 1px solid rgba(47,107,64,.22);
-  }
-  .status {
-    display: inline-flex; align-items: center; gap: 9px;
-    border: 1px solid var(--edge); border-radius: 999px;
-    padding: 6px 15px; font-size: 11.5px; letter-spacing: .1em;
-    color: var(--gold); margin-bottom: 20px;
-  }
-  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--gold); }
-
-  @media (max-width: 620px) {
-    .wordmark { letter-spacing: .1em; }
-    section { padding: 52px 0; }
-  }
-</style>
+    /* Wallet-side economy readout. Read-only for now -- nothing settles
+         onchain yet. */
+    #wallet {
+      position: absolute; right: 10px; bottom: 10px; z-index: 9;
+      background: rgba(13,26,16,.9); border: 1px solid var(--edge);
+      border-radius: 8px; padding: 10px 12px; font-size: 12px; min-width: 200px;
+    }
+    #wallet h2 { font-size: 11px; margin: 0 0 6px; letter-spacing: .12em;
+      text-transform: uppercase; color: var(--dim); font-weight: 600; }
+    #wallet .gem { display: flex; justify-content: space-between; margin-top: 3px; }
+    #wallet .gem .n { color: var(--dim); }
+    #wallet .foot { margin-top: 8px; font-size: 10px; color: #6d8a6d; }
+  </style>
 </head>
 <body>
+  <div id="game"></div>
 
-<header>
-  <div class="hero-bg"></div>
-  <div class="hero-fade"></div>
-  <div class="wrap hero-inner">
-    <p class="eyebrow">Adventure Gem Hunt</p>
-    <h1 class="wordmark">DEEPWOOD</h1>
-    <p class="tagline">An endless forest. Gems you can only find, not buy.</p>
-    <a class="cta" href="#about">Enter the forest</a>
+  <div id="season">
+    <h1>Season I &middot; Verdant Hollow</h1>
+    <div class="row"><span>Rank</span><span id="rank">—</span></div>
+    <div class="row"><span>ROI</span><span id="roi">—</span></div>
+    <div class="row"><span>Ends in</span><span id="ends">13d 04h</span></div>
+    <div class="bar"><i id="seasonbar"></i></div>
   </div>
-  <p class="scroll-note">Scroll</p>
-</header>
 
-<main class="wrap">
-
-  <section id="about">
-    <h2><span class="n">01</span>The Forest</h2>
-    <p class="lede">
-      You are a hunter in a procedurally generated forest that never repeats.
-      Every swing is weighted by your tools, your skill, and the season you
-      happen to be playing in.
-    </p>
-    <p>
-      Common gems can be bought. <strong>Rare gems and above are hunt-only</strong>
-      — there is no path that converts money directly into a Diamond find, and
-      that is deliberate. The moment the best gem could simply be purchased,
-      hunting would stop being a game.
-    </p>
-  </section>
-
-  <section>
-    <h2><span class="n">02</span>How It Works</h2>
-    <div class="grid">
-      <div class="card">
-        <h3>Off-chain hunting</h3>
-        <p>Movement, swings, and finds resolve instantly in your browser. No
-           waiting, and the chain is not in the animation loop.</p>
-      </div>
-      <div class="card">
-        <h3>Committed in advance</h3>
-        <p>Every possible outcome is committed as a Merkle root before a season
-           starts, so a result cannot be rewritten after you see it.</p>
-      </div>
-      <div class="card">
-        <h3>Ranked by efficiency</h3>
-        <p>Seasons last 14 days and rank return per ETH spent. One Diamond on
-           a small stake outranks a thousand Common gems hoarded.</p>
-      </div>
-      <div class="card">
-        <h3>Gems are burned</h3>
-        <p>Redeeming burns a fee to the treasury and destroys the rest. The
-           treasury holds ETH backing every outstanding gem, publicly.</p>
-      </div>
-      <div class="card">
-        <h3>Tools carry you</h3>
-        <p>Four tiers, each with durability. Tools break, and repairs are paid
-           for in gems — so gear is earned through play.</p>
-      </div>
-      <div class="card">
-        <h3>Skill is not for sale</h3>
-        <p>Gems burned raise the ceiling on what you can find. Money raises
-           your balance; only play raises what you can hunt.</p>
-      </div>
-    </div>
-  </section>
-
-  <section>
-    <h2><span class="n">03</span>$DEEPWOOD</h2>
-    <p class="lede">
-      $DEEPWOOD is the settlement layer for the game economy.
-    </p>
-    <p>
-      Redemption pays in ETH until the token rail is switched on, and in the
-      token at identical face value afterwards. Same numbers either way — the
-      token changes the unit, never the value of what you found.
-    </p>
-    <div class="note">
-      <p style="margin:0">
-        <strong>Status: pre-launch.</strong> The game, its contracts, and the
-        token are in testnet testing. Nothing here is live on mainnet, and no
-        token is in circulation. Figures on this page describe the design, not
-        a released economy.
-      </p>
-    </div>
-  </section>
-
-</main>
-
-<footer>
-  <div class="wrap">
-    <span class="status"><span class="dot"></span> In development · testnet</span>
-    <p style="margin:0">DeepWood — Adventure Gem Hunt</p>
+  <div id="topbar">
+    <div class="chip">Season I</div>
+    <div class="chip" id="chainstat">checking chain…</div>
+    <button class="chip" id="connect">Connect wallet</button>
   </div>
-</footer>
 
+  <div id="wallet">
+    <h2>Satchel</h2>
+    <div id="gemlist"></div>
+    <div class="foot" id="walletfoot">Off-chain preview. Nothing settles onchain yet.</div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+  <script type="module">
+    // Report the real chain state in the topbar. The game is playable
+    // offline, so this only ever ADDS information -- a failure downgrades to
+    // the simulation and says so, rather than leaving "checking chain…"
+    // up forever or implying the site is live when it is not.
+    import { bootChain, describe } from '/src/live.js';
+
+    const stat = document.getElementById('chainstat');
+    const foot = document.getElementById('walletfoot');
+
+    bootChain().then((r) => {
+      if (r.ok) {
+        const at = r.chain.address.slice(0, 6) + '…' + r.chain.address.slice(-4);
+        stat.innerHTML = '● live · ' + at;
+        stat.style.borderColor = '#3f8a52';
+        stat.title = describe(r);
+        if (r.drift && r.drift.length) {
+          // Loud, but not fatal: the simulation is still playable.
+          foot.textContent = 'Client differs from contract: ' + r.drift.join('; ');
+        } else {
+          foot.textContent = 'Reading the live contract. Settlement is not wired yet.';
+        }
+      } else {
+        stat.textContent = '○ offline';
+        stat.style.borderColor = '#6a5a3a';
+        stat.title = r.reason;
+        foot.textContent = 'Offline simulation — ' + r.reason;
+      }
+    }).catch((e) => {
+      stat.textContent = '○ offline';
+      stat.title = String(e);
+      foot.textContent = 'Offline simulation — could not reach the chain.';
+    });
+  </script>
+  <script>
+    // Bridge Phaser scene state into the DOM shell. Keeps the economy
+    // readout honest without duplicating game logic in two places.
+    const gemNames = ['Quartz', 'Amber', 'Sapphire', 'Ruby', 'Diamond'];
+    const gemColors = ['#cfd6dd', '#d9a441', '#3a6fd8', '#d83a5a', '#8a3ad8'];
+    const gemlist = document.getElementById('gemlist');
+    const totals = [0, 0, 0, 0, 0];
+
+    function renderGems() {
+      gemlist.innerHTML = gemNames.map((n, i) =>
+        totals[i] ? `<div class="gem"><span class="n" style="color:${gemColors[i]}">${n}</span><span>${totals[i]}</span></div>` : ''
+      ).join('') || '<div class="gem"><span class="n">empty</span></div>';
+    }
+    renderGems();
+
+    window.addEventListener('deepwood:find', (e) => {
+      const r = e.detail;
+      r.counts.forEach((c, i) => { totals[i] += c; });
+      renderGems();
+    });
+
+    document.getElementById('connect').addEventListener('click', () => {
+      const b = document.getElementById('connect');
+      b.textContent = '0x1234…abcd';
+      b.style.borderColor = '#d9a441';
+    });
+  </script>
 </body>
 </html>
