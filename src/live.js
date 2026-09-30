@@ -88,6 +88,7 @@ export function describe(result) {
   const { onChain } = result;
   const bits = [`chain ${config.chainId}`, 'contract live'];
   if (onChain?.current) bits.push(`season ${onChain.current.id ?? '?'}`);
+  if (config.tokenAddress) bits.push(`token ${config.tokenAddress.slice(0, 6)}…${config.tokenAddress.slice(-4)}`);
   if (result.drift?.length) bits.push(`${result.drift.length} drift`);
   return bits.join(' · ');
 }

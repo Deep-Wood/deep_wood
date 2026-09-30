@@ -3,4 +3,8 @@ node_modules
 .git
 dist/
 .env.local
-.env.production
+
+
+# .env.production IS committed: it holds only public addresses and a public
+# RPC, no credentials. See the file header.
+!/.env.production
