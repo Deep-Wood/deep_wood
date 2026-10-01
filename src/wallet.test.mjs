@@ -49,7 +49,7 @@ for (const f of ['.env.local', '.env.production', '.env']) {
 const {
   WalletError, GAME_CHAIN_ID, sel, encUint8, encUint256, encAddress,
   toQuantity, fromQuantity, checkTier, checkBuy,
-  calldataClaimTool, calldataBuyGems, decodeHeader,
+  calldataClaimTool, calldataBuyGems, calldataSettleHunt, decodeHeader,
   connect, claimTool, buyGems, getState, getAccount, getChainId,
   resetWallet, installListeners,
 } = await import('./wallet.js');
@@ -555,5 +555,52 @@ test('no signing key is read anywhere in the client', async (t) => {
       }
       assert.doesNotMatch(String(v), /^[0-9a-fA-F]{64}$/, `config.${k} looks like a raw key/hash`);
     }
+  });
+});
+
+// --- open settlement: settleHunt calldata ------------------------------
+//
+// The regression that matters: the offset word for the trailing `bytes`
+// argument is a POSITION, not a presence flag. Encoding it as 0 makes every
+// settlement revert on a real chain with a bare `data: "0x"` and no error
+// name, so a shape check alone would not have caught it -- the payload has to
+// be sent to a contract. script/dryrun-client-abi.mjs does that; these
+// assertions pin the arithmetic that produced the wrong value.
+describe('calldataSettleHunt', () => {
+  const PLAYER = '0xf39Fd6e51aad88F6F4ce6aB8827279cfffb92266';
+  const counts = [4n, 1n, 0n, 0n, 0n];
+
+  it('keeps the keeper-era selector, so existing tooling still works', () => {
+    const data = calldataSettleHunt(PLAYER, 1, counts, 400000000000000n);
+    assert.equal(decodeHeader(data), sel('settleHunt(address,uint8,uint256[5],uint256,bytes)'));
+    assert.equal(data.length, 8 + 64 * 10, '4 + 10 words: player, tier, 5 counts, best, offset, length');
+  });
+
+  it('points the bytes offset past the head, not at zero', () => {
+    const data = calldataSettleHunt(PLAYER, 1, counts, 400000000000000n);
+    const word = (i) => data.slice(8 + 64 * i, 8 + 64 * (i + 1));
+    // slots: 0 player, 1 tier, 2..6 counts, 7 best, 8 offset, 9 length
+    assert.equal(word(8), (9n * 32n).toString(16).padStart(64, '0'), 'offset must be 0x120');
+    assert.notEqual(word(8), '0'.repeat(64), 'offset 0 reverts on chain with an unnamed error');
+    assert.equal(word(9), '0'.repeat(64), 'the ignored signature is empty');
+  });
+
+  it('inlines the fixed-size counts array rather than offsetting it', () => {
+    const data = calldataSettleHunt(PLAYER, 1, counts, 400000000000000n);
+    const word = (i) => BigInt('0x' + data.slice(8 + 64 * i, 8 + 64 * (i + 1)));
+    assert.equal(word(0), BigInt(PLAYER), 'player is left-padded into slot 0');
+    assert.equal(word(1), 1n, 'tier');
+    counts.forEach((c, i) => assert.equal(word(2 + i), c, `count ${i}`));
+    assert.equal(word(7), 400000000000000n, 'bestSingleWei');
+  });
+
+  it('refuses a counts array that is not five long', () => {
+    assert.throws(() => calldataSettleHunt(PLAYER, 1, [1, 2, 3], 1n), /exactly 5/);
+    assert.throws(() => calldataSettleHunt(PLAYER, 1, 'nope', 1n), /exactly 5/);
+  });
+
+  it('rejects an out-of-range tier rather than truncating it', () => {
+    assert.throws(() => calldataSettleHunt(PLAYER, 9, counts, 1n));
+    assert.throws(() => calldataSettleHunt(PLAYER, 0, counts, 1n));
   });
 });

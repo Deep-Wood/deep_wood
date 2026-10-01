@@ -225,7 +225,14 @@ export function calldataSettleHunt(player, tier, counts, bestSingleWei) {
   head += encUint8(t);
   for (const c of counts) head += encUint256(c);
   head += encUint256(bestSingleWei);
-  head += encUint(0n, 256, 'uint256'); // offset to the bytes argument
+  // Offset to the bytes payload. The head is 9 slots (player, tier, 5 counts,
+  // best, this offset), so the tail -- the bytes length word -- starts at 0x120.
+  //
+  // Zero here is NOT an acceptable encoding of "empty bytes": the contract
+  // reads the offset as a position, not as a presence flag, and reverts with a
+  // bare `data: "0x"` -- no error name, which is why it looked like an unrelated
+  // failure. Caught only by sending the client's own bytes to a real contract.
+  head += encUint(9n * 32n, 256, 'uint256');
   head += encUint(0n, 256, 'uint256'); // its length -- empty, and ignored
   return head;
 }
