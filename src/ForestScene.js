@@ -958,12 +958,33 @@ export class ForestScene extends Phaser.Scene {
     if (!this.shopRows || !this.shopRows.length) return;
     for (const row of this.shopRows) {
       const p = await priceFor(row.rarity);
-      row.label.setText(
-        p === null
-          ? `${RARITY_NAME_ONSALE[row.rarity]} - price unavailable`
-          : `${RARITY_NAME_ONSALE[row.rarity]} ${eth(p)}`
-      );
-      row.buy.setText(onchainActive() ? 'buy' : 'connect');
+
+      // The await above yields, and anything can happen before it resumes: the
+      // panel can be closed, rebuilt, or the scene torn down. A destroyed Phaser
+      // Text has its canvas nulled, so setText() on it throws from inside the
+      // renderer -- `updateUVs -> setCutPosition -> setSize -> updateText ->
+      // setText -> drawImage` on null. That was reported as an uncaught
+      // pageerror reading "Cannot read properties of null (reading
+      // 'drawImage')", which looks exactly like the game crashing.
+      //
+      // It is reachable on a real phone by opening and closing the toolbelt in
+      // quick succession, so it is fixed here rather than filtered out of the
+      // harness. The liveness check handles the ordinary case; the guard is
+      // there because Phaser's internals decide what a destroyed Text still
+      // exposes, and an async write to a destroyed object must not be able to
+      // take down the frame regardless.
+      if (!row.label || row.label.scene !== this.sys.scene) continue;
+      try {
+        row.label.setText(
+          p === null
+            ? `${RARITY_NAME_ONSALE[row.rarity]} - price unavailable`
+            : `${RARITY_NAME_ONSALE[row.rarity]} ${eth(p)}`
+        );
+        row.buy.setText(onchainActive() ? 'buy' : 'connect');
+      } catch (err) {
+        // The row was destroyed across the await. Nothing to paint.
+        if (this.sys.isActive()) console.warn('shop row destroyed during refresh', err);
+      }
     }
   }
 
