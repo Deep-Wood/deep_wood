@@ -79,6 +79,16 @@
 
   <div id="hint" class="chip"></div>
 
+  <!-- Error reporting installed FIRST, before any other module runs, so it
+       captures throws from the game boot as well as from the HUD below.
+       Without an endpoint configured it is a local ring buffer and a console
+       log only -- see src/reporter.js. No third party is contacted unless
+       VITE_ERROR_REPORT_URL is set at build time. -->
+  <script type="module">
+    import { createReporter, REPORT_ENDPOINT } from '/src/reporter.js';
+    window.__reporter = createReporter({ endpoint: REPORT_ENDPOINT });
+    window.__reporter.install(window);
+  </script>
   <script type="module" src="/src/main.js"></script>
   <script type="module">
     // Report the real chain state in the topbar. The game is playable
@@ -160,8 +170,13 @@
       window.deepwoodChain = r;
       render(r);
     }).catch((e) => {
-      window.deepwoodChain = { ok: false, reason: String(e) };
-      render({ ok: false, reason: String(e) });
+      // This .catch() is what turned the production ReferenceError into a
+      // believable "offline · retry". Swallowing a render bug as an
+      // infrastructure state is how it survived a deploy and a green test
+      // suite. Report it, then still degrade gracefully -- but never silently.
+      window.__reporter?.reportError(e, 'bootChain');
+      window.deepwoodChain = { ok: false, reason: String(e && e.message || e) };
+      render({ ok: false, reason: String(e && e.message || e) });
     });
 
     check();

@@ -13,20 +13,16 @@ await p.goto(URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
 await p.waitForFunction('window.deepwoodChain !== undefined', { timeout: 30000 }).catch(() => {});
 await new Promise((r) => setTimeout(r, 2500));
 
-const out = await p.evaluate(async () => {
+const out = await p.evaluate(() => {
   const res = { windowDeepwoodChain: window.deepwoodChain, chipText: null };
   const chip = document.getElementById('chainstat');
   res.chipText = chip ? chip.innerText.trim() : null;
   const hint = document.getElementById('hint');
   res.hint = hint ? hint.innerText.trim().slice(0, 160) : null;
-  // now call the real thing again, live, and capture the failure directly
-  try {
-    const live = await import('/assets/' + '');
-  } catch { /* module path differs in prod; use the global the page set up */ }
   return res;
 });
 
-console.log('deepwoodChain:', JSON.stringify(out.windowDeepwoodChain, null, 1));
+console.log('deepwoodChain:', JSON.stringify(out && out.windowDeepwoodChain));
 console.log('chip          :', out.chipText);
 console.log('hint          :', out.hint);
 console.log('net failures  :', netlog.length ? netlog.slice(0, 5) : 'none');
