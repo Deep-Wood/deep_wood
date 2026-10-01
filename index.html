@@ -114,10 +114,12 @@
           // Loud, but not fatal: the simulation is still playable.
           foot.textContent = 'Client differs from contract: ' + r.drift.join('; ');
         } else {
-          // Accurate: reads are live, tool claims and gem buys go on chain
-          // once a wallet is connected. Hunt settlement is still keeper-only
-          // (settleHunt is onlyHunter), so do not imply more than that.
-          foot.textContent = 'Live contract. Connect a wallet to claim tools and buy gems on chain. Hunts settle via the keeper.';
+          // Accurate as long as the season has a committed seed. Without one,
+          // settleHunt would revert SeedNotCommitted, so do not advertise it.
+          const seedReady = live && live.current && live.current.seedCommitted;
+          foot.textContent = seedReady
+            ? 'Live contract. Connect a wallet to claim tools, buy gems and settle your own hunts on chain.'
+            : 'Live contract. Connect a wallet to claim tools and buy gems on chain. Hunts settle once the season seed is committed.';
         }
         return;
       }

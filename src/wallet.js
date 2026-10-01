@@ -190,6 +190,46 @@ export function calldataBuyGems(rarity, count) {
   return sel('buyGems(uint8,uint256)').slice(2) + encUint8(r) + encUint256(n);
 }
 
+/**
+ * `settleHunt(address,uint8,uint256[5],uint256,bytes)` -- open settlement.
+ *
+ * Layout: 4 + 32 (player) + 32 (tier) + 5*32 (counts, INLINED because the
+ * array type is fixed-size) + 32 (bestSingleWei) + 32 (offset to bytes) + 32
+ * (bytes length) = 292 bytes = 584 hex chars plus the selector.
+ *
+ * The trailing `bytes signature` is RETAINED IN THE ABI BUT IGNORED by the
+ * contract: it was never verified even under the keeper, and open settlement
+ * has no keeper. We still send `0x` so the selector stays `0x2ded79da` and
+ * existing tooling keeps working -- changing it would be a different function.
+ *
+ * The counts MUST be the chain's own `previewHunt` output. The contract
+ * recomputes the result from (season seed, season, player, hunt index) and
+ * reverts ResultMismatch on any difference, so a locally rolled find is
+ * rejected. This is not a formality: `rollHunt` hashing the 0x-prefixed
+ * address instead of the bare hex made every client find unrepresentable.
+ *
+ * @param {string} player      the settling player's address (must be you)
+ * @param {number} tier        1..4
+ * @param {(bigint|number)[]} counts  five rarity counts, from previewHunt
+ * @param {bigint|number|string} bestSingleWei  from previewHunt
+ */
+export function calldataSettleHunt(player, tier, counts, bestSingleWei) {
+  if (!Array.isArray(counts) || counts.length !== 5) {
+    const e = new Error('counts must be an array of exactly 5 rarity counts');
+    e.code = 'bad-arg';
+    throw e;
+  }
+  const t = checkTier(tier);
+  let head = sel('settleHunt(address,uint8,uint256[5],uint256,bytes)').slice(2);
+  head += encAddress(player);
+  head += encUint8(t);
+  for (const c of counts) head += encUint256(c);
+  head += encUint256(bestSingleWei);
+  head += encUint(0n, 256, 'uint256'); // offset to the bytes argument
+  head += encUint(0n, 256, 'uint256'); // its length -- empty, and ignored
+  return head;
+}
+
 /** The 4-byte selector of a bare-hex calldata blob. */
 export function decodeHeader(data) {
   return '0x' + String(data).replace(/^0x/, '').slice(0, 8);
@@ -506,6 +546,28 @@ export async function claimTool(tier) {
   let data;
   try {
     data = calldataClaimTool(tier);
+  } catch (e) {
+    return { ok: false, code: e.code || 'bad-arg', reason: e.message };
+  }
+  return send(data);
+}
+
+/**
+ * Settle your own hunt. Anyone may call it; the contract requires the caller
+ * to BE the player, so a third party cannot settle on your behalf (that would
+ * burn your cooldown and your tool durability).
+ *
+ * @param {object} o
+ * @param {string} o.player
+ * @param {number} o.tier
+ * @param {(bigint|number)[]} o.counts    from chain.previewHunt
+ * @param {bigint} o.bestSingleWei        from chain.previewHunt
+ * @returns {Promise<{ok:boolean, hash?:string, code?:string, reason?:string}>}
+ */
+export async function settleHunt({ player, tier, counts, bestSingleWei }) {
+  let data;
+  try {
+    data = calldataSettleHunt(player, tier, counts, bestSingleWei);
   } catch (e) {
     return { ok: false, code: e.code || 'bad-arg', reason: e.message };
   }

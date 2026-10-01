@@ -21,7 +21,12 @@
  * When no wallet is connected the caller falls back to the local simulation in
  * tools.js, which is unchanged and still preview-only.
  */
-import { getState, claimTool as wcClaimTool, buyGems as wBuyGems } from './wallet.js';
+import {
+  getState,
+  claimTool as wcClaimTool,
+  buyGems as wBuyGems,
+  settleHunt as wSettleHunt,
+} from './wallet.js';
 import { connect as readConnect } from './chain.js';
 import { config } from './config.js';
 
@@ -165,6 +170,98 @@ export async function buyGemsOnchain(rarity, count, priceWei) {
   }
 
   return { ok: true, hash: sent.hash, confirmed: true, count: after.value, spentWei: value };
+}
+
+/**
+ * Settle your own hunt on chain.
+ *
+ * Same rule as every other write in this module: send, then poll until the
+ * contract's own state proves it applied. Here the signal is
+ * `huntIndexOf(player)`, which settleHunt increments exactly once.
+ *
+ * The counts are NOT computed locally. They are read from the contract's own
+ * `previewHunt`, because settleHunt recomputes the result from the committed
+ * season seed and reverts ResultMismatch on any difference. Rolling it here
+ * would produce finds the chain refuses -- which is exactly what happened when
+ * `rollHunt` hashed the 0x-prefixed address.
+ *
+ * @param {number} tier 1..4
+ * @returns {Promise<{ok:boolean, counts?:bigint[], bestSingleWei?:bigint,
+ *                    hash?:string, code?:string, reason?:string}>}
+ */
+export async function settleHuntOnchain(tier) {
+  const r = await getReader();
+  if (!r) return fail('not-configured', 'GAME_ADDRESS not set - no contract to write to');
+
+  const { account } = getState();
+
+  // A season with no committed seed cannot settle anything. Say that plainly
+  // rather than letting the player pay gas to be rejected with SeedNotCommitted.
+  let season;
+  try {
+    season = await r.current();
+  } catch {
+    return fail('read-failed', 'could not read the current season');
+  }
+  if (!season.seedCommitted) {
+    return fail('no-seed', 'this season has no committed seed yet, so hunts cannot be settled');
+  }
+
+  let preview;
+  try {
+    preview = await r.previewHunt(account, tier);
+  } catch (e) {
+    return fail('read-failed', `could not preview the hunt: ${e.message}`);
+  }
+
+  const before = await r.huntIndexOf(account);
+  const sent = await wSettleHunt({
+    player: account,
+    tier,
+    counts: preview.counts,
+    bestSingleWei: preview.bestSingleWei,
+  });
+  if (!sent.ok) return fail(sent.code || 'send-failed', sent.reason || 'transaction was not sent');
+
+  const after = await pollUntilChanged(
+    () => r.huntIndexOf(account),
+    before,
+    (b, a) => a > b,
+  );
+  if (!after.changed) {
+    // Same shape as the other writes: a receipt here proves nothing. On 46630 a
+    // reverted call still yields status 0x1.
+    return fail('reverted', 'contract did not apply the settlement (it reverted) - find not credited');
+  }
+
+  return {
+    ok: true,
+    hash: sent.hash,
+    confirmed: true,
+    counts: preview.counts,
+    bestSingleWei: preview.bestSingleWei,
+    huntIndex: after.value,
+  };
+}
+
+/**
+ * The result the chain will accept for this player's next hunt, or null when
+ * there is no contract / no committed seed. Read-only: safe to call for the
+ * HUD without a wallet connected.
+ *
+ * @param {number} tier 1..4
+ * @returns {Promise<{counts:bigint[], bestSingleWei:bigint}|null>}
+ */
+export async function previewHuntFor(tier) {
+  const r = await getReader();
+  if (!r) return null;
+  const { account } = getState();
+  if (!account) return null;
+  try {
+    return await r.previewHunt(account, tier);
+  } catch {
+    return null;
+  }
 }
 
 /** Read the on-chain price for a sellable rarity. null if unavailable. */

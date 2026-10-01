@@ -64,6 +64,13 @@ export const SIGS = {
   'setConfig(uint256,uint64,uint64,uint256,uint64,uint8,uint8)': '0x54c0d486',
   'setPaused(bool)': '0x16c38b3c',
   'settleHunt(address,uint8,uint256[5],uint256,bytes)': '0x2ded79da',
+  // Open settlement. `settleHunt`'s selector is UNCHANGED from the keeper
+  // version because the unused `bytes signature` argument was retained for ABI
+  // compatibility -- the signature is now ignored entirely.
+  'previewHunt(address,uint8)': '0x3ab14c7c',
+  'huntIndexOf(address)': '0xac3ab04f',
+  'seasonSeed()': '0x87a7d7e7',
+  'commitSeed(bytes32)': '0x3ffc6f9c',
   'setToken(address)': '0x144fa6d7',
   'setTokenRail(bool)': '0x57ffbeff',
   'skillOf(address)': '0x8955cd0c',
@@ -185,7 +192,8 @@ function dArray5(hex) {
  * struct Season order, read from src/DeepWood.sol -- NOT from the artifact,
  * because the artifact's components carry no names:
  *   uint64 id, uint64 startsAt, uint64 endsAt, bool finalized,
- *   uint256 bestSingleFindWei, bytes32 commitRoot, bool committed
+ *   uint256 bestSingleFindWei, bytes32 commitRoot, bool committed,
+ *   bytes32 seed, bool seedCommitted
  *
  * An earlier version of this decoder assumed `bytes32 root` sat at word 4
  * with `committed` at 3. Both guesses were wrong, and both would have
@@ -204,6 +212,15 @@ function dCurrent(hex) {
     bestSingleFindWei: u(4),
     root: '0x' + w(5).slice(-64),
     committed: u(6) !== 0n,
+    // Words 7-8 were added for open settlement: the per-season seed the
+    // contract now recomputes every result from.
+    //
+    // GUARDED, because the DEPLOYED contract still returns the OLD seven-word
+    // Season. Reading word 7 unconditionally gives BigInt('0x') -> TypeError,
+    // which took the whole live page down rather than degrading. A missing
+    // word means "no seed on this contract", which is exactly true.
+    seed: h.length >= 9 * 64 ? '0x' + w(7).slice(-64) : '0x' + '0'.repeat(64),
+    seedCommitted: h.length >= 9 * 64 ? u(8) !== 0n : false,
   };
 }
 
@@ -306,7 +323,25 @@ export async function connect({ rpcUrl, address, player }) {
     priceOf: async (r) => dUint(await rpc.call(to, sel('priceOf(uint8)') + arg8(r))),
     rarityWeight: async (r) => dUint(await rpc.call(to, sel('rarityWeight(uint8)') + arg8(r))),
 
+    // --- open settlement ---
+    //
+    // previewHunt returns (uint256[5] counts, uint256 bestSingleWei) as SIX
+    // static words -- a fixed-size array is inlined, not offset. This is the
+    // authoritative result the chain will accept; settleHunt reverts with
+    // ResultMismatch on anything else, so the client must show THIS and not a
+    // locally rolled guess.
+    previewHunt: async (p = player, tier = 1) => {
+      const h = (
+        await rpc.call(to, sel('previewHunt(address,uint8)') + argAddr(p) + arg8(tier))
+      ).replace(/^0x/, '');
+      const w = (i) => BigInt('0x' + h.slice(i * 64, (i + 1) * 64));
+      return { counts: [w(0), w(1), w(2), w(3), w(4)], bestSingleWei: w(5) };
+    },
+
     // --- per-player ---
+    // The settlement confirmation signal: settleHunt increments this, so
+    // poll-until-changed on it proves the chain applied the write.
+    huntIndexOf: async (p = player) => dUint(await rpc.call(to, sel('huntIndexOf(address)') + argAddr(p))),
     roi: async (p = player) => dUint(await rpc.call(to, sel('roi(address)') + argAddr(p))),
     onRoiBoard: async (p = player) => dBool(await rpc.call(to, sel('onRoiBoard(address)') + argAddr(p))),
     toolCount: async (p = player) => dUint(await rpc.call(to, sel('toolCount(address)') + argAddr(p))),
