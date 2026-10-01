@@ -186,7 +186,16 @@ if (walked) {
       await page.keyboard.down('Space');
       await new Promise((r) => setTimeout(r, 120));
       await page.keyboard.up('Space');
-      await new Promise((r) => setTimeout(r, 1600));
+      // POLL for the find instead of sleeping a fixed 1600ms. The dig is
+      // frame-driven, so on a slow or loaded frame it completes later in wall
+      // time -- a fixed wait made this the suite's flaky check, failing with
+      // "reached a node and pressed SPACE, satchel still empty after 6s".
+      let settled = false;
+      for (let w = 0; w < 30; w++) {
+        await new Promise((r) => setTimeout(r, 200));
+        const n = await page.evaluate(() => window.__scene.finds.length);
+        if (n > before.finds) { settled = true; break; }
+      }
       const after = await page.evaluate(() => {
         const s = window.__scene;
         return {
@@ -543,7 +552,7 @@ check('trees block the hunter',
   `walked ${collided.moved}px, stopped ${collided.gapToRight}px left of the trunk's right edge (x=${collided.trunkX}), rested=${collided.rested}`);
 
 check('walked to a dig node', !!walked, walked ? `node at ${Math.round(walked.nx)},${Math.round(walked.ny)}` : 'no node within range');
-check('a hunt produced a gem', hunted, hunted ? '' : 'reached a node and pressed SPACE, satchel still empty');
+check('a hunt produced a gem', hunted, hunted ? '' : 'reached a node and pressed SPACE, satchel still empty after 6s');
 
 /* ---------------- on-screen controls ----------------
  *
