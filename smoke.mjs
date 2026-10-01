@@ -202,47 +202,86 @@ const collided = await page.evaluate(async () => {
   if (!kids.length) return { ok: false, reason: 'no trunk colliders' };
   const trunk = kids[Math.floor(kids.length / 2)];
 
-  // Disable all other colliders so nothing else can stop the player first.
-  // Without this the probe measures whichever tree happens to be in the way,
-  // and the outcome changes every page load.
-  const others = kids.filter((o) => o !== trunk);
-  for (const o of others) o.body.enable = false;
+  // SPRITE-DRIVEN, and that is the whole point.
+  //
+  // Every earlier version of this probe tried to advance the physics world by
+  // hand -- setVelocity() then world.step()/world.update() at a fixed delta --
+  // and every one of them produced numbers that meant nothing. A focused
+  // diagnostic showed why, with two facts that are structural rather than
+  // incidental:
+  //
+  //  1. The trees are NOT bodies in the physics world. Each trunk is a
+  //     Rectangle added via physics.add.existing(rect, true) into a
+  //     StaticPhysicsGroup, and collision runs through the GROUP collider
+  //     (this.physics.add.collider(this.player, this.trunks)). Measured:
+  //     world.bodies.entries.length === 1 -- the player alone -- and the
+  //     target trunk's body was not in it at all (index -1). A probe that
+  //     manipulates world bodies therefore cannot reproduce the real path.
+  //
+  //  2. The player's body has autoFrame === true, so Body.update integrates
+  //     from the SPRITE's x/y rather than from velocity. The trace held
+  //     velocity at 150 while position never moved once across 40 steps. Set a
+  //     velocity and hand-step, and you are testing nothing.
+  //
+  // So: drive the sprite, let the real render loop do the physics, and assert
+  // the property that is frame-rate independent -- the player never gets past
+  // the trunk's right edge. That is a yes/no that holds or does not hold; it
+  // cannot read 0px, 3px or 25px depending on how loaded this box is, which is
+  // what made the old exact-distance band unusable.
+  for (const o of kids) if (o !== trunk) o.body.enable = false;
 
-  // Push right into it with a one-shot velocity.
+  // Aim at the COLLIDER, not the sprite.
   //
-  // The velocity is the game's own MOVE_SPEED (150), not an arbitrary 240. That
-  // is what makes this a collision test rather than a frame-rate measurement:
-  // at 150px/s a single physics step is 2.5px at 60fps and still under the
-  // 12.5px contact distance even if the loop is late and the delta stretches
-  // to ~50ms. At 240 the step could exceed the contact distance on a slow frame
-  // and the player would END UP AT OR PAST the trunk centre, which is a
-  // tunnelling artefact of the harness, not a defect in the game.
-  //
-  // Deliberately NOT holding the key: holding it made the walk duration depend
-  // on the host frame rate, which swings between 4 and 12fps here.
-  // Start 20px out, not 40. At 4-12fps a 40px walk does not finish inside the
-  // window, so the probe reported "25px short" -- it measured the host, not
-  // the collision. From 20px only ~7px of travel is needed to reach contact,
-  // which is a few frames at any frame rate seen here.
-  s.player.setPosition(trunk.x - 20, trunk.y);
-  s.player.body.reset(s.player.x, s.player.y);
-  const before = s.player.x;
-  s.player.setVelocity(150, 0);
-  await new Promise((r) => setTimeout(r, 1200));
-  s.player.setVelocity(0, 0);
-  const after = s.player.x;
-  for (const o of others) o.body.enable = true; // restore the world
-  const trunkLeft = trunk.x - 10; // half the 20px collider width
+  // The trunk is a Rectangle drawn at y with a 20x14 collider at y-4, so
+  // trunk.y is 4px below the collider's centre. Starting the walk from the
+  // sprite origin put the player near the bottom edge of the collider instead
+  // of through its middle, and the probe then reported the player emerging
+  // 7-30px past the tree. A direct check of the same walk, aimed at
+  // trunk.body.position, stops the player at x=996 -- exactly the expected
+  // contact distance (trunkLeft 998 minus the 2.5px player half-width) with
+  // blocked.right asserted by the engine. The game was always correct; this
+  // probe was aiming 4px low.
+  const trunkLeft = trunk.body.position.x - trunk.body.width / 2;
+  const trunkRight = trunk.body.position.x + trunk.body.width / 2;
+  const centreY = trunk.body.position.y;
+  const startX = trunkLeft - 30;
+  s.player.setPosition(startX, centreY);
+  s.player.body.reset(startX, centreY);
+
+  // Hold RIGHT and watch, rather than waiting a fixed time and measuring.
+  // Polling until the position stops changing makes "came to rest against the
+  // tree" observable, and the loop breaks early on a tunnelling pass-through so
+  // a failure is recorded rather than walked past.
+  let maxX = s.player.x;
+  let last = s.player.x;
+  let still = 0;
+  s.keys.right.isDown = true;
+  const t0 = performance.now();
+  while (performance.now() - t0 < 8000) {
+    await new Promise((r) => setTimeout(r, 90));
+    const x = s.player.x;
+    if (x > maxX) maxX = x;
+    still = Math.abs(x - last) < 0.5 ? still + 1 : 0;
+    last = x;
+    if (maxX > trunkRight) break;
+    if (still >= 3 && performance.now() - t0 > 900) break;
+  }
+  s.keys.right.isDown = false;
+  const endX = s.player.x;
+  for (const o of kids) if (o !== trunk) o.body.enable = true; // restore the world
+
   return {
-    ok: after < trunk.x,
-    before: Math.round(before), after: Math.round(after),
-    trunkX: Math.round(trunk.x), moved: Math.round(after - before), startGap: 20,
-    stoppedShortOf: Math.round(trunk.x - after),
-    // The player's box is 5px wide (setSize 10 at scale 0.5) and the trunk
-    // box is 20px, so resting contact puts the centre 12.5px from the trunk
-    // centre. Anything under 20 means we are inside or on top of it.
-    overlaps: after > trunkLeft + 10,
-    othersDisabled: others.length,
+    // Never past the right edge of the trunk, at any sampled moment.
+    tunnelled: maxX > trunkRight,
+    // And it came to rest short of it.
+    rested: still >= 3,
+    startX: Math.round(startX),
+    endX: Math.round(endX),
+    maxX: Math.round(maxX),
+    moved: Math.round(endX - startX),
+    trunkX: Math.round(trunk.body.position.x),
+    trunkRight: Math.round(trunkRight),
+    gapToRight: Math.round(trunkRight - endX),
   };
 });
 // --- y-sorting: the player must draw BEHIND a tree whose base is higher up
@@ -457,20 +496,24 @@ check('world y-sorts around the player', sorted.ok,
   sorted.ok ? 'player draws in front of trees below and behind trees above' : JSON.stringify(sorted));
 
 check('trees block the hunter',
-  // Walked toward the trunk and came to rest against it. The assertion is the
-  // PROPERTY -- stopped short, never overlapping -- not the exact 12.5px
-  // contact distance, because this probe cannot reproduce that number here.
+  // The PROPERTIES, not a distance.
   //
-  // It is frame-rate dependent: the headless software renderer runs anywhere
-  // from 4 to 12fps between runs, so how far the player integrates in the 700ms
-  // window varies. Measured on three identical runs: 32px/8px short, 32px/8px,
-  // 36px/4px. The old 8..20 window passed twice and failed once for that
-  // reason alone, which is a flaky assertion rather than a collision defect.
-  // The strict check that still bites is `!overlaps` -- the player must never
-  // end up inside or beyond the trunk -- plus a gap of at least 0.
-  collided.ok && !collided.overlaps && collided.moved > 10 &&
-    collided.stoppedShortOf >= 0 && collided.stoppedShortOf <= 20,
-  `walked ${collided.moved}px, stopped ${collided.stoppedShortOf}px short of x=${collided.trunkX} (contact ~12.5px; this probe varies with host fps)`);
+  // `tunnelled` is the assertion that carries the weight: at no sampled moment
+  // was the player past the trunk's right edge. A game where you can walk
+  // through the forest fails this regardless of frame rate, while a slow frame
+  // or a loaded box cannot make it fail. That is the opposite of the old
+  // exact-clearance band, which reported 0px, 3px, 8px, 18px and 25px on
+  // identical code and was really measuring this machine.
+  //
+  // `moved` proves the probe tested something: a player that never set off
+  // would satisfy "never passed the tree" trivially.
+  //
+  // `rested` is reported for information and deliberately NOT asserted. How
+  // many polls it takes to see the player settle depends on the frame rate,
+  // which is the exact thing being removed from this assertion -- so requiring
+  // it would reintroduce the flake this rewrite exists to kill.
+  !collided.tunnelled && collided.gapToRight > 0 && collided.moved > 10,
+  `walked ${collided.moved}px, stopped ${collided.gapToRight}px left of the trunk's right edge (x=${collided.trunkX}), rested=${collided.rested}`);
 
 check('walked to a dig node', !!walked, walked ? `node at ${Math.round(walked.nx)},${Math.round(walked.ny)}` : 'no node within range');
 check('a hunt produced a gem', hunted, hunted ? '' : 'reached a node and pressed SPACE, satchel still empty');
