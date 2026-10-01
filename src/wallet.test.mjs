@@ -562,45 +562,48 @@ test('no signing key is read anywhere in the client', async (t) => {
 //
 // The regression that matters: the offset word for the trailing `bytes`
 // argument is a POSITION, not a presence flag. Encoding it as 0 makes every
-// settlement revert on a real chain with a bare `data: "0x"` and no error
-// name, so a shape check alone would not have caught it -- the payload has to
-// be sent to a contract. script/dryrun-client-abi.mjs does that; these
-// assertions pin the arithmetic that produced the wrong value.
-describe('calldataSettleHunt', () => {
-  const PLAYER = '0xf39Fd6e51aad88F6F4ce6aB8827279cfffb92266';
-  const counts = [4n, 1n, 0n, 0n, 0n];
+// settlement revert on a real chain with a bare `data: "0x"` and no error name,
+// so a shape check alone would not have caught it -- the payload has to be
+// sent to a contract. script/dryrun-client-abi.mjs does that; these assertions
+// pin the arithmetic that produced the wrong value.
+//
+// Written with test(), not describe(), to match this file -- it imports only
+// `test` from node:test, and a stray describe() fails the whole file under
+// `node --test`.
+const SETTLE_SIG = 'settleHunt(address,uint8,uint256[5],uint256,bytes)';
+const P = '0xf39Fd6e51aad88F6F4ce6aB8827279cfffb92266';
+const COUNTS = [4n, 1n, 0n, 0n, 0n];
+const BEST = 400000000000000n;
+const slot = (data, i) => BigInt('0x' + data.slice(8 + 64 * i, 8 + 64 * (i + 1)));
 
-  it('keeps the keeper-era selector, so existing tooling still works', () => {
-    const data = calldataSettleHunt(PLAYER, 1, counts, 400000000000000n);
-    assert.equal(decodeHeader(data), sel('settleHunt(address,uint8,uint256[5],uint256,bytes)'));
-    assert.equal(data.length, 8 + 64 * 10, '4 + 10 words: player, tier, 5 counts, best, offset, length');
-  });
+test('calldataSettleHunt: keeps the keeper-era selector', () => {
+  const data = calldataSettleHunt(P, 1, COUNTS, BEST);
+  assert.equal(decodeHeader(data), sel(SETTLE_SIG), 'selector must be unchanged');
+  assert.equal(data.length, 8 + 64 * 10, '4 bytes + 10 words');
+});
 
-  it('points the bytes offset past the head, not at zero', () => {
-    const data = calldataSettleHunt(PLAYER, 1, counts, 400000000000000n);
-    const word = (i) => data.slice(8 + 64 * i, 8 + 64 * (i + 1));
-    // slots: 0 player, 1 tier, 2..6 counts, 7 best, 8 offset, 9 length
-    assert.equal(word(8), (9n * 32n).toString(16).padStart(64, '0'), 'offset must be 0x120');
-    assert.notEqual(word(8), '0'.repeat(64), 'offset 0 reverts on chain with an unnamed error');
-    assert.equal(word(9), '0'.repeat(64), 'the ignored signature is empty');
-  });
+test('calldataSettleHunt: points the bytes offset past the head', () => {
+  const data = calldataSettleHunt(P, 1, COUNTS, BEST);
+  // slots: 0 player, 1 tier, 2..6 counts, 7 best, 8 offset, 9 length
+  assert.equal(slot(data, 8), 9n * 32n, 'offset must be 0x120');
+  assert.notEqual(slot(data, 8), 0n, 'offset 0 reverts on chain, with no error name');
+  assert.equal(slot(data, 9), 0n, 'the ignored signature is empty');
+});
 
-  it('inlines the fixed-size counts array rather than offsetting it', () => {
-    const data = calldataSettleHunt(PLAYER, 1, counts, 400000000000000n);
-    const word = (i) => BigInt('0x' + data.slice(8 + 64 * i, 8 + 64 * (i + 1)));
-    assert.equal(word(0), BigInt(PLAYER), 'player is left-padded into slot 0');
-    assert.equal(word(1), 1n, 'tier');
-    counts.forEach((c, i) => assert.equal(word(2 + i), c, `count ${i}`));
-    assert.equal(word(7), 400000000000000n, 'bestSingleWei');
-  });
+test('calldataSettleHunt: inlines the fixed-size counts array', () => {
+  const data = calldataSettleHunt(P, 1, COUNTS, BEST);
+  assert.equal(slot(data, 0), BigInt(P), 'player is left-padded into slot 0');
+  assert.equal(slot(data, 1), 1n, 'tier');
+  COUNTS.forEach((c, i) => assert.equal(slot(data, 2 + i), c, `count ${i}`));
+  assert.equal(slot(data, 7), BEST, 'bestSingleWei');
+});
 
-  it('refuses a counts array that is not five long', () => {
-    assert.throws(() => calldataSettleHunt(PLAYER, 1, [1, 2, 3], 1n), /exactly 5/);
-    assert.throws(() => calldataSettleHunt(PLAYER, 1, 'nope', 1n), /exactly 5/);
-  });
+test('calldataSettleHunt: refuses a counts array that is not five long', () => {
+  assert.throws(() => calldataSettleHunt(P, 1, [1, 2, 3], BEST), /exactly 5/);
+  assert.throws(() => calldataSettleHunt(P, 1, 'nope', BEST), /exactly 5/);
+});
 
-  it('rejects an out-of-range tier rather than truncating it', () => {
-    assert.throws(() => calldataSettleHunt(PLAYER, 9, counts, 1n));
-    assert.throws(() => calldataSettleHunt(PLAYER, 0, counts, 1n));
-  });
+test('calldataSettleHunt: rejects an out-of-range tier rather than truncating', () => {
+  assert.throws(() => calldataSettleHunt(P, 9, COUNTS, BEST));
+  assert.throws(() => calldataSettleHunt(P, 0, COUNTS, BEST));
 });
