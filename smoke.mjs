@@ -25,11 +25,21 @@ const browser = await puppeteer.launch({
 const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 800 });
 
+// Optional CPU throttle. The collision assertion is the one that must hold at
+// low frame rate, because frame-rate compensation raises per-step travel and
+// Arcade separates overlaps only AFTER moving -- the failure mode being guarded
+// against is the player walking straight through a trunk at 8fps.
+const THROTTLE = Number(process.env.DW_THROTTLE || 1);
+if (THROTTLE > 1) {
+  const _cdp = await page.target().createCDPSession();
+  await _cdp.send('Emulation.setCPUThrottlingRate', { rate: THROTTLE });
+}
+
 const errors = [];
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 page.on('pageerror', (e) => errors.push('pageerror: ' + e.message + '\n   STACK: ' + String(e.stack || '').split('\n').slice(0,12).join('\n   ')));
 
-console.log('loading', URL);
+console.log('loading', URL + (THROTTLE > 1 ? `  (CPU throttle x${THROTTLE})` : ''));
 await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
 // Poll for the canvas rather than waiting on network idle: Vite keeps an HMR
 // websocket open forever, so networkidle never fires against the dev server.

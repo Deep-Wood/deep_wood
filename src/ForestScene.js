@@ -36,6 +36,20 @@ const TILE = 32;
 const WORLD_W = 40, WORLD_H = 30;
 const MOVE_SPEED = 150;
 
+/**
+ * Largest distance the player may travel in ONE physics step.
+ *
+ * Arcade separates overlapping bodies only AFTER moving them, so a step wider
+ * than the obstacle can skip it entirely. Trunk colliders are 20x14 (a 20x14
+ * rectangle at the tree base) and the player's body is 10 wide, so anything at
+ * or above 20px risks walking straight through a tree. 12px leaves margin.
+ *
+ * This cap is why frame-rate compensation is not a complete fix: below ~8fps
+ * the game still moves slower than MOVE_SPEED. That is the deliberate trade --
+ * correct collision instead of full speed.
+ */
+const MAX_STEP_PX = 12;
+
 // World sprites y-sort by using their own y as depth, so any UI must sit
 // above WORLD_H * TILE. See openBelt().
 const UI_DEPTH = 100_000;
@@ -1202,28 +1216,47 @@ export class ForestScene extends Phaser.Scene {
     const vx = intent.vx;
     const vy = intent.vy;
 
-    // DELIBERATELY NOT applying frameScale() to this velocity.
+    // Frame-rate compensation, CLAMPED.
     //
-    // The diagnosis behind frameScale() is real: Phaser pins its loop delta, so
-    // below ~60fps the simulation advances 16.67ms of game time per real frame
-    // and the game runs in slow motion. Scaling velocity by real elapsed time
-    // does correct the distance, and it was measured doing so.
+    // MEASURED (delta-probe.mjs, three CPU throttles): Phaser advances a fixed
+    // 16.67ms of game time per rendered frame, so distance per FRAME is a
+    // constant 2.5px while the frame interval varied 6x. Movement speed in px/s
+    // is therefore proportional to frame rate -- 150px/s at 60fps, 16px/s at
+    // 7.9fps, 1px/s at 1.3fps.
     //
-    // It also breaks collision, which is why it is not wired in. Arcade physics
-    // separates overlaps only after moving, so the correction's larger per-step
-    // travel steps clean over a trunk: measured at 8-9fps the hunter walked
-    // 288px and finished 248px PAST a tree it should have stopped at. The old
-    // slow motion was incidentally acting as a collision safeguard.
+    // So compensate: scale this frame's step by how long the frame REALLY took.
+    // At 60fps this is exactly 1.0 and changes nothing.
     //
-    // Doing this properly means SUB-STEPPING the physics -- running the world
-    // step several times per frame with a real delta -- not inflating velocity.
-    // That is a larger change than the controls work and is not taken on
-    // silently. Until then the game is slow on a weak device rather than letting
-    // the player walk through the forest.
+    // The clamp is the whole trick. Earlier attempts scaled velocity without one
+    // and the hunter walked 288px, finishing 248px PAST a trunk: Arcade
+    // separates overlaps only AFTER moving, so a step wider than the collider
+    // skips it entirely. The trunk body is 20x14 and the player's is 10 wide,
+    // so any single step must stay under 20px; MAX_STEP_PX holds it at 12 with
+    // margin.
+    //
+    // The cost is deliberate: below the cap the game is still slower than
+    // MOVE_SPEED rather than teleporting through the forest. At 7.9fps that is
+    // 79px/s instead of 16, and at 1.3fps 13px/s instead of 1. Correctness of
+    // collision beats completeness of the speed fix.
     const moving = intent.moving;
+
+    const nowMs = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const realMs = Math.min(nowMs - (this._lastFrameAt || nowMs - 16.67), 250);
+    this._lastFrameAt = nowMs;
+
+    const simMs = delta > 0 ? delta : 16.67; // Phaser's fixed per-frame step
+    // px needed this frame to hold real-time speed, capped so no single step
+    // can clear a 20px trunk collider
+    const wantPx = MOVE_SPEED * (realMs / 1000);
+    const stepPx = Math.min(wantPx, MAX_STEP_PX);
+    // Phaser integrates position += velocity * delta/1000, so the velocity that
+    // produces stepPx over ITS fixed delta is just stepPx / (delta/1000). No
+    // extra ratio factor -- an earlier draft had one and double-counted.
+    const v = stepPx / (simMs / 1000);
+
     this.player.setVelocity(
-      moving ? Math.round(vx * MOVE_SPEED) : 0,
-      moving ? Math.round(vy * MOVE_SPEED) : 0,
+      moving ? Math.round(vx * v) : 0,
+      moving ? Math.round(vy * v) : 0,
     );
 
     // y-sort: the player draws behind objects whose base is higher up the
