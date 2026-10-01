@@ -28,6 +28,9 @@ import {
   priceFor, FOR_SALE, RARITY_NAME_ONSALE,
 } from './onchain.js';
 import sha3 from 'js-sha3';
+import {
+  TouchState, readIntent, frameScale, touchRects, shouldShowTouch, TOUCH_LAYOUT,
+} from './touch.js';
 
 const TILE = 32;
 const WORLD_W = 40, WORLD_H = 30;
@@ -175,6 +178,11 @@ export class ForestScene extends Phaser.Scene {
     this.setupInput();
     this.setupCamera();
     this.setupHud();
+    this.setupTouch();
+
+    // Independent of Phaser's delta, which is the value that lies on a slow
+    // device. See frameScale().
+    this._lastRealTime = (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
     this.cameras.main.fadeIn(400, 0, 0, 0);
     this.updateHud();
@@ -359,6 +367,158 @@ export class ForestScene extends Phaser.Scene {
     this.input.keyboard.addCapture('TAB');
   }
 
+  /* ---------------- on-screen controls ---------------- */
+
+  /**
+   * Build the d-pad, HUNT, BELT and BOARD as real Phaser zones.
+   *
+   * The game was keyboard-only, so a phone had nothing to press: not a broken
+   * control scheme, an absent one. These are drawn from `touch.js`, which owns
+   * the layout maths and the multi-touch bookkeeping, so this method is only
+   * about pixels and pointer events.
+   *
+   * Pointer events (not touch events) throughout, so the same zones work for a
+   * finger, a stylus and a mouse in a desktop browser's device-emulation mode --
+   * which is also how the smoke test drives them.
+   */
+  setupTouch() {
+    this.touchState = new TouchState();
+    this.touchLayer = this.add.container(0, 0)
+      .setScrollFactor(0)
+      .setDepth(UI_DEPTH + 2);
+
+    // Force-visible from the harness, which cannot rely on device detection.
+    const forced = typeof window !== 'undefined'
+      ? window.__forceTouchControls
+      : undefined;
+    this.touchVisible = shouldShowTouch(this.game, forced);
+    if (!this.touchVisible) {
+      this.touchLayer.setVisible(false);
+      return;
+    }
+
+    this.layoutTouch();
+
+    // RESIZE mode does not re-run create(), so the pad has to be repositioned
+    // by hand. Without this, rotating a phone leaves the controls off-screen.
+    this.scale.on('resize', () => this.layoutTouch());
+
+    // Losing focus mid-press (a notification, a tab switch) never delivers
+    // pointerup, which would otherwise leave a direction stuck on.
+    this.game.events.on('blur', () => this.touchState.clear());
+  }
+
+  /** Recompute every control's geometry from the current viewport. */
+  layoutTouch() {
+    if (!this.touchLayer) return;
+
+    // Disable the outgoing zones BEFORE destroying them.
+    //
+    // removeAll(true) destroys the objects but does NOT remove them from the
+    // InputPlugin's list, because setInteractive() registered them against the
+    // scene. A stale zone at the same coordinates as a live one shadows it --
+    // `topOnly` dispatches to the topmost hit, which is the dead one, so the
+    // button silently did nothing. Measured: 14 input entries for 7 buttons,
+    // because setupTouch() plus the RESIZE handler both ran layoutTouch() at
+    // boot and left 7 corpses behind.
+    for (const z of this.touchZones || []) {
+      z.zone.disableInteractive();
+      z.zone.destroy();
+    }
+    this.touchZones = [];
+    this.touchLayer.removeAll(true);
+
+    const W = this.scale.width, H = this.scale.height;
+    const r = touchRects(W, H);
+
+    // Rebuild rather than mutate: the rectangles all change on resize and
+    // tracking nine zones' geometry by hand is how they end up mismatched.
+    const zone = (btn, rect, label, opts = {}) => {
+      const { radius = 0, fontSize = 13, alpha = 0.34, tint = 0x9fbc9f } = opts;
+      const cx = rect.x + rect.w / 2;
+      const cy = rect.y + rect.h / 2;
+
+      const bg = radius
+        ? this.add.circle(cx, cy, rect.w / 2, 0x0d1a10, alpha)
+          .setStrokeStyle(2, tint)
+        : this.add.rectangle(rect.x, rect.y, rect.w, rect.h, 0x0d1a10, alpha)
+          .setOrigin(0)
+          .setStrokeStyle(2, tint);
+
+      const text = this.add.text(cx, cy, label, {
+        fontFamily: 'monospace',
+        fontSize: `${fontSize}px`,
+        color: `#${tint.toString(16).padStart(6, '0')}`,
+      }).setOrigin(0.5);
+
+      this.touchLayer.add([bg, text]);
+
+      // The hit area is a DIRECT SCENE CHILD, not a member of touchLayer.
+      //
+      // Adding a Game Object to a Container after setInteractive() registers
+      // it against the scene and then again against the container, and the
+      // InputPlugin ends up holding two entries per button at identical
+      // coordinates (measured: 14 entries for 7 buttons). With the default
+      // topOnly, dispatch goes to the topmost hit, so a button can be shadowed
+      // by a duplicate of itself and silently do nothing. Zones carry no pixels,
+      // so grouping them with the artwork bought nothing and cost the input
+      // list. scrollFactor 0 + an explicit depth keep them pinned to the screen
+      // and above the world.
+      const z = this.add.zone(cx, cy, rect.w, rect.h)
+        .setOrigin(0.5)
+        .setScrollFactor(0)
+        .setDepth(UI_DEPTH + 2)
+        .setInteractive({ useHandCursor: true });
+
+      // The pointer argument is required on release as well as press: the
+      // release path needs the SAME pointerId to clear that pointer's entry,
+      // and a handler that omits the parameter throws ReferenceError the moment
+      // a thumb lifts.
+      z.on('pointerdown', (p) => {
+        this.touchState.press(p.pointerId, btn);
+        bg.setAlpha(0.62); // visible press feedback
+      });
+      z.on('pointerup', (p) => { this.touchState.release(p.pointerId); bg.setAlpha(alpha); });
+      z.on('pointerout', (p) => { this.touchState.release(p.pointerId); bg.setAlpha(alpha); });
+
+      this.touchZones.push({ btn, zone: z, bg, rect });
+      return z;
+    };
+
+    const ARROW = { fontSize: 20, tint: 0x9fbc9f };
+    zone('up', r.up, '^', ARROW);
+    zone('left', r.left, '<', ARROW);
+    zone('right', r.right, '>', ARROW);
+    zone('down', r.down, 'v', ARROW);
+
+    // Dead-zone hub: drawn so a resting thumb has a home, but NOT interactive.
+    this.touchLayer.add(this.add.circle(
+      r.hub.x + r.hub.w / 2, r.hub.y + r.hub.h / 2, 7, 0x0d1a10, 0.5,
+    ).setStrokeStyle(1, 0x3f8a52));
+
+    // HUNT is the core verb, so it gets its own large target rather than
+    // living on the d-pad where it competes with the directions.
+    zone('hunt', r.hunt, 'HUNT', { radius: 1, fontSize: 15, alpha: 0.42, tint: 0x3f8a52 });
+
+    // Without these, a phone player cannot reach the toolbelt or the board at
+    // all -- TAB and L are keyboard-only, so the claim/buy path would be
+    // unreachable and the game unplayable on touch.
+    zone('belt', r.belt, 'TOOLBELT', { fontSize: 11, alpha: 0.3 });
+    zone('board', r.board, 'BOARD', { fontSize: 11, alpha: 0.3 });
+
+    this.touchLayer.setVisible(this.touchVisible);
+
+    // The find log lived bottom-left, which is now under the d-pad. Move it up
+    // rather than letting the pad cover a log the player is reading.
+    if (this.logText) this.logText.setPosition(12, 96);
+    this._touchLogMoved = true;
+  }
+
+  /** True when the on-screen controls are up. Used by the HUD hint text. */
+  get hasTouchPad() {
+    return !!(this.touchLayer && this.touchLayer.visible);
+  }
+
   /* ---------------- HUD ---------------- */
 
   setupHud() {
@@ -406,9 +566,16 @@ export class ForestScene extends Phaser.Scene {
 
     const tierName = tool ? `Tool ${roman(tool.tier)}` : 'TOOL BROKEN';
     const uses = tool ? `${tool.left}/${tool.max}` : '--';
+
+    // Name the controls the player actually has. Telling a phone player to
+    // "press SPACE" is the same defect as having no button: the instruction
+    // refers to hardware they do not have.
+    const hint = this.hasTouchPad
+      ? 'use the pad to move  -  HUNT to dig  -  TOOLBELT  -  BOARD'
+      : 'WASD move  -  SPACE hunt  -  TAB toolbelt  -  L board';
+
     this.tierText.setText(
-      `${tierName}  ${uses} uses   ${fmt(this.belt.common)} Common   ` +
-      `WASD move  -  SPACE hunt  -  TAB toolbelt  -  L board`
+      `${tierName}  ${uses} uses   ${fmt(this.belt.common)} Common   ${hint}`
     );
     this.tierText.setColor(tool ? '#9fbc9f' : '#d83a5a');
 
@@ -419,7 +586,10 @@ export class ForestScene extends Phaser.Scene {
       const name = RARITY_NAME[f.rarity] || 'Quartz';
       return `found ${name} x${f.count}  =  ${(Number(f.valueWei) / 1e18).toFixed(5)} ETH`;
     });
-    this.logText.setText(lines.length ? lines.join('\n') : 'no finds yet - walk to a glowing stone and press SPACE');
+    this.logText.setText(lines.length ? lines.join('\n')
+      : (this.hasTouchPad
+        ? 'no finds yet - walk to a glowing stone and tap HUNT'
+        : 'no finds yet - walk to a glowing stone and press SPACE'));
   }
 
   /* ---------------- season leaderboard ---------------- */
@@ -438,6 +608,7 @@ export class ForestScene extends Phaser.Scene {
   openLeaderboard() {
     if (this.leaderboardOpen) return;
     this.leaderboardOpen = true;
+    this.releaseTouch();
 
     const W = this.scale.width, H = this.scale.height;
     const pw = 430, ph = 396;
@@ -582,6 +753,7 @@ export class ForestScene extends Phaser.Scene {
    * so an action that is disabled here would revert onchain.
    */
   openBelt() {
+    this.releaseTouch();
     if (this.beltOpen) return;
     this.beltOpen = true;
     this.closeLeaderboard();
@@ -966,6 +1138,7 @@ export class ForestScene extends Phaser.Scene {
 
   closeBelt() {
     if (!this.beltPanel) return;
+    this.releaseTouch();
     this.beltPanel.destroy(true);
     this.beltPanel = null;
     this.beltRows = [];
@@ -976,20 +1149,61 @@ export class ForestScene extends Phaser.Scene {
     if (this.beltPanel) this.closeBelt(); else this.openBelt();
   }
 
+  /**
+   * A panel covers the d-pad, so any held direction must be released or the
+   * character walks off on its own the moment the panel closes.
+   */
+  releaseTouch() {
+    if (this.touchState) this.touchState.clear();
+  }
+
   /* ---------------- the loop ---------------- */
 
   update(time, delta) {
     if (!this.player) return;
 
     const k = this.keys;
-    let vx = 0, vy = 0;
-    if (k.left.isDown || k.left2.isDown) vx -= 1;
-    if (k.right.isDown || k.right2.isDown) vx += 1;
-    if (k.up.isDown || k.up2.isDown) vy -= 1;
-    if (k.down.isDown || k.down2.isDown) vy += 1;
+    const t = this.touchState || new TouchState();
 
-    const moving = vx !== 0 || vy !== 0;
-    this.player.setVelocity(moving ? vx * MOVE_SPEED : 0, moving ? vy * MOVE_SPEED : 0);
+    // One merge for BOTH input sources. Reading the keyboard and the d-pad in
+    // separate branches is how two control schemes end up disagreeing about
+    // what "moving right" means -- and diagonals get normalised once, here.
+    const intent = readIntent({
+      left: k.left.isDown || k.left2.isDown,
+      right: k.right.isDown || k.right2.isDown,
+      up: k.up.isDown || k.up2.isDown,
+      down: k.down.isDown || k.down2.isDown,
+      interact: Phaser.Input.Keyboard.JustDown(k.interact),
+      belt: Phaser.Input.Keyboard.JustDown(k.belt),
+      board: Phaser.Input.Keyboard.JustDown(k.board),
+    }, t);
+
+    const vx = intent.vx;
+    const vy = intent.vy;
+
+    // DELIBERATELY NOT applying frameScale() to this velocity.
+    //
+    // The diagnosis behind frameScale() is real: Phaser pins its loop delta, so
+    // below ~60fps the simulation advances 16.67ms of game time per real frame
+    // and the game runs in slow motion. Scaling velocity by real elapsed time
+    // does correct the distance, and it was measured doing so.
+    //
+    // It also breaks collision, which is why it is not wired in. Arcade physics
+    // separates overlaps only after moving, so the correction's larger per-step
+    // travel steps clean over a trunk: measured at 8-9fps the hunter walked
+    // 288px and finished 248px PAST a tree it should have stopped at. The old
+    // slow motion was incidentally acting as a collision safeguard.
+    //
+    // Doing this properly means SUB-STEPPING the physics -- running the world
+    // step several times per frame with a real delta -- not inflating velocity.
+    // That is a larger change than the controls work and is not taken on
+    // silently. Until then the game is slow on a weak device rather than letting
+    // the player walk through the forest.
+    const moving = intent.moving;
+    this.player.setVelocity(
+      moving ? Math.round(vx * MOVE_SPEED) : 0,
+      moving ? Math.round(vy * MOVE_SPEED) : 0,
+    );
 
     // y-sort: the player draws behind objects whose base is higher up the
     // screen, so walking north puts them behind a tree and walking south
@@ -1012,9 +1226,9 @@ export class ForestScene extends Phaser.Scene {
     if (near) {
       this.prompt.setVisible(true);
       this.prompt.setText(
-        !activeTool(this.belt) ? 'TOOL BROKEN - TAB to repair'
+        !activeTool(this.belt) ? (this.hasTouchPad ? 'TOOL BROKEN - open TOOLBELT' : 'TOOL BROKEN - TAB to repair')
           : this.busy ? 'hunting...'
-            : 'SPACE  hunt'
+            : (this.hasTouchPad ? 'tap HUNT' : 'SPACE  hunt')
       );
       this.prompt.setPosition(this.cameras.main.scrollX + this.scale.width / 2,
         this.cameras.main.scrollY + this.scale.height - 70);
@@ -1022,15 +1236,15 @@ export class ForestScene extends Phaser.Scene {
       this.prompt.setVisible(false);
     }
 
-    if (Phaser.Input.Keyboard.JustDown(k.interact) && near && !this.busy) {
+    if (intent.hunt && near && !this.busy) {
       this.doHunt(near);
     }
 
-    if (Phaser.Input.Keyboard.JustDown(k.belt)) {
+    if (intent.belt) {
       this.closeLeaderboard();
       this.toggleBelt();
     }
-    if (Phaser.Input.Keyboard.JustDown(k.board)) {
+    if (intent.board) {
       this.toggleLeaderboard();
     }
   }
