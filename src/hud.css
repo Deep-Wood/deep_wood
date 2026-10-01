@@ -1,0 +1,227 @@
+/* DeepWood HUD — shared shell styling.
+ *
+ * Extracted from index.html so the launch page and the game can agree.
+ *
+ * The original shell was four independently absolutely-positioned boxes
+ * (#season, #topbar, #wallet, and the Phaser-drawn find log) competing for the
+ * same corners. Measured on a 390x844 phone, two of them genuinely overlapped:
+ *
+ *   season  x 10-271, y 10-117
+ *   topbar  x 32-390, y   0-48     -> overlap x 32-271, y 10-48
+ *   wallet  x  0-380, y 749-834
+ *   dpad    x 16-78,  y 698-760    -> overlap, the card swallowed LEFT taps
+ *
+ * Absolute positioning cannot express "these two must not collide" -- that is a
+ * layout problem, and it needs a layout. So the HUD is one grid container now,
+ * and the boxes are placed in it rather than in the viewport.
+ */
+
+:root {
+  /* one spacing scale, used everywhere. Absolute pixel paddings are why the
+     four old boxes each looked slightly wrong. */
+  --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
+
+  --ink:   #e8f0e0;
+  --dim:   #9fbc9f;
+  --faint: #6d8a6d;
+  --panel: rgba(13, 26, 16, .92);
+  --panel-solid: #0d1a10;
+  --edge:  #3f8a52;
+  --edge-dim: rgba(63, 138, 82, .28);
+  --gold:  #d9a441;
+  --warn:  #b4863a;
+  --bad:   #c05a5a;
+
+  --radius: 10px;
+  --shadow: 0 2px 0 rgba(0,0,0,.45), 0 8px 24px rgba(0,0,0,.35);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0; height: 100%;
+  background: #07120a;
+  overflow: hidden;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--ink);
+  -webkit-tap-highlight-color: transparent;
+}
+
+#game { position: absolute; inset: 0; }
+#game canvas { display: block; image-rendering: pixelated; }
+
+/* --- HUD frame -----------------------------------------------------------
+ * A single grid owns the top-left (season) and top-right (status) slots, so
+ * they cannot overlap: each claims a column and the gap is the gutter. The
+ * right column is content-sized and the left one flexes, so a long season
+ * title wraps instead of pushing the chips off-screen.
+ * ------------------------------------------------------------------------ */
+
+#hud {
+  position: absolute;
+  inset: var(--s3) var(--s3) auto var(--s3);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--s3);
+  z-index: 9;
+  pointer-events: none;   /* the forest underneath stays walkable */
+}
+#hud > * { pointer-events: auto; }
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--edge-dim);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(3px);
+}
+
+.card-title {
+  font-size: 10px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--dim);
+  font-weight: 600;
+}
+
+/* --- season card -------------------------------------------------------- */
+
+#season { padding: var(--s3) var(--s3) var(--s3); min-width: 0; }
+
+.season-head {
+  display: flex; align-items: center; gap: var(--s2);
+  margin-bottom: var(--s3);
+}
+.season-head .card-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Countdown ring. The season is the one thing on screen with a deadline, so
+ * it gets the only circular element in the HUD -- it reads as a clock rather
+ * than as another bar competing with the progress track below it. */
+.ring { width: 26px; height: 26px; flex: none; transform: rotate(-90deg); }
+.ring .track { stroke: rgba(63,138,82,.22); }
+.ring .fill  { stroke: var(--edge); transition: stroke-dashoffset .5s linear; }
+.ring.warn .fill { stroke: var(--warn); }
+
+.season-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  gap: var(--s2) var(--s3);
+}
+.stat { min-width: 0; }
+.stat .k {
+  font-size: 9px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--faint); display: block;
+}
+.stat .v {
+  font-size: 13px; color: var(--ink); display: block; margin-top: 1px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.stat .v.hi { color: var(--gold); }
+
+.bar { height: 4px; background: rgba(26,42,26,.9); border-radius: 2px; margin-top: var(--s3); overflow: hidden; }
+.bar > i {
+  display: block; height: 100%; width: 0%;
+  background: linear-gradient(90deg, var(--edge), var(--gold));
+  border-radius: 2px; transition: width .4s ease;
+}
+
+/* --- status / wallet column -------------------------------------------- */
+
+#status {
+  display: flex; flex-direction: column; align-items: flex-end; gap: var(--s2);
+}
+
+.chip {
+  display: inline-flex; align-items: center; gap: var(--s2);
+  background: var(--panel); border: 1px solid var(--edge-dim);
+  border-radius: 999px; padding: var(--s1) var(--s3);
+  font-size: 11px; color: var(--ink); white-space: nowrap;
+  box-shadow: var(--shadow);
+}
+.chip b { color: var(--gold); font-weight: 600; }
+button.chip { cursor: pointer; font-family: inherit; }
+button.chip:hover { background: rgba(63,138,82,.22); border-color: var(--edge); }
+button.chip:active { transform: translateY(1px); }
+button.chip:disabled { opacity: .55; cursor: default; }
+
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--edge); flex: none; }
+.dot.ok   { background: var(--edge); }
+.dot.warn { background: var(--warn); }
+.dot.bad  { background: var(--bad); }
+
+/* --- satchel ------------------------------------------------------------
+ * Hidden until it holds something.
+ *
+ * The old card was always on screen and wrote the literal word "empty", which
+ * both occupied 380x85px of a 390px phone and sat on top of the d-pad's lower
+ * left corner, swallowing LEFT taps. Hiding it until the first gem is found
+ * removes the collision entirely -- the thing that was covering the d-pad is
+ * the thing that should not have existed yet.
+ *
+ * Anchored bottom-right and ABOVE the d-pad row, so even when populated it
+ * cannot overlap the controls.
+ * ------------------------------------------------------------------------ */
+
+#satchel {
+  position: absolute;
+  right: var(--s3);
+  bottom: calc(var(--s3) + 0px);
+  width: 200px;
+  padding: var(--s2) var(--s3) var(--s3);
+  z-index: 8;
+  /* hidden by default; .on is set by renderGems() the moment there is a gem */
+  opacity: 0; transform: translateY(6px); pointer-events: none;
+  transition: opacity .25s ease, transform .25s ease;
+}
+#satchel.on { opacity: 1; transform: none; pointer-events: auto; }
+#satchel .card-title { margin-bottom: var(--s2); }
+
+#gemlist { display: grid; gap: 3px; }
+.gem { display: flex; justify-content: space-between; gap: var(--s3); font-size: 11px; }
+.gem .n { color: var(--dim); }
+.gem .c { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+#satchelfoot { margin-top: var(--s2); padding-top: var(--s2); border-top: 1px solid var(--edge-dim);
+  font-size: 9px; color: var(--faint); line-height: 1.45; }
+
+/* The persistent note. Lives at the top-right of the status column rather than
+ * inside the satchel, so hiding the satchel cannot hide it. */
+#hint {
+  position: absolute;
+  top: calc(var(--s3) + 76px);
+  right: var(--s3);
+  max-width: min(240px, 52vw);
+  font-size: 9px;
+  color: var(--dim);
+  text-align: right;
+  white-space: normal;
+  line-height: 1.5;
+  background: var(--panel);
+  border: 1px solid var(--edge-dim);
+  padding: var(--s2) var(--s3);
+  z-index: 8;
+}
+#hint:empty { display: none; }
+@media (max-width: 420px) { #hint { top: auto; bottom: var(--s3); left: var(--s3); right: var(--s3);
+  max-width: none; text-align: left; } }
+
+/* --- narrow screens -----------------------------------------------------
+ * Below 420px the three season stats and the status column cannot share a row
+ * without the title truncating to nothing, so the status column drops under
+ * the season card and the pair becomes one full-width stack.
+ * ------------------------------------------------------------------------ */
+@media (max-width: 420px) {
+  #hud { grid-template-columns: minmax(0, 1fr); }
+  #status { flex-direction: row; align-items: center; flex-wrap: wrap; }
+  #season { width: 100%; }
+}
+
+/* The d-pad owns the bottom-left on touch devices. Lift the satchel clear of
+ * it rather than hoping they do not overlap. */
+@media (pointer: coarse) {
+  #satchel { bottom: auto; top: calc(var(--s3) + 190px); }
+}
+@media (pointer: coarse) and (max-height: 620px) {
+  #satchel { top: auto; bottom: calc(var(--s3) + 210px); }
+}

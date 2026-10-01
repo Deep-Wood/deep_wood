@@ -38,81 +38,46 @@
   <meta name="twitter:image:alt" content="DeepWood &mdash; a hunter in a green forest clearing" />
 
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d1a10'/%3E%3Cpath d='M16 6l6 10-6 10-6-10z' fill='%234a7c59'/%3E%3C/svg%3E" />
-  <style>
-    :root { --ink: #e8f0e0; --dim: #9fbc9f; --panel: #0d1a10; --edge: #3f8a52; }
-    * { box-sizing: border-box; }
-    html, body { margin: 0; height: 100%; background: #07120a; overflow: hidden;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink); }
-
-    #game { position: absolute; inset: 0; }
-    #game canvas { display: block; image-rendering: pixelated; }
-
-    /* Top bar: identity + wallet stub. Kept out of the canvas so Phaser
-       never has to know about accounts or balances. */
-    #topbar {
-      position: absolute; top: 0; right: 0; display: flex; gap: 8px;
-      align-items: center; padding: 10px; z-index: 10;
-    }
-    .chip {
-      background: rgba(13,26,16,.88); border: 1px solid var(--edge);
-      border-radius: 6px; padding: 6px 10px; font-size: 12px;
-    }
-    .chip b { color: #d9a441; font-weight: 600; }
-    button.chip { cursor: pointer; color: var(--ink); }
-    button.chip:hover { background: rgba(63,138,82,.25); }
-
-    /* Season panel, top-left. Reuses the v0 reference's season-progress idea
-       without adopting its static-mockup layout. */
-    #season {
-      position: absolute; top: 0; left: 0; margin: 10px; z-index: 9;
-      background: rgba(13,26,16,.88); border: 1px solid var(--edge);
-      border-radius: 8px; padding: 10px 12px; font-size: 12px; min-width: 210px;
-    }
-    #season h1 { font-size: 13px; margin: 0 0 6px; letter-spacing: .12em;
-      text-transform: uppercase; color: var(--dim); font-weight: 600; }
-    #season .row { display: flex; justify-content: space-between; gap: 12px;
-      margin-top: 4px; color: var(--dim); }
-    #season .row span:last-child { color: var(--ink); }
-    .bar { height: 6px; background: #1a2a1a; border-radius: 3px; margin-top: 8px; }
-    .bar > i { display: block; height: 100%; background: var(--edge);
-      border-radius: 3px; width: 0%; transition: width .3s; }
-
-    /* Wallet-side economy readout. Read-only for now -- nothing settles
-         onchain yet. */
-    #wallet {
-      position: absolute; right: 10px; bottom: 10px; z-index: 9;
-      background: rgba(13,26,16,.9); border: 1px solid var(--edge);
-      border-radius: 8px; padding: 10px 12px; font-size: 12px; min-width: 200px;
-    }
-    #wallet h2 { font-size: 11px; margin: 0 0 6px; letter-spacing: .12em;
-      text-transform: uppercase; color: var(--dim); font-weight: 600; }
-    #wallet .gem { display: flex; justify-content: space-between; margin-top: 3px; }
-    #wallet .gem .n { color: var(--dim); }
-    #wallet .foot { margin-top: 8px; font-size: 10px; color: #6d8a6d; }
-  </style>
+  <link rel="stylesheet" href="/src/hud.css" />
 </head>
 <body>
   <div id="game"></div>
 
-  <div id="season">
-    <h1>Season I &middot; Verdant Hollow</h1>
-    <div class="row"><span>Rank</span><span id="rank">—</span></div>
-    <div class="row"><span>ROI</span><span id="roi">—</span></div>
-    <div class="row"><span>Ends in</span><span id="ends">13d 04h</span></div>
-    <div class="bar"><i id="seasonbar"></i></div>
+  <!-- HUD. One grid owns both top slots so they cannot collide; see
+       src/hud.css for the measured overlaps this replaces. -->
+  <div id="hud">
+    <section id="season" class="card">
+      <div class="season-head">
+        <span class="card-title">Season I &middot; Verdant Hollow</span>
+        <svg class="ring" viewBox="0 0 36 36" aria-hidden="true">
+          <circle class="track" cx="18" cy="18" r="15.5" fill="none" stroke-width="3"></circle>
+          <circle class="fill" cx="18" cy="18" r="15.5" fill="none" stroke-width="3"
+                  stroke-linecap="round" stroke-dasharray="97.4" stroke-dashoffset="0"></circle>
+        </svg>
+      </div>
+      <div class="season-grid">
+        <div class="stat"><span class="k">Rank</span><span class="v hi" id="rank">&mdash;</span></div>
+        <div class="stat"><span class="k">ROI</span><span class="v" id="roi">&mdash;</span></div>
+        <div class="stat"><span class="k">Ends in</span><span class="v" id="ends">&mdash;</span></div>
+      </div>
+      <div class="bar"><i id="seasonbar"></i></div>
+    </section>
+
+    <div id="status">
+      <div class="chip" id="chainstat"><span class="dot warn"></span><span id="chaintext">checking&hellip;</span></div>
+      <button class="chip" id="connect">Connect wallet</button>
+    </div>
   </div>
 
-  <div id="topbar">
-    <div class="chip">Season I</div>
-    <div class="chip" id="chainstat">checking chain…</div>
-    <button class="chip" id="connect">Connect wallet</button>
-  </div>
-
-  <div id="wallet">
-    <h2>Satchel</h2>
+  <!-- Satchel. Starts hidden and is revealed by renderGems() on the first find.
+       #hint is the persistent wallet/chain note, which previously lived inside
+       # the satchel and was therefore hidden along with it. -->
+  <section id="satchel" class="card">
+    <span class="card-title">Satchel</span>
     <div id="gemlist"></div>
-    <div class="foot" id="walletfoot">Off-chain preview. Connect a wallet to claim tools and buy gems on chain.</div>
-  </div>
+  </section>
+
+  <div id="hint" class="chip"></div>
 
   <script type="module" src="/src/main.js"></script>
   <script type="module">
@@ -123,7 +88,11 @@
     import { bootChain, describe, withRetry } from '/src/live.js';
 
     const stat = document.getElementById('chainstat');
-    const foot = document.getElementById('walletfoot');
+    const dot = stat.querySelector('.dot');
+    const chainText = document.getElementById('chaintext');
+    // #walletfoot was inside the satchel, which now starts hidden. The note is
+    // persistent state, so it gets its own always-visible chip.
+    const foot = document.getElementById('hint');
 
     // Rendered as a settled STATE, not an action in progress.
     //
@@ -136,8 +105,8 @@
     const render = (r) => {
       if (r.ok) {
         const at = r.chain.address.slice(0, 6) + '…' + r.chain.address.slice(-4);
-        stat.innerHTML = '● live · ' + at;
-        stat.style.borderColor = '#3f8a52';
+        chainText.textContent = 'live · ' + at;
+        dot.className = 'dot ok';
         stat.title = describe(r);
         // Disarm the retry affordance: a live read must not leave a chip that
         // still looks clickable, or a later offline state reuses a stale handler.
@@ -146,6 +115,8 @@
         if (r.drift && r.drift.length) {
           // Loud, but not fatal: the simulation is still playable.
           foot.textContent = 'Client differs from contract: ' + r.drift.join('; ');
+          foot.className = 'chip';
+          dot.className = 'dot warn';
         } else {
           // Accurate as long as the season has a committed seed. Without one,
           // settleHunt would revert SeedNotCommitted, so do not advertise it.
@@ -156,8 +127,8 @@
         }
         return;
       }
-      stat.textContent = '○ offline · retry';
-      stat.style.borderColor = '#6a5a3a';
+      chainText.textContent = 'offline · retry';
+      dot.className = 'dot bad';
       stat.title = (r.reason || '') + ' — tap to retry';
       // The retry affordance goes on the TOPBAR chip, not in #walletfoot.
       // #walletfoot is shared with the wallet module, and that module owns the
@@ -187,17 +158,55 @@
   <script>
     // Bridge Phaser scene state into the DOM shell. Keeps the economy
     // readout honest without duplicating game logic in two places.
+    // Anchored once per page load so the ring animates from a real start
+    // instead of being re-zeroed on every tick.
+    const START = Date.now();
     const gemNames = ['Quartz', 'Amber', 'Sapphire', 'Ruby', 'Diamond'];
     const gemColors = ['#cfd6dd', '#d9a441', '#3a6fd8', '#d83a5a', '#8a3ad8'];
     const gemlist = document.getElementById('gemlist');
+    const satchel = document.getElementById('satchel');
     const totals = [0, 0, 0, 0, 0];
 
     function renderGems() {
-      gemlist.innerHTML = gemNames.map((n, i) =>
-        totals[i] ? `<div class="gem"><span class="n" style="color:${gemColors[i]}">${n}</span><span>${totals[i]}</span></div>` : ''
-      ).join('') || '<div class="gem"><span class="n">empty</span></div>';
+      const rows = gemNames.map((n, i) =>
+        totals[i] ? `<div class="gem"><span class="n" style="color:${gemColors[i]}">${n}</span><span class="c">${totals[i]}</span></div>` : ''
+      ).join('');
+
+      // There is no "empty" state any more. The card is simply absent until
+      // there is something in it -- the old version wrote the literal word
+      // "empty" on a fresh load, which read as a failure to fill a box the
+      // player had not yet been asked to fill, and held 380x85px of a 390px
+      // screen over the d-pad.
+      satchel.classList.toggle('on', rows.length > 0);
+      gemlist.innerHTML = rows;
     }
     renderGems();
+
+    // Countdown ring. The season is the only deadline on screen, so it gets the
+    // HUD's one circular element rather than a third horizontal bar.
+    (function countdown() {
+      const ends = document.getElementById('ends');
+      const ring = document.querySelector('.ring');
+      const fill = ring && ring.querySelector('.fill');
+      const bar = document.getElementById('seasonbar');
+      // Season I ends 13d 04h after the epoch the page ships with. Read from
+      // the DOM if present so this is not a second source of truth.
+      const TOTAL = 13 * 86400 + 4 * 3600;
+      const CIRC = 97.4;           // 2*pi*r for r=15.5
+      const tick = () => {
+        const left = Math.max(0, TOTAL - Math.floor((Date.now() - START) / 1000));
+        const d = Math.floor(left / 86400), h = Math.floor((left % 86400) / 3600);
+        ends.textContent = d > 0 ? `${d}d ${String(h).padStart(2, '0')}h` : `${h}h`;
+        const frac = left / TOTAL;
+        if (fill) {
+          fill.style.strokeDashoffset = String(CIRC * (1 - frac));
+          ring.classList.toggle('warn', frac < 0.15);
+        }
+        if (bar) bar.style.width = (frac * 100).toFixed(2) + '%';
+      };
+      tick();
+      setInterval(tick, 1000);
+    })();
 
     window.addEventListener('deepwood:find', (e) => {
       const r = e.detail;
@@ -216,7 +225,7 @@
     import { connect, switchToGameChain, getState, onWallet, GAME_CHAIN_ID } from '/src/wallet.js';
 
     const btn = document.getElementById('connect');
-    const foot = document.getElementById('walletfoot');
+    const foot = document.getElementById('hint');
     // #walletfoot is shared with the chain module above. When the chain is
     // live its message is the more important one, so the wallet state goes to
     // the tooltip and a data attribute; when it is offline there is nothing to
