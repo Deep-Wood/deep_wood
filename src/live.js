@@ -37,6 +37,45 @@ function clientMirror() {
 }
 
 /**
+ * Retry an operation that failed for a transient reason.
+ *
+ * The live read fires ~36 JSON-RPC calls at boot. It was measured failing
+ * outright on roughly one page load in three with `RPC error: Failed to fetch`
+ * -- and because bootChain() had no retry, a single dropped connection
+ * downgraded the whole session to the offline simulation permanently, with no
+ * recovery short of a page reload. On a phone that is a real exposure.
+ *
+ * Only the "whole read failed" case is retried. A result that came back but
+ * said `chain mismatch` or `contract is paused` is a real answer and must be
+ * reported immediately, not asked again -- retrying those would just delay the
+ * truth the player needs to see.
+ *
+ * @param {() => Promise<T>} fn
+ * @param {number} attempts total tries, including the first
+ * @param {number} baseMs first backoff delay; doubles each retry
+ */
+export async function withRetry(fn, attempts = 3, baseMs = 400) {
+  let last;
+  for (let i = 0; i < attempts; i++) {
+    if (i > 0) {
+      // Exponential backoff, so a burst of retries does not hammer an endpoint
+      // that is already struggling -- which is a likely cause in the first place.
+      await new Promise((r) => setTimeout(r, baseMs * 2 ** (i - 1)));
+    }
+    try {
+      const r = await fn();
+      if (r.ok) return r;
+      last = r;
+      // A definitive answer, not a transport failure: stop and report it.
+      if (!/RPC error|bad config|could not reach/i.test(r.reason || '')) return r;
+    } catch (e) {
+      last = { ok: false, reason: `RPC error: ${e.message}` };
+    }
+  }
+  return last;
+}
+
+/**
  * @param {object} [o]
  * @param {string} [o.player] wallet address for per-player reads
  * @returns {Promise<{ok:boolean, reason?:string, chain?:object, drift?:string[], onChain?:object}>}

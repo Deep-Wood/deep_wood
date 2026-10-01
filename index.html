@@ -87,20 +87,29 @@
     // offline, so this only ever ADDS information -- a failure downgrades to
     // the simulation and says so, rather than leaving "checking chain…"
     // up forever or implying the site is live when it is not.
-    import { bootChain, describe } from '/src/live.js';
+    import { bootChain, describe, withRetry } from '/src/live.js';
 
     const stat = document.getElementById('chainstat');
     const foot = document.getElementById('walletfoot');
 
-    bootChain().then((r) => {
-      // Published so the wallet script below can tell "the chain is live" from
-      // "we are offline" without clobbering this message.
-      window.deepwoodChain = r;
+    // Rendered as a settled STATE, not an action in progress.
+    //
+    // This line used to read "Reading the live contract…" and it was NOT a
+    // loading state -- it was the success message, written in present
+    // progressive. Because the read finishes in about a second, the text was
+    // almost always describing work that had already completed, so a live,
+    // healthy game looked like it was permanently still trying. A player took
+    // it for a hang. It now states what being live MEANS instead.
+    const render = (r) => {
       if (r.ok) {
         const at = r.chain.address.slice(0, 6) + '…' + r.chain.address.slice(-4);
         stat.innerHTML = '● live · ' + at;
         stat.style.borderColor = '#3f8a52';
         stat.title = describe(r);
+        // Disarm the retry affordance: a live read must not leave a chip that
+        // still looks clickable, or a later offline state reuses a stale handler.
+        stat.style.cursor = '';
+        stat.onclick = null;
         if (r.drift && r.drift.length) {
           // Loud, but not fatal: the simulation is still playable.
           foot.textContent = 'Client differs from contract: ' + r.drift.join('; ');
@@ -108,19 +117,37 @@
           // Accurate: reads are live, tool claims and gem buys go on chain
           // once a wallet is connected. Hunt settlement is still keeper-only
           // (settleHunt is onlyHunter), so do not imply more than that.
-          foot.textContent = 'Reading the live contract. Connect a wallet to claim tools and buy gems on chain. Hunts settle via the keeper.';
+          foot.textContent = 'Live contract. Connect a wallet to claim tools and buy gems on chain. Hunts settle via the keeper.';
         }
-      } else {
-        stat.textContent = '○ offline';
-        stat.style.borderColor = '#6a5a3a';
-        stat.title = r.reason;
-        foot.textContent = 'Offline simulation — ' + r.reason;
+        return;
       }
+      stat.textContent = '○ offline · retry';
+      stat.style.borderColor = '#6a5a3a';
+      stat.title = (r.reason || '') + ' — tap to retry';
+      // The retry affordance goes on the TOPBAR chip, not in #walletfoot.
+      // #walletfoot is shared with the wallet module, and that module owns the
+      // line outright whenever the chain is not ok -- it overwrites
+      // textContent, which would delete a button appended there. Putting it on
+      // the chip keeps it out of two writers' way.
+      stat.style.cursor = 'pointer';
+      stat.onclick = () => check();
+      foot.textContent = 'Offline simulation — ' + (r.reason || 'could not reach the chain.');
+    };
+
+    // Three tries with backoff. The read was measured failing on roughly one
+    // load in three, and a single dropped connection used to downgrade the
+    // session to the offline simulation permanently.
+    const check = () => withRetry(() => bootChain()).then((r) => {
+      // Published so the wallet script below can tell "the chain is live" from
+      // "we are offline" without clobbering this message.
+      window.deepwoodChain = r;
+      render(r);
     }).catch((e) => {
-      stat.textContent = '○ offline';
-      stat.title = String(e);
-      foot.textContent = 'Offline simulation — could not reach the chain.';
+      window.deepwoodChain = { ok: false, reason: String(e) };
+      render({ ok: false, reason: String(e) });
     });
+
+    check();
   </script>
   <script>
     // Bridge Phaser scene state into the DOM shell. Keeps the economy
