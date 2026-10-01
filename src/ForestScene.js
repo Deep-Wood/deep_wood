@@ -23,6 +23,10 @@ import {
 import {
   initCommitment, commitSeason, verifySeason, seasonState, rollSeason,
 } from './commitment.js';
+import {
+  onchainActive, mode as chainMode, claimToolOnchain, buyGemsOnchain,
+  priceFor, FOR_SALE, RARITY_NAME_ONSALE,
+} from './onchain.js';
 import sha3 from 'js-sha3';
 
 const TILE = 32;
@@ -583,7 +587,9 @@ export class ForestScene extends Phaser.Scene {
     this.closeLeaderboard();
 
     const W = this.scale.width, H = this.scale.height;
-    const pw = 340, ph = 300;
+    // Taller than the old 300: the panel now carries a mode banner and a gem
+    // shop. Sized to the content below rather than clipping the last row.
+    const pw = 340, ph = 396;
     const px = W - pw - 16, py = 88;
 
     // UI_DEPTH sits above EVERY world object. World sprites use their own y
@@ -609,8 +615,18 @@ export class ForestScene extends Phaser.Scene {
     });
     c.add(this.beltCommon);
 
+    // Mode banner: the single most important line in the panel. Everything
+    // below either touches the contract or is a local simulation, and the
+    // player must be able to tell which at a glance.
+    this.beltMode = this.add.text(px + 14, py + 50, '', {
+      fontFamily: 'monospace', fontSize: '10px', color: '#d9a441',
+      wordWrap: { width: pw - 28 },
+    });
+    c.add(this.beltMode);
+
     // --- owned tools
-    let y = py + 56;
+    // Starts below the mode banner (which occupies py+50..py+66).
+    let y = py + 72;
     this.beltRows = [];
     this.belt.tools.forEach((t, i) => {
       const row = this.add.text(px + 14, y, '', {
@@ -644,6 +660,10 @@ export class ForestScene extends Phaser.Scene {
     }).setInteractive({ useHandCursor: true });
     c.add(this.claimBtn);
 
+    // Connected -> the chain is the source of truth and the local belt is a
+    // mirror of it. Not connected -> the existing local simulation runs, and
+    // the panel says so. The two must never be confused: granting a tool
+    // locally after an on-chain attempt is what this branch exists to prevent.
     this.claimBtn.on('pointerdown', () => {
       const belt = this.belt;
       const next = belt.tools.reduce((m, t) => Math.max(m, t.tier), 0) + 1;
@@ -658,6 +678,10 @@ export class ForestScene extends Phaser.Scene {
         this.beltMsg.setColor('#d83a5a');
         return;
       }
+      if (onchainActive()) {
+        this.claimToolOnchain(next);
+        return;
+      }
       const res = claimTool(belt, next);
       this.beltMsg.setText(`Claimed Tier ${roman(next)} - burned ${fmt(toolCost(next))} Common, ${res.fee} to treasury.`);
       this.beltMsg.setColor('#3f8a52');
@@ -666,6 +690,36 @@ export class ForestScene extends Phaser.Scene {
       this.updateHud();
     });
 
+    // --- gem shop
+    // Only Common and Uncommon: Rare and above are hunt-only and the contract
+    // reverts RarityNotForSale for them, so offering them would be a lie.
+    y += 30;
+    c.add(this.add.text(px + 14, y, 'GEM SHOP', {
+      fontFamily: 'monospace', fontSize: '11px', color: '#e8f0e0',
+    }));
+    y += 16;
+
+    this.shopRows = [];
+    for (const rarity of FOR_SALE) {
+      const label = this.add.text(px + 14, y, `${RARITY_NAME_ONSALE[rarity]} ...`, {
+        fontFamily: 'monospace', fontSize: '11px', color: '#cfe0cf',
+      });
+      c.add(label);
+
+      const buy = this.add.text(px + pw - 92, y - 2, 'buy', {
+        fontFamily: 'monospace', fontSize: '11px', color: '#fff8d0',
+        backgroundColor: '#2a4d38', padding: { x: 8, y: 4 },
+      }).setInteractive({ useHandCursor: true });
+      c.add(buy);
+      this.shopRows.push({ label, buy, rarity });
+      y += 20;
+    }
+
+    for (const row of this.shopRows) {
+      row.buy.on('pointerdown', () => this.buyGemsOnchain(row.rarity, 1));
+    }
+
+    // Close button, then finalize the panel and paint it once.
     // --- close
     this.beltClose = this.add.text(px + pw - 30, py + 10, 'X', {
       fontFamily: 'monospace', fontSize: '14px', color: '#9fbc9f',
@@ -675,11 +729,164 @@ export class ForestScene extends Phaser.Scene {
 
     this.beltPanel = c;
     this.refreshBelt();
+    this.refreshShopPrices();
+  }
+
+  /**
+   * Buy one gem on chain. Price comes from the contract's own priceOf, never
+   * a hardcoded number, and the credit is confirmed by re-reading
+   * gemsOf(account, rarity) before the local balance moves.
+   */
+  async buyGemsOnchain(rarity, count) {
+    if (this.busy) return;
+    if (!onchainActive()) {
+      this.beltMsg.setText('Connect a wallet to buy gems on chain.');
+      this.beltMsg.setColor('#d83a5a');
+      return;
+    }
+    this.busy = true;
+    this.beltMsg.setText('Buying on chain...');
+    this.beltMsg.setColor('#d9a441');
+
+    const price = await priceFor(rarity);
+    if (price === null) {
+      this.busy = false;
+      this.beltMsg.setText('Could not read the price from the contract.');
+      this.beltMsg.setColor('#d83a5a');
+      return;
+    }
+
+    const r = await buyGemsOnchain(rarity, count, price);
+    this.busy = false;
+
+    if (!r.ok) {
+      this.beltMsg.setText(
+        r.code === 'reverted'
+          ? 'Purchase reverted on chain - nothing credited.'
+          : `Purchase failed: ${r.reason || r.code}`
+      );
+      this.beltMsg.setColor('#d83a5a');
+      this.refreshBelt();
+      this.updateHud();
+      return;
+    }
+
+    // Confirmed: the contract's gem balance actually rose. Mirror it.
+    this.belt.common += count;
+    this.beltMsg.setText(
+      `Bought ${count} ${RARITY_NAME_ONSALE[rarity]} for ${eth(r.spentWei)} (tx ${String(r.hash).slice(0, 10)}...).`
+    );
+    this.beltMsg.setColor('#3f8a52');
+    this.refreshBelt();
+    this.updateHud();
+  }
+
+  /** Paint the shop rows with live prices read from the contract. */
+  async refreshShopPrices() {
+    if (!this.shopRows || !this.shopRows.length) return;
+    for (const row of this.shopRows) {
+      const p = await priceFor(row.rarity);
+      row.label.setText(
+        p === null
+          ? `${RARITY_NAME_ONSALE[row.rarity]} - price unavailable`
+          : `${RARITY_NAME_ONSALE[row.rarity]} ${eth(p)}`
+      );
+      row.buy.setText(onchainActive() ? 'buy' : 'connect');
+    }
+  }
+
+  /**
+   * Claim a tier on chain.
+   *
+   * Nothing local changes until the contract's own state confirms it. The
+   * reply to a duplicate claim is a receipt that says "success" while the
+   * count never moves, so a successful send is not treated as a grant.
+   */
+  async claimToolOnchain(tier) {
+    if (this.busy) return;
+    this.busy = true;
+    this.claimBtn.setText('claiming on chain...');
+    this.beltMsg.setText(`Sending claim for Tier ${roman(tier)}...`);
+    this.beltMsg.setColor('#d9a441');
+
+    const r = await claimToolOnchain(tier);
+
+    this.busy = false;
+    this.claimBtn.setText('');
+
+    if (!r.ok) {
+      // Explicitly say nothing was granted. A failed on-chain claim must not
+      // leave the player believing they have a tool.
+      this.beltMsg.setText(
+        r.code === 'reverted'
+          ? 'Claim reverted on chain - nothing granted.'
+          : `Claim failed: ${r.reason || r.code}`
+      );
+      this.beltMsg.setColor('#d83a5a');
+      this.refreshBelt();
+      this.updateHud();
+      return;
+    }
+
+    // The contract now reports the tool. Mirror it into the local belt by
+    // reading it back, rather than assuming what the grant produced.
+    await this.syncBeltFromChain();
+    this.beltMsg.setText(`Tier ${roman(tier)} claimed on chain (tx ${String(r.hash).slice(0, 10)}...).`);
+    this.beltMsg.setColor('#3f8a52');
+    this.flash(`Tier ${roman(tier)} tool claimed on chain`);
+    this.refreshBelt();
+    this.updateHud();
+  }
+
+  /**
+   * Pull the player's tools from the contract into the local belt.
+   *
+   * The chain is the source of truth when connected, so the local mirror is
+   * rebuilt from what the contract actually holds rather than from what the
+   * client hoped happened.
+   */
+  async syncBeltFromChain() {
+    if (!onchainActive()) return;
+    const { getAccount } = await import('./wallet.js');
+    const { connect } = await import('./chain.js');
+    const { config } = await import('./config.js');
+    const account = getAccount();
+    if (!account || !config.gameAddress) return;
+    let chain_ = this._chainReader;
+    if (!chain_) {
+      chain_ = await connect({ rpcUrl: config.rpcUrl, address: config.gameAddress });
+      this._chainReader = chain_;
+    }
+    const count = await chain_.toolCount(account);
+    const tools = [];
+    for (let i = 0; i < count; i++) {
+      // toolAt takes an INDEX, not a tier - it reverts at index >= count.
+      const [tier, durability, active] = await chain_.toolAt(account, i);
+      const max = durabilityOf(tier);
+      tools.push({ tier, left: durability, max, active });
+    }
+    if (!tools.length) return; // never empty a belt we failed to read
+    this.belt.tools = tools;
   }
 
   refreshBelt() {
     if (!this.beltPanel) return;
     const belt = this.belt;
+
+    // Mode must be visible in the panel itself, not just the topbar. A player
+    // who is in simulation should never read a "claimed" line and assume it
+    // went to the contract.
+    if (this.beltMode) {
+      const m = chainMode();
+      this.beltMode.setText(
+        m === 'onchain'
+          ? 'ON-CHAIN - writes go to the DeepWood contract'
+          : m === 'offline'
+            ? 'OFFLINE - no contract configured'
+            : 'PREVIEW - simulation only, nothing is on-chain'
+      );
+      this.beltMode.setColor(m === 'onchain' ? '#3f8a52' : '#d9a441');
+    }
 
     this.beltCommon.setText(
       `Common ${fmt(belt.common)}   burned ${fmt(belt.burned)}   fees ${fmt(belt.feesPaid)}`

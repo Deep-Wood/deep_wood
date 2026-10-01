@@ -78,7 +78,7 @@
   <div id="wallet">
     <h2>Satchel</h2>
     <div id="gemlist"></div>
-    <div class="foot" id="walletfoot">Off-chain preview. Nothing settles onchain yet.</div>
+    <div class="foot" id="walletfoot">Off-chain preview. Connect a wallet to claim tools and buy gems on chain.</div>
   </div>
 
   <script type="module" src="/src/main.js"></script>
@@ -93,6 +93,9 @@
     const foot = document.getElementById('walletfoot');
 
     bootChain().then((r) => {
+      // Published so the wallet script below can tell "the chain is live" from
+      // "we are offline" without clobbering this message.
+      window.deepwoodChain = r;
       if (r.ok) {
         const at = r.chain.address.slice(0, 6) + '…' + r.chain.address.slice(-4);
         stat.innerHTML = '● live · ' + at;
@@ -102,7 +105,10 @@
           // Loud, but not fatal: the simulation is still playable.
           foot.textContent = 'Client differs from contract: ' + r.drift.join('; ');
         } else {
-          foot.textContent = 'Reading the live contract. Settlement is not wired yet.';
+          // Accurate: reads are live, tool claims and gem buys go on chain
+          // once a wallet is connected. Hunt settlement is still keeper-only
+          // (settleHunt is onlyHunter), so do not imply more than that.
+          foot.textContent = 'Reading the live contract. Connect a wallet to claim tools and buy gems on chain. Hunts settle via the keeper.';
         }
       } else {
         stat.textContent = '○ offline';
@@ -137,11 +143,85 @@
       renderGems();
     });
 
-    document.getElementById('connect').addEventListener('click', () => {
-      const b = document.getElementById('connect');
-      b.textContent = '0x1234…abcd';
-      b.style.borderColor = '#d9a441';
+    </script>
+  <script type="module">
+    // Wallet connect. Replaces a fake handler that hardcoded '0x1234…abcd'.
+    //
+    // The scene knows nothing about accounts; this shell does, and it is the
+    // only place window.ethereum is touched. No private key exists anywhere in
+    // the client -- every write is handed to the wallet, which prompts the
+    // user. See src/wallet.js.
+    import { connect, switchToGameChain, getState, onWallet, GAME_CHAIN_ID } from '/src/wallet.js';
+
+    const btn = document.getElementById('connect');
+    const foot = document.getElementById('walletfoot');
+    // #walletfoot is shared with the chain module above. When the chain is
+    // live its message is the more important one, so the wallet state goes to
+    // the tooltip and a data attribute; when it is offline there is nothing to
+    // protect and the wallet owns the line.
+    const noteWallet = (msg) => {
+      foot.dataset.wallet = msg;
+      if (!window.deepwoodChain?.ok) {
+        foot.textContent = msg;
+        return;
+      }
+      foot.title = (foot.title ? foot.title.split('\nwallet ')[0] + '\n' : '') + 'wallet: ' + msg;
+    };
+
+    const short = (a) => a ? a.slice(0, 6) + '…' + a.slice(-4) : '';
+
+    function render() {
+      const s = getState();
+      if (s.connected) {
+        btn.textContent = short(s.account);
+        btn.style.borderColor = '#d9a441';
+        btn.title = `${s.account}\nchain ${s.chainId} · writes go to the DeepWood contract`;
+        noteWallet(`Wallet ${short(s.account)} on chain ${s.chainId}. Buy gems and claim tools in the shop.`);
+        return;
+      }
+      if (s.account && !s.rightChain) {
+        // Wrong chain is NOT connected -- same stance live.js takes on reads.
+        // Offer the switch instead of pretending the wallet is ready.
+        btn.textContent = 'Switch to chain ' + GAME_CHAIN_ID;
+        btn.style.borderColor = '#d9a441';
+        btn.title = `Wallet ${short(s.account)} is on chain ${s.chainId}; the game is on ${GAME_CHAIN_ID}.`;
+        noteWallet(`Wrong network: wallet on chain ${s.chainId}, game on ${GAME_CHAIN_ID}.`);
+        return;
+      }
+      btn.textContent = 'Connect wallet';
+      btn.style.borderColor = '';
+      btn.title = '';
+      noteWallet('Off-chain preview. Connect a wallet to buy gems and claim tools.');
+    }
+
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      try {
+        const s = getState();
+        if (s.account && !s.rightChain) {
+          const r = await switchToGameChain();
+          if (!r.ok) noteWallet('Could not switch network: ' + r.reason);
+          render();
+          return;
+        }
+        const r = await connect();
+        if (!r.ok && r.code !== 'wrong-chain') {
+          // Rejections and missing-provider cases are worth saying out loud;
+          // a wrong chain has its own button state below.
+          noteWallet(r.code === 'rejected' ? 'Connection rejected in the wallet.'
+            : r.code === 'no-provider' ? 'No wallet detected. Install an EIP-1193 wallet to play onchain.'
+            : 'Connect failed: ' + r.reason);
+        }
+        render();
+      } finally {
+        btn.disabled = false;
+      }
     });
+
+    // Provider events (accountsChanged / chainChanged / disconnect) keep the
+    // button honest without a reload.
+    onWallet(render);
+    render();
   </script>
 </body>
 </html>
