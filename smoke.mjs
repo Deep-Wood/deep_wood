@@ -25,6 +25,23 @@ const browser = await puppeteer.launch({
 const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 800 });
 
+// Vite's HMR reloads the page whenever a source file changes, which destroys
+// the JS execution context mid-evaluate. Puppeteer then throws
+// "Execution context was destroyed, most likely because of a navigation" and
+// the whole suite dies with no FAIL line -- this was the intermittent
+// `npm test` failure: it happened whenever the suite ran while a source edit
+// was being saved. Retry once after settling rather than dying on it.
+const rawEvaluate = page.evaluate.bind(page);
+page.evaluate = async (fn, ...rest) => {
+  try {
+    return await rawEvaluate(fn, ...rest);
+  } catch (e) {
+    if (!/Execution context was destroyed|Target closed|detached/i.test(String(e && e.message))) throw e;
+    await new Promise((r) => setTimeout(r, 1200));
+    return rawEvaluate(fn, ...rest);
+  }
+};
+
 // Optional CPU throttle. The collision assertion is the one that must hold at
 // low frame rate, because frame-rate compensation raises per-step travel and
 // Arcade separates overlaps only AFTER moving -- the failure mode being guarded

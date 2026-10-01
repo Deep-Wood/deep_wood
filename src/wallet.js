@@ -469,6 +469,13 @@ export async function switchToGameChain({ provider } = {}) {
     }
     try {
       await p.request({ method: 'wallet_addEthereumChain', params: [params] });
+      // RETRY the switch. Adding a chain and switching to it are two separate
+      // operations, and wallets differ: some auto-select a freshly added chain,
+      // some leave the wallet where it was. Without this retry the et_chainId
+      // check below reports 'wrong-chain' and the player is stuck staring at a
+      // chain they just added. The doc comment promised this retry; the code
+      // never did it.
+      await p.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: target }] });
     } catch (e2) {
       const code = errCode(e2);
       return {
