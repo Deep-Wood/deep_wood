@@ -231,3 +231,30 @@ test('shouldShowTouch honours an explicit override for the harness', () => {
   assert.equal(shouldShowTouch(null, false), false);
   assert.equal(shouldShowTouch(null, undefined), false, 'no touch device reported');
 });
+
+test('shouldShowTouch reads Phaser device off game.device, not game.sys.game', () => {
+  // The exact bug that shipped the controls dead: `game.sys.game.device` is
+  // undefined on a Phaser Game, so detection returned false on every device.
+  // It only ever looked right locally because the harness forced it on.
+  const phaserTouch = { device: { input: { touch: true } } };
+  assert.equal(shouldShowTouch(phaserTouch, undefined), true,
+    'a Phaser Game with touch must be detected');
+
+  const phaserNoTouch = { device: { input: { touch: false } } };
+  // In Node there is no navigator/matchMedia, so this exercises the Phaser
+  // branch in isolation -- which is the one that was broken.
+  assert.equal(shouldShowTouch(phaserNoTouch, undefined), false);
+
+  // A real Game object has no `sys`; make sure that shape does not throw or
+  // accidentally satisfy the check.
+  const realishGame = { device: { input: { touch: true } } };
+  assert.equal(realishGame.sys, undefined);
+  assert.equal(shouldShowTouch(realishGame, undefined), true);
+});
+
+test('shouldShowTouch survives a malformed or absent game object', () => {
+  // Detection must never be the thing that throws during create().
+  for (const g of [null, undefined, {}, { device: null }, { device: {} }, { device: { input: null } }]) {
+    assert.equal(typeof shouldShowTouch(g, undefined), 'boolean');
+  }
+});

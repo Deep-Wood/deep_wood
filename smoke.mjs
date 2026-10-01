@@ -61,12 +61,28 @@ const genTextures = await page.evaluate(() => {
 // Read pixels from a 2D COPY of the canvas, not via gl.readPixels: the WebGL
 // back buffer is cleared after compositing, so gl.readPixels outside the draw
 // call reliably returns all-zero even when the game is drawing perfectly.
+// One scratch canvas, reused for every read.
+//
+// This used to create a fresh canvas per call. Chromium caps the number of live
+// canvas contexts per process, so once the suite also opened a second (touch)
+// page the cap was hit, `getContext('2d')` returned null, and the very next
+// line threw "Cannot read properties of null (reading 'drawImage')" -- a
+// harness failure that surfaced as a console error and looked like the game
+// had crashed. Reusing one context keeps the suite well inside the limit.
 const painted = async (label) => page.evaluate((lbl) => {
   const c = document.querySelector('#game canvas');
   if (!c) return { label: lbl, ok: false, reason: 'no canvas' };
-  const tmp = document.createElement('canvas');
-  tmp.width = c.width; tmp.height = c.height;
+  if (!window.__scratch) {
+    window.__scratch = document.createElement('canvas');
+  }
+  const tmp = window.__scratch;
+  if (tmp.width !== c.width || tmp.height !== c.height) {
+    tmp.width = c.width;
+    tmp.height = c.height;
+  }
   const g = tmp.getContext('2d');
+  if (!g) return { label: lbl, ok: false, reason: 'no 2d context available' };
+  g.clearRect(0, 0, tmp.width, tmp.height);
   g.drawImage(c, 0, 0);
   let d;
   try { d = g.getImageData(0, 0, tmp.width, tmp.height).data; }
@@ -194,17 +210,25 @@ const collided = await page.evaluate(async () => {
 
   // Push right into it with a one-shot velocity.
   //
-  // Deliberately NOT holding the key: holding it makes the walk duration depend
-  // on the host's frame rate, and in this headless software renderer that
-  // swings between 4 and 12fps between runs. The probe then measures how many
-  // physics steps happened to fit in 700ms, not the collision. Verified by
-  // stashing the change: a held-key walk ran 32px, then 105px, then 288px on
-  // three identical runs of the same code.
-  s.player.setPosition(trunk.x - 40, trunk.y);
+  // The velocity is the game's own MOVE_SPEED (150), not an arbitrary 240. That
+  // is what makes this a collision test rather than a frame-rate measurement:
+  // at 150px/s a single physics step is 2.5px at 60fps and still under the
+  // 12.5px contact distance even if the loop is late and the delta stretches
+  // to ~50ms. At 240 the step could exceed the contact distance on a slow frame
+  // and the player would END UP AT OR PAST the trunk centre, which is a
+  // tunnelling artefact of the harness, not a defect in the game.
+  //
+  // Deliberately NOT holding the key: holding it made the walk duration depend
+  // on the host frame rate, which swings between 4 and 12fps here.
+  // Start 20px out, not 40. At 4-12fps a 40px walk does not finish inside the
+  // window, so the probe reported "25px short" -- it measured the host, not
+  // the collision. From 20px only ~7px of travel is needed to reach contact,
+  // which is a few frames at any frame rate seen here.
+  s.player.setPosition(trunk.x - 20, trunk.y);
   s.player.body.reset(s.player.x, s.player.y);
   const before = s.player.x;
-  s.player.setVelocity(240, 0);
-  await new Promise((r) => setTimeout(r, 700));
+  s.player.setVelocity(150, 0);
+  await new Promise((r) => setTimeout(r, 1200));
   s.player.setVelocity(0, 0);
   const after = s.player.x;
   for (const o of others) o.body.enable = true; // restore the world
@@ -212,7 +236,7 @@ const collided = await page.evaluate(async () => {
   return {
     ok: after < trunk.x,
     before: Math.round(before), after: Math.round(after),
-    trunkX: Math.round(trunk.x), moved: Math.round(after - before),
+    trunkX: Math.round(trunk.x), moved: Math.round(after - before), startGap: 20,
     stoppedShortOf: Math.round(trunk.x - after),
     // The player's box is 5px wide (setSize 10 at scale 0.5) and the trunk
     // box is 20px, so resting contact puts the centre 12.5px from the trunk
@@ -458,18 +482,45 @@ check('a hunt produced a gem', hunted, hunted ? '' : 'reached a node and pressed
  * touchState.press() directly would prove the arithmetic and prove nothing
  * about whether the buttons are wired to it.
  *
- * This runs in a second page forced to touch mode, because the desktop page
- * above is a mouse browser and correctly hides the pad.
+ * It runs on a phone-sized viewport with real touch capability. The desktop
+ * page is closed first so only one WebGL game is live at a time.
  */
-const touchPage = await browser.newPage();
+// The touch checks run in their OWN BROWSER PROCESS.
+//
+// Closing the desktop page first was not enough: the touch page still threw
+// "Cannot read properties of null (reading 'drawImage')" on roughly one run in
+// three. Phaser allocates a canvas per generated sprite texture, Chromium caps
+// live canvas contexts per process, and once that budget is spent getContext
+// returns null -- which surfaces as an uncaught error that looks exactly like
+// the game crashing. A fresh browser gives the touch run its own budget, so
+// the failure cannot depend on how much canvas the desktop run already used.
+//
+// The desktopPad check reads a flag captured before the page goes away.
+const desktopHadPad = await page.evaluate(() => !!(window.__scene && window.__scene.hasTouchPad));
+// Written while the page still exists -- this is the artefact the run produces.
+await page.screenshot({ path: SHOT });
+await page.close();
+await browser.close();
+
+const touchBrowser = await puppeteer.launch({
+  headless: 'new',
+  args: ['--no-sandbox', '--disable-setuid-sandbox', '--use-gl=swiftshader', '--enable-webgl'],
+});
+const touchPage = await touchBrowser.newPage();
 const touchErrors = [];
 touchPage.on('console', (m) => { if (m.type() === 'error') touchErrors.push(m.text()); });
 touchPage.on('pageerror', (e) => touchErrors.push('pageerror: ' + e.message));
 // A phone viewport, so the layout assertions are against the size that matters.
 await touchPage.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
-// The pad's visibility keys off Phaser's device detection; a headless browser
-// reports no touch, so it is forced on rather than being faked per-button.
-await touchPage.evaluateOnNewDocument(() => { window.__forceTouchControls = true; });
+// NO __forceTouchControls override here on purpose.
+//
+// The pad's visibility is device detection, and forcing it on is exactly how
+// the original bug survived: shouldShowTouch() read `game.sys.game.device`,
+// which is undefined on a Phaser Game, so it returned false on EVERY device
+// and the controls were dead in production -- while the harness forced them
+// visible and reported green. This page runs on real detection against a
+// touch-enabled viewport, and a separate check below asserts a DESKTOP page
+// correctly does NOT get them.
 await touchPage.goto(URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
 await touchPage.waitForSelector('#game canvas', { timeout: 30000 }).catch(() => {});
 await new Promise((r) => setTimeout(r, 3500));
@@ -568,14 +619,19 @@ const panels = await touchPage.evaluate(async () => {
 check('TOOLBELT opens from the screen', panels.beltOpened);
 check('BOARD opens from the screen', panels.boardOpened);
 
+// The other half of the detection contract: a mouse browser must NOT get the
+// pad. Without this, "the pad appears" could be satisfied by always-on.
+check('a desktop mouse browser does NOT get the on-screen controls',
+  desktopHadPad === false, `hasTouchPad=${desktopHadPad}`);
+
 check('no console errors with touch controls', touchErrors.length === 0,
   touchErrors.slice(0, 3).join(' | '));
 if (touchErrors.length) touchErrors.slice(0, 6).forEach((e) => console.log('   console:', e.slice(0, 200)));
 
 await touchPage.close();
+await touchBrowser.close();
 
-await page.screenshot({ path: SHOT });
-console.log('\nscreenshot ->', SHOT);
+console.log('screenshot ->', SHOT);
 
 check('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 if (errors.length) errors.slice(0, 6).forEach((e) => console.log('   console:', e.slice(0, 200)));

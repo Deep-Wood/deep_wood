@@ -201,14 +201,35 @@ export function readIntent(kb, t) {
 /**
  * Should the on-screen controls be shown?
  *
- * Phaser's touch detection is the authority because it also covers a laptop
- * with a touchscreen. `force` lets the smoke test pin it on regardless of
- * what the headless browser reports.
+ * Detection reads SEVERAL independent signals, because any one of them alone
+ * gets a real phone wrong:
+ *
+ *  - `game.device.input.touch` is Phaser's own verdict.
+ *  - `navigator.maxTouchPoints` is what the platform actually reports.
+ *  - `(pointer: coarse)` is the CSS answer to "is the primary input a finger".
+ *
+ * A laptop with a touchscreen reports coarse pointer but no touch points while
+ * a stylus user reports neither, so the controls follow the most likely intent
+ * rather than one vendor's guess.
+ *
+ * `force` lets the smoke test pin it on regardless of what the browser claims.
  */
 export function shouldShowTouch(game, force) {
   if (force !== undefined) return !!force;
-  const input = game && game.sys && game.sys.game && game.sys.game.device;
-  return !!(input && input.input && input.input.touch);
+
+  // Phaser exposes the device on the Game itself. It is NOT `game.sys.game`:
+  // there is no `sys` on a Game, so that expression silently evaluated to
+  // undefined and this returned false on EVERY device -- the controls were dead
+  // in production and only appeared locally because the harness forced them on.
+  const phaserSaysTouch = !!(game && game.device && game.device.input && game.device.input.touch);
+
+  const hasTouchPoints = typeof navigator !== 'undefined' && (navigator.maxTouchPoints || 0) > 0;
+
+  const coarse = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    && (window.matchMedia('(pointer: coarse)').matches
+      || window.matchMedia('(any-pointer: coarse)').matches);
+
+  return phaserSaysTouch || hasTouchPoints || coarse;
 }
 
 /** Button rectangles, recomputed on resize rather than baked at create time. */
