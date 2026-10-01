@@ -120,10 +120,21 @@
         } else {
           // Accurate as long as the season has a committed seed. Without one,
           // settleHunt would revert SeedNotCommitted, so do not advertise it.
-          const seedReady = live && live.current && live.current.seedCommitted;
+          //
+          // `r` is the bootChain result. This used to read a bare `live`, which
+          // was never in scope -- render() threw "ReferenceError: live is not
+          // defined", the surrounding .catch() swallowed it as an RPC failure,
+          // and the whole site reported "offline · retry" while the chain was
+          // completely healthy. A render bug disguised as an infrastructure
+          // outage.
+          const seedReady = !!(r.onChain && r.onChain.current && r.onChain.current.seedCommitted);
+          const open = r.onChain ? r.onChain.seasonOpen : null;
           foot.textContent = seedReady
             ? 'Live contract. Connect a wallet to claim tools, buy gems and settle your own hunts on chain.'
             : 'Live contract. Connect a wallet to claim tools and buy gems on chain. Hunts settle once the season seed is committed.';
+          if (open === false) {
+            foot.textContent = 'Live contract, but Season I is closed right now -- hunts will not settle until the owner opens it.';
+          }
         }
         return;
       }

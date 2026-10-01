@@ -23,6 +23,7 @@ const SEL = new Map();
 // then diff this table against the artifact in chain.test.mjs.
 export const SIGS = {
   'BPS_DENOMINATOR()': '0xe1a45218',
+  'seasonOpen()': '0xc09afc17',
   'buyGems(uint8,uint256)': '0xaf6520db',
   'claimTool(uint8)': '0xcbc15b3a',
   'commitSeason(bytes32)': '0x4937e907',
@@ -314,6 +315,12 @@ export async function connect({ rpcUrl, address, player }) {
 
     current: async () => dCurrent(await rpc.call(to, sel('current()'))),
 
+    // Owner-controlled season gate. Absent from the OLD keeper contract, which
+    // is why this tolerates a revert: a contract without the function returns
+    // null and the client treats "no gate" as "open", rather than declaring the
+    // whole chain unreadable.
+    seasonOpen: async () => dBool(await rpc.call(to, sel('seasonOpen()'))),
+
     // --- per-tier economy ---
     toolCost: async (t) => dUint(await rpc.call(to, sel('toolCost(uint8)') + arg8(t))),
     durabilityOf: async (t) => dUint(await rpc.call(to, sel('durabilityOf(uint8)') + arg8(t))),
@@ -386,10 +393,21 @@ export async function connect({ rpcUrl, address, player }) {
         price.push(await chain.priceOf(r));
         weight.push(await chain.rarityWeight(r));
       }
+      // Season gate. A CLOSED season is a legitimate state, not an error --
+      // it used to be invisible to the client, which is how the footer ended up
+      // advertising settlement against a shut season. Read it alongside the rest.
+      // Wrapped in a function, not `.catch()`, because a missing selector or a
+      // reverted call throws synchronously inside the chain object -- a trailing
+      // .catch() on the expression never gets constructed and the throw escapes
+      // to bootChain's outer catch, which reports the whole site as offline.
+      let seasonOpen = null;
+      try { seasonOpen = await chain.seasonOpen(); } catch { seasonOpen = null; }
+
       return {
         config,
         bpsDenominator: dUint(bps),
         current,
+        seasonOpen,
         tiers,
         price,
         weight,
