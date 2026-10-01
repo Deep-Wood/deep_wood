@@ -72,7 +72,9 @@ export function rollHunt(seed, player, huntIndex, toolTier) {
   const h = hash(concat(
     toBuf32(BigInt(seed)),
     toBuf32(huntIndex),
-    utf8(String(player).toLowerCase()),
+    // Strip the 0x prefix: the contract hashes the bare 40-char lowercase hex,
+    // so keeping the prefix makes every client render disagree with the chain.
+    utf8(String(player).toLowerCase().replace(/^0x/, '')),
   ));
   const gemCount = 3 + (h[0] % 3);
 
