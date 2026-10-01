@@ -504,29 +504,57 @@ export function makeGlowTexture(scene) {
  * deterministic and lets the detail be non-repeating.
  */
 export function makeGroundTexture(scene, worldW, worldH) {
+  // SEAMLESS TILE, not a world-sized bake.
+  //
+  // The endless forest cannot use a texture sized to the world -- there is no
+  // world size any more. This now produces a single tile that repeats, so the
+  // ground is a TileSprite following the camera at scrollFactor 0 instead of a
+  // giant image.
+  //
+  // Seamless means every blob is ALSO drawn at its wrapped offsets, so a patch
+  // that runs off the right edge reappears on the left. Without that the seams
+  // are visible as a grid and the forest immediately reads as tiled.
   const key = 'ground';
   if (scene.textures.exists(key)) scene.textures.remove(key);
-  const W = worldW, H = worldH;
+  const W = GROUND_TILE, H = GROUND_TILE;
   const t = scene.textures.createCanvas(key, W, H);
   t.setFilter(Phaser.Textures.FilterMode.LINEAR);
   const ctx = t.getContext();
   const rnd = rng(20260929);
 
+  // Draw fn, called once per wrap-offset so anything crossing an edge is
+  // continued on the opposite side.
+  const wrapped = (x, y, draw) => {
+    for (let ox = -1; ox <= 1; ox++) {
+      for (let oy = -1; oy <= 1; oy++) {
+        const px = x + ox * W, py = y + oy * H;
+        if (px < -W || px > W * 2 || py < -H || py > H * 2) continue;
+        draw(px, py);
+      }
+    }
+  };
+
   ctx.fillStyle = toCss(PAL.ground);
   ctx.fillRect(0, 0, W, H);
 
   // broad tonal patches, so the floor is not one flat colour
-  for (let i = 0; i < 220; i++) {
-    oval(ctx, rnd() * W, rnd() * H, 40 + rnd() * 110, 30 + rnd() * 90,
-      rnd() > 0.5 ? PAL.groundAlt : PAL.groundDark, 0.35);
+  for (let i = 0; i < 90; i++) {
+    const x = rnd() * W, y = rnd() * H;
+    const rx = 40 + rnd() * 110, ry = 30 + rnd() * 90;
+    const col = rnd() > 0.5 ? PAL.groundAlt : PAL.groundDark;
+    wrapped(x, y, (px, py) => oval(ctx, px, py, rx, ry, col, 0.35));
   }
   // worn dirt
-  for (let i = 0; i < 26; i++) {
-    oval(ctx, rnd() * W, rnd() * H, 30 + rnd() * 70, 20 + rnd() * 50, PAL.dirt, 0.28);
+  for (let i = 0; i < 12; i++) {
+    const x = rnd() * W, y = rnd() * H;
+    const rx = 30 + rnd() * 70, ry = 20 + rnd() * 50;
+    wrapped(x, y, (px, py) => oval(ctx, px, py, rx, ry, PAL.dirt, 0.28));
   }
 
   // blades
-  for (let i = 0; i < 9000; i++) {
+  // Density scaled from the old 9000-over-1280x960 bake to this 512 tile,
+  // so the repeat does not read as noise.
+  for (let i = 0; i < 1900; i++) {
     const r = rnd();
     ctx.fillStyle = toCss(r > 0.86 ? PAL.leafLit : r > 0.55 ? PAL.leaf : PAL.leafDark);
     ctx.globalAlpha = 0.5 + rnd() * 0.4;
@@ -535,7 +563,7 @@ export function makeGroundTexture(scene, worldW, worldH) {
   ctx.globalAlpha = 1;
 
   // pebbles and flowers
-  for (let i = 0; i < 260; i++) {
+  for (let i = 0; i < 56; i++) {
     const r = rnd();
     if (r > 0.82) {
       ctx.fillStyle = toCss(PAL.rockDark);
@@ -551,6 +579,9 @@ export function makeGroundTexture(scene, worldW, worldH) {
 }
 
 /** Create every texture. Call once in scene create(). */
+/** Ground tile edge in px. One tile repeats under the camera forever. */
+export const GROUND_TILE = 512;
+
 export function buildAllTextures(scene, worldW = 1280, worldH = 960) {
   makeHunterTexture(scene);
   makeGems(scene);

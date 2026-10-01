@@ -10,6 +10,11 @@ import Phaser from 'phaser';
 import { buildAllTextures, PAL, rng } from './art.js';
 import { rollHunt, RARITY_NAME } from './engine.js';
 import {
+  CHUNK, chunkOf, describeChunk, nodeKey,
+  residentChunks, staleChunks,
+  depletionStore, saveDepletion, epochFor,
+} from './streaming.js';
+import {
   newToolbelt, activeTool, consumeUse, claimTool, canClaim,
   repairTool, canRepair, equip, toolCost, repairCost, durabilityOf,
   huntCostWei, expectedHuntWei, roman, fmt, eth, MAX_TIER,
@@ -33,7 +38,11 @@ import {
 } from './touch.js';
 
 const TILE = 32;
+// Retained only for spawn/legacy callers. There is no world extent any more --
+// see WORLD_FAR and the chunk streamer.
 const WORLD_W = 40, WORLD_H = 30;
+// Effectively-unbounded play area. See the setBounds comment in create().
+const WORLD_FAR = 1e7;
 const MOVE_SPEED = 150;
 
 /**
@@ -104,7 +113,13 @@ export class ForestScene extends Phaser.Scene {
       if (!this.anims.exists(`walk-${i}`)) throw new Error(`walk-${i} not registered`);
     }
 
-    this.physics.world.setBounds(0, 0, WORLD_W * TILE, WORLD_H * TILE);
+    // Effectively no boundary. The character must never hit a wall.
+    //
+    // Not literally infinite: Arcade physics works in float px, so coordinates
+    // far enough out quantise and the sprite jitters or sticks. 1e7px is
+    // ~200,000 chunks in every direction and is never reachable in a session,
+    // while staying well inside float precision.
+    this.physics.world.setBounds(-WORLD_FAR, -WORLD_FAR, WORLD_FAR * 2, WORLD_FAR * 2);
 
     // --- ground
     //
@@ -113,7 +128,12 @@ export class ForestScene extends Phaser.Scene {
     // silently falls back to a blank UUID-keyed one -- the floor rendered as
     // flat empty colour and, being added after the world, painted over
     // everything. A 1:1 image has no such constraint.
-    this.bg = this.add.image(0, 0, 'ground').setOrigin(0).setDepth(0);
+    // TileSprite at scrollFactor 0 rather than a world-sized image: the ground
+    // now repeats under the camera forever. It must be re-sized on viewport
+    // resize or it leaves bare colour at the edges on a rotated phone.
+    this.bg = this.add.tileSprite(0, 0, this.scale.width, this.scale.height, 'ground')
+      .setOrigin(0).setScrollFactor(0).setDepth(0);
+    this.scale.on('resize', (size) => this.bg.setSize(size.width, size.height));
 
     // Trees and props are added to the scene (not a container) so each can
     // carry a depth used for y-sorting. A container would render its children
@@ -128,45 +148,27 @@ export class ForestScene extends Phaser.Scene {
     // the wood.
     this.trunks = this.physics.add.staticGroup();
 
-    this.placeTrees(96);
-    this.placeProps(220);
+    // Content is streamed per chunk from now on; the whole-world placement
+    // below is what the endless forest replaces.
+    this.chunks = new Map();
+    this._lastChunk = null;
+    this._pendingChunkReload = null;
+    this.epochByKey = depletionStore(this.seasonSeed);
+    // NOTE: the first refreshChunks() is NOT called here. It needs this.player
+    // (to know which chunk to load) and this.nodes (to push into), and both are
+    // created further down. Calling it here threw "Cannot read properties of
+    // undefined (reading 'x')" and left the scene never booting.
 
     // --- dig nodes: the huntable spots
+    //
+    // The fixed findSpots(24) roster that used to live here is gone: nodes are
+    // created per chunk by refreshChunks(), so this array is bookkeeping for
+    // what is currently loaded rather than the whole world.
     this.nodes = [];
-    const spots = this.findSpots(24);
-    spots.forEach((s, i) => {
-      // additive glow underneath, so a node reads as "interactable" from
-      // across the clearing
-      const glow = this.add.image(s.x, s.y + 6, 'glow')
-        .setBlendMode(Phaser.BlendModes.ADD)
-        .setAlpha(0.5)
-        .setScale(0.75);
-      glow.setDepth(s.y - 1);
-      this.sortables.push(glow);
-
-      const marker = this.add.image(s.x, s.y, 'node');
-      marker.setOrigin(0.5, 0.85);
-      marker.setData('idx', i);
-      marker.setDepth(s.y);
-      this.sortables.push(marker);
-      this.nodes.push(marker);
-
-      // subtle idle bob so they read as interactable
-      this.tweens.add({
-        targets: marker, y: s.y - 3, duration: 900 + i * 37,
-        yoyo: true, repeat: -1, ease: 'Sine.inOut',
-      });
-
-      // slow pulse on the glow
-      this.tweens.add({
-        targets: glow, alpha: 0.32, duration: 1100 + i * 53,
-        yoyo: true, repeat: -1, ease: 'Sine.inOut',
-      });
-    });
 
     // --- the hunter
     // Position is set from a resolved frame, not from a bare texture key.
-    this.player = this.physics.add.sprite(WORLD_W * TILE / 2, WORLD_H * TILE / 2, 'hunter', 0);
+    this.player = this.physics.add.sprite(0, 0, 'hunter', 0);
     // The generated sheet is 16 logical px at 4x = 64px. The world tile is
     // 32px, so draw the character at 0.5 to keep it tile-sized.
     this.player.setScale(0.5);
@@ -191,6 +193,9 @@ export class ForestScene extends Phaser.Scene {
     this.seedRivals();
     this.setupInput();
     this.setupCamera();
+    // First world stream: the hunter and the node list now exist, so the
+    // origin neighbourhood can finally be built.
+    this.refreshChunks(true);
     this.setupHud();
     this.setupTouch();
 
@@ -290,79 +295,150 @@ export class ForestScene extends Phaser.Scene {
 
   /* ---------------- world building ---------------- */
 
-  placeTrees(n) {
-    // deterministic layout -- same forest every load
-    const rnd = rng(987654321);
+  /** Bushes, rocks, grass tufts and flowers. Purely decorative. */
 
-    const cx = WORLD_W * TILE / 2, cy = WORLD_H * TILE / 2;
-    const nodes = this.findSpots(24);
-    let placed = 0, guard = 0;
-    const taken = [];
-    while (placed < n && guard++ < n * 60) {
-      const x = Math.floor(rnd() * WORLD_W) * TILE + TILE / 2;
-      const y = Math.floor(rnd() * WORLD_H) * TILE + TILE / 2;
-      // keep the spawn area and a ring around it clear
-      // 190px left a visibly bald ring around spawn; 150 still frames the
-      // start without leaving the player in a clearing.
-      if (Math.hypot(x - cx, y - cy) < 150) continue;
-      // never spawn a tree on a dig node, or the node is unhuntable
-      if (nodes.some((s) => Math.hypot(s.x - x, s.y - y) < 64)) continue;
-      // and keep trunks from stacking into an impassable clump
-      if (taken.some((t) => Math.hypot(t.x - x, t.y - y) < 52)) continue;
+  // ---------------- endless forest: chunk streaming ----------------
 
-      const v = Math.floor(rnd() * 4);
-      const t = this.add.image(x, y, `tree${v}`);
-      t.setOrigin(0.5, 0.9);
-      t.setDepth(y);
-      this.sortables.push(t);
+  /**
+   * Bring the loaded chunk set in line with the player's position.
+   * Cheap to call every frame -- it early-returns unless the player has crossed
+   * a chunk boundary, so the common case is one comparison.
+   */
+  refreshChunks(force = false) {
+    const [cx, cy] = chunkOf(this.player.x, this.player.y);
+    if (!force && this._lastChunk && this._lastChunk[0] === cx && this._lastChunk[1] === cy) return;
+    this._lastChunk = [cx, cy];
 
-      // Trunk-only collider: a 20x14 box at the base. The canopy overhangs
-      // freely, which is what makes a forest feel walkable rather than a maze.
-      const body = this.add.rectangle(x, y - 4, 20, 14);
+    const wanted = residentChunks(this.player.x, this.player.y);
+    for (const key of staleChunks(this.chunks.keys(), wanted)) this.unloadChunk(key);
+    for (const [key, [kx, ky]] of wanted) {
+      if (!this.chunks.has(key)) this.loadChunk(key, kx, ky);
+    }
+  }
+
+  loadChunk(key, cx, cy) {
+    const data = describeChunk(this.seasonSeed, cx, cy);
+    const objs = [];
+
+    for (const t of data.trees) {
+      const img = this.add.image(t.x, t.y, `tree${t.v}`).setOrigin(0.5, 0.9).setDepth(t.y);
+      this.sortables.push(img);
+      objs.push(img);
+      // Trunk-only collider, matching the old fixed world exactly: a 20x14 box
+      // at the base, so the canopy overhangs and the forest reads as walkable
+      // rather than a maze.
+      const body = this.add.rectangle(t.x, t.y - 4, 20, 14);
       this.physics.add.existing(body, true);
       this.trunks.add(body);
-
-      taken.push({ x, y });
-      placed++;
+      objs.push(body);
     }
+
+    for (const p of data.props) {
+      const img = this.add.image(p.x, p.y, `prop${p.k}`)
+        .setOrigin(0.5, 0.9).setDepth(p.y).setAlpha(0.92);
+      this.sortables.push(img);
+      objs.push(img);
+    }
+
+    const nodes = [];
+    data.nodes.forEach((n) => {
+      // A dug node reappears at a new spot: render at the epoch this chunk's
+      // depletion record says it is currently on.
+      const epoch = epochFor(this.epochByKey, cx, cy, n.idx);
+      const spot = epoch === 0 ? n : describeChunk(this.seasonSeed, cx, cy, epoch).nodes.find((q) => q.idx === n.idx);
+      if (!spot) return;
+
+      const glow = this.add.image(spot.x, spot.y + 6, 'glow')
+        .setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.5).setScale(0.75);
+      glow.setDepth(spot.y - 1);
+      this.sortables.push(glow);
+      objs.push(glow);
+
+      const marker = this.add.image(spot.x, spot.y, 'node').setOrigin(0.5, 0.85);
+      marker.setData('idx', n.idx);
+      marker.setData('epoch', epoch);
+      marker.setData('cx', cx);
+      marker.setData('cy', cy);
+      marker.setDepth(spot.y);
+      this.sortables.push(marker);
+      this.nodes.push(marker);
+      objs.push(marker);
+      nodes.push(marker);
+
+      this.tweens.add({
+        targets: marker, y: spot.y - 3, duration: 900 + n.idx * 37,
+        yoyo: true, repeat: -1, ease: 'Sine.inOut',
+      });
+      this.tweens.add({
+        targets: glow, alpha: 0.32, duration: 1100 + n.idx * 53,
+        yoyo: true, repeat: -1, ease: 'Sine.inOut',
+      });
+    });
+
+    this.chunks.set(key, { objs, nodes });
   }
 
-  /** Bushes, rocks, grass tufts and flowers. Purely decorative. */
-  placeProps(n) {
-    const rnd = rng(13579246);
-    const cx = WORLD_W * TILE / 2, cy = WORLD_H * TILE / 2;
-    for (let i = 0; i < n; i++) {
-      const x = rnd() * WORLD_W * TILE;
-      const y = rnd() * WORLD_H * TILE;
-      if (Math.hypot(x - cx, y - cy) < 120) continue;
-      const k = Math.floor(rnd() * 4);
-      const p = this.add.image(x, y, `prop${k}`);
-      p.setOrigin(0.5, 0.9);
-      p.setDepth(y);
-      p.setAlpha(0.92);
-      this.sortables.push(p);
+  unloadChunk(key) {
+    const c = this.chunks.get(key);
+    if (!c) return;
+    for (const o of c.objs) {
+      // Stop the idle bob/pulse tweens before destroying their targets, or the
+      // tween keeps writing to a destroyed object every frame.
+      this.tweens.killTweensOf(o);
+      if (o.destroy) o.destroy();
     }
+    for (const n of c.nodes) {
+      const i = this.nodes.indexOf(n);
+      if (i >= 0) this.nodes.splice(i, 1);
+    }
+    for (const o of c.objs) {
+      const i = this.sortables.indexOf(o);
+      if (i >= 0) this.sortables.splice(i, 1);
+    }
+    // Trunk colliders are static bodies; they must leave the physics world, not
+    // just the display list, or a "destroyed" tree keeps blocking the player.
+    for (const o of c.objs) {
+      if (o.body && this.trunks.has(o)) this.trunks.remove(o);
+    }
+    // NOTE: do NOT call physics.world.colliders.destroy() here. It destroys
+    // EVERY collider in the world, including the player-vs-trunk collider set up
+    // in create(), so the first chunk unload would leave the player walking
+    // straight through every tree in the forest. Destroying the body above is
+    // what removes a single static collider.
+    this.chunks.delete(key);
   }
 
-  findSpots(n) {
-    let seed = 24680;
-    const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
-    const cx = WORLD_W * TILE / 2, cy = WORLD_H * TILE / 2;
-    const out = [];
-    let guard = 0;
-    while (out.length < n && guard++ < n * 60) {
-      const x = 60 + rnd() * (WORLD_W * TILE - 120);
-      const y = 60 + rnd() * (WORLD_H * TILE - 120);
-      if (Math.hypot(x - cx, y - cy) < 130) continue;
-      if (out.some((s) => Math.hypot(s.x - x, s.y - y) < 70)) continue;
-      out.push({ x: Math.round(x), y: Math.round(y) });
+  /** Record a dig and respawn that node elsewhere in the same chunk. */
+  markNodeDug(node) {
+    const cx = node.getData('cx'), cy = node.getData('cy'), idx = node.getData('idx');
+    if (cx === undefined) return;
+    const key = `${cx},${cy}`;
+    this.epochByKey[nodeKey(cx, cy, idx, 0)] = ((this.epochByKey[nodeKey(cx, cy, idx, 0)] | 0) + 1);
+    saveDepletion(this.seasonSeed, this.epochByKey);
+
+    // The chunk is NOT reloaded here. This runs at the START of the dig, while
+    // the dig animation still holds a reference to `node` -- unloading now
+    // destroys that node mid-animation. The reload is deferred until the dig is
+    // over.
+    const c = this.chunks.get(key);
+    if (c) this._pendingChunkReload = key;
+  }
+
+  /** Finish a dig: rebuild the chunk so the emptied node respawns elsewhere. */
+  completeNodeDig() {
+    const key = this._pendingChunkReload;
+    if (!key) return;
+    this._pendingChunkReload = null;
+    if (this.chunks.has(key)) {
+      const [cx, cy] = key.split(',').map(Number);
+      this.unloadChunk(key);
+      this.loadChunk(key, cx, cy);
     }
-    return out;
   }
 
   setupCamera() {
     const cam = this.cameras.main;
-    cam.setBounds(0, 0, WORLD_W * TILE, WORLD_H * TILE);
+    // No camera bounds -- same reason as the physics bounds.
     cam.startFollow(this.player, true, 0.12, 0.12);
     cam.setDeadzone(120, 90);
   }
@@ -1197,6 +1273,10 @@ export class ForestScene extends Phaser.Scene {
   update(time, delta) {
     if (!this.player) return;
 
+    // Stream the world around the player. Early-returns unless a chunk
+    // boundary was crossed, so this is one comparison on a normal frame.
+    this.refreshChunks();
+
     const k = this.keys;
     const t = this.touchState || new TouchState();
 
@@ -1355,12 +1435,22 @@ export class ForestScene extends Phaser.Scene {
     }
     this.busy = true;
     node.setData('used', true);
+    // Record the dig before the animation, so the epoch bump is committed even
+    // if the player walks off mid-dig. The chunk REBUILD is deferred to
+    // completeNodeDig(), because doing it here would destroy the node the
+    // tween below is still animating.
+    this.markNodeDug(node);
 
     // Brief dig: hold the current facing, pulse the node, then reveal.
     this.player.anims.stop();
     this.tweens.add({
       targets: node, alpha: 0.2, scale: 0.45, duration: 220, yoyo: true,
-      onComplete: () => { this.reveal(node); },
+      onComplete: () => {
+        this.reveal(node);
+        // Rebuild the chunk AFTER the reveal has read everything it needs off
+        // the node, so the emptied spot respawns somewhere else in the chunk.
+        this.completeNodeDig();
+      },
     });
 
     const used = consumeUse(this.belt);
