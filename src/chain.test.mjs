@@ -113,8 +113,11 @@ group('client ABI covers the real functions');
     seasonStruct.join(' | '),
     seasonStruct.join(' | '),
   );
-  check('  commitRoot is word 5, committed is word 6',
-    /^uint64 id, uint64 startsAt, uint64 endsAt, bool finalized, uint256 bestSingleFindWei, bytes32 commitRoot, bool committed$/.test(seasonStruct.join(', ')),
+  // Words 5-6 are still commitRoot/committed; 7-8 are the seed added for open
+  // settlement, where settleHunt recomputes each result from the committed seed
+  // instead of trusting a keeper-signed one.
+  check('  commitRoot is word 5, committed is word 6, seed is word 7',
+    /^uint64 id, uint64 startsAt, uint64 endsAt, bool finalized, uint256 bestSingleFindWei, bytes32 commitRoot, bool committed, bytes32 seed, bool seedCommitted$/.test(seasonStruct.join(', ')),
     seasonStruct.join(', '),
   );
   const toolStruct = structOf('Tool');
