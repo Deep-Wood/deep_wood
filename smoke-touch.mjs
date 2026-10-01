@@ -94,19 +94,27 @@ if (pad.rightCentre) {
 
 // HUNT must fire a real hunt from the button, not just set a latch.
 if (pad.huntCentre) {
-  const huntedByButton = await touchPage.evaluate(async () => {
+  // Press HUNT through the real zone, then POLL for the find rather than
+  // sleeping a fixed 1400ms inside the evaluate. The dig is frame-driven, so on
+  // a slow or loaded frame it finishes later in wall time; the fixed wait made
+  // this the touch suite's flaky check ("finds 0 -> 0"), the same defect as the
+  // one fixed in smoke.mjs.
+  const findsBefore = await touchPage.evaluate(async () => {
     const s = window.__scene;
-    const findsBefore = s.finds.length;
-    // Stand the hunter on a node, then press HUNT through the real zone.
+    // Stand the hunter on a node.
     const node = s.nodes.find((n) => !n.getData('used'));
     s.player.setPosition(node.x, node.y);
     await new Promise((r) => setTimeout(r, 120));
-    const z = s.touchZones.find((t) => t.btn === 'hunt').zone;
-    z.emit('pointerdown', { pointerId: 77 });
-    await new Promise((r) => setTimeout(r, 1400));
-    z.emit('pointerup', { pointerId: 77 });
-    return { before: findsBefore, after: s.finds.length };
+    s.touchZones.find((t) => t.btn === 'hunt').zone.emit('pointerdown', { pointerId: 77 });
+    return s.finds.length;
   });
+  let findsAfter = findsBefore;
+  for (let w = 0; w < 30; w++) {
+    await new Promise((r) => setTimeout(r, 200));
+    findsAfter = await touchPage.evaluate(() => window.__scene.finds.length);
+    if (findsAfter > findsBefore) break;
+  }
+  const huntedByButton = { before: findsBefore, after: findsAfter };
   check('the on-screen HUNT button performs a hunt',
     huntedByButton.after > huntedByButton.before,
     `finds ${huntedByButton.before} -> ${huntedByButton.after}`);
