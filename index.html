@@ -37,6 +37,10 @@
   <meta name="twitter:image" content="https://deepwood-two.vercel.app/launch/hero.jpg" />
   <meta name="twitter:image:alt" content="DeepWood &mdash; a hunter in a green forest clearing" />
 
+  <!-- Start the emblem's 142KB fetch before the body is parsed. It used to
+       begin only when the parser reached the splash, by which point the 1.5MB
+       game bundle had already taken the connection. -->
+  <link rel="preload" as="image" href="/launch/hero.jpg" fetchpriority="high" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d1a10'/%3E%3Cpath d='M16 6l6 10-6 10-6-10z' fill='%234a7c59'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="/src/hud.css" />
   <link rel="stylesheet" href="/src/belt.css" />
@@ -61,10 +65,27 @@
         b.classList.add(DONE);
         setTimeout(function () { if (b.parentNode) b.remove(); }, 900);
       }
-      // 1. hard ceiling, measured from the document, not from the game.
-      //    The CSS animation already forces this at 2.0s; this is the belt to
-      //    its braces for browsers that drop animations.
-      setTimeout(dismiss, 2500);
+      // 0. Nothing may dismiss the splash until the emblem has painted or
+      //    failed. Both the CSS timer and the canvas handover below are gated
+      //    on this; before it, a phone could lose the race and get a loading
+      //    screen with no logo on it.
+      // A FUNCTION, not a one-shot boolean, and that distinction is the whole
+      // fix. This script is in <head>, so when it first ran, #boot had not been
+      // parsed yet: querySelector returned null, the old code treated "no
+      // element" as "settled", the gate was open from the first millisecond, and
+      // the canvas handover dismissed the splash at t+2.5s with the emblem
+      // still unpainted -- exactly the bug it was written to prevent. Re-checked
+      // on every call, so it cannot be defeated by evaluation order.
+      function emblemSettled() {
+        var img = document.querySelector('#boot .emblem');
+        if (!img) return false;              // not parsed yet: NOT settled
+        return img.complete;                 // loaded, or errored
+      }
+
+      // 1. hard ceiling. Generous, and only counted once the emblem has
+      //    settled: its job is to rescue a splash that is somehow stuck, not
+      //    to race the logo off screen.
+      setTimeout(dismiss, 6000);
       // 2. any uncaught error: a broken game must not hide behind a logo
       window.addEventListener('error', dismiss);
       window.addEventListener('unhandledrejection', dismiss);
@@ -75,6 +96,7 @@
       //    forest is visible while the rest of the world streams, which is what
       //    a title card is for.
       function handover() {
+        if (!emblemSettled()) return;   // never cut the logo short
         var c = document.querySelector('#game canvas');
         if (!c || c.width <= 0) return;
         // one more frame, so there is something behind the splash
@@ -95,8 +117,18 @@
         });
       } else { handover(); }
       window.addEventListener('load', function () { setTimeout(handover, 300); });
-      // 4. the game tells us directly, when it can
-      window.__dismissBoot = dismiss;
+      // 4. the game tells us directly, when it can -- but through the SAME
+      //    gate, so the scene cannot cut the logo short either. It was calling
+      //    this straight from create() 120ms in, which landed at ~2.7s and
+      //    added .done while the emblem was still unpainted. That path was the
+      //    one actually firing; the CSS timer and the canvas handover were
+      //    correctly gated and innocent.
+      window.__emblemSettled = emblemSettled;
+      window.__dismissBoot = function () {
+        if (!emblemSettled()) return false;   // emblem not painted yet
+        dismiss();
+        return true;
+      };
     })();
   </script>
 </head>
@@ -104,7 +136,31 @@
   <!-- The emblem, while the forest streams its first chunks. -->
   <div id="boot">
     <div>
-      <img class="emblem" src="/launch/hero.jpg" alt="" width="1280" height="698" />
+      <!-- decode="async" so a slow JPEG never blocks the first paint of the
+           page, and the class below is how the splash knows it may leave. -->
+      <img class="emblem" src="/launch/hero.jpg" alt="" width="1280" height="698"
+           decoding="async" fetchpriority="high" />
+      <script>
+        // The emblem must PAINT before the splash is allowed to leave.
+        //
+        // It did not, and that is why the logo never appeared. The splash was
+        // dismissed by whichever came first: the canvas element existing, or a
+        // 2.0s CSS timer. Neither waited for the image. A 142KB JPEG is racing a
+        // 1.5MB JS bundle, so on a phone the canvas won by a wide margin and the
+        // splash faded out over an empty radial gradient -- a loading screen with
+        // no logo on it. Measured: opacity 0.38 at t+1s, gone by t+2s.
+        (function () {
+          var img = document.querySelector('#boot .emblem');
+          var boot = document.getElementById('boot');
+          if (!img || !boot) return;
+          function ready() { boot.classList.add('emblem-ready'); }
+          if (img.complete && img.naturalWidth > 0) ready();
+          else img.addEventListener('load', ready, { once: true });
+          // A failed or blocked image must not strand the player on a splash
+          // with nothing in it -- treat the error as "ready" and move on.
+          img.addEventListener('error', ready, { once: true });
+        })();
+      </script>
       <div class="wordmark">DEEPWOOD</div>
       <div class="tagline">ENTERING THE HOLLOW</div>
     </div>

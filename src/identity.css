@@ -213,7 +213,11 @@ button.chip:active { transform: translateY(1px); }
      when the game is ready, but it must never be the reason the game is
      revealed. Hard out at 2.0s regardless of game state. */
   animation: boot-out .6s ease 1.4s forwards;
+  /* ...but only once the emblem has actually painted. Without this the timer
+     raced the image and the splash could fade out over an empty background. */
+  animation-play-state: paused;
 }
+#boot.emblem-ready { animation-play-state: running; }
 #boot.done { opacity: 0; visibility: hidden; pointer-events: none; animation: none; }
 
 @keyframes boot-out {

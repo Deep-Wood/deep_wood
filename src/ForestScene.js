@@ -24,6 +24,9 @@ import { retireWalletFoot } from './hud-idle.js';
 function dismissBoot() {
   const inline = window.__dismissBoot;
   if (typeof inline === 'function') { inline(); return; }
+  // No inline handler (should not happen): still do not cut the emblem short.
+  const img = document.querySelector('#boot .emblem');
+  if (img && !img.complete) return;
   const b = document.getElementById('boot');
   if (!b || b.classList.contains('done')) return;
   b.classList.add('done');
