@@ -234,3 +234,22 @@ button.chip:disabled { opacity: .55; cursor: default; }
 @media (pointer: coarse) and (max-height: 620px) {
   #satchel { top: auto; bottom: calc(var(--s3) + 210px); }
 }
+/* --- idle --------------------------------------------------------------- *
+ * Both HUD cards are transient. They were permanently over the playfield and
+ * the player had no way to clear them, which is the actual complaint; shrinking
+ * them was treating a symptom. They show, say their piece, and fade.
+ * ------------------------------------------------------------------------ */
+#hud, #hint {
+  transition: opacity .45s ease, transform .45s ease;
+}
+body.hud-idle #hud,
+body.hud-idle #hint {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-6px);
+}
+body.hud-idle #hint { transform: translateY(6px); }
+
+@media (prefers-reduced-motion: reduce) {
+  #hud, #hint { transition: opacity .01s linear; }
+}

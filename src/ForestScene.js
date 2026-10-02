@@ -10,6 +10,7 @@ import Phaser from 'phaser';
 import { buildAllTextures, PAL, rng } from './art.js';
 import { createAmbience } from './ambience.js';
 import { panelFrame } from './layout.js';
+import { hudKeepAwake } from './hud-idle.js';
 
 // Bisect switch for the ambience layers. The 2bf3694 deploy added ~730 display
 // objects (205 canopy, 376 undergrowth, 152 shadows) and the character stopped
@@ -1027,6 +1028,11 @@ export class ForestScene extends Phaser.Scene {
     mode.style.color = m === 'onchain' ? 'var(--ok)' : 'var(--warn)';
 
     // --- tool rows, each with its repair / equip action
+    // Interacting with the card keeps it awake.
+    for (const id of ['belt-claim-slot', 'belt-shop']) {
+      q(id)?.addEventListener('click', () => hudKeepAwake(), true);
+    }
+
     const tools = q('belt-tools');
     tools.textContent = '';
     // The claim button lives in the same row as the tools, so the belt is three
@@ -1112,6 +1118,9 @@ export class ForestScene extends Phaser.Scene {
     if (!el) return;
     el.textContent = text;
     el.className = 'belt-msg' + (kind ? ' ' + kind : '');
+    // A message just arrived, so hold the HUD up long enough to read it instead
+    // of letting the idle timer fade it out from under the player.
+    if (text) hudKeepAwake();
   }
 
   /**
