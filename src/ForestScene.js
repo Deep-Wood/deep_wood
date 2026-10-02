@@ -68,6 +68,23 @@ const FADE_ALPHA = 0.45;
 const WORLD_W = 40, WORLD_H = 30;
 // Effectively-unbounded play area. See the setBounds comment in create().
 const WORLD_FAR = 1e7;
+
+// The ground is a scrollFactor-0 TileSprite at a FIXED depth, but every world
+// object uses its raw world Y as its depth for y-sorting. Those two conventions
+// only agree while world Y is non-negative.
+//
+// The old fixed world was 0..960, so Y never went negative and a ground depth of
+// 0 was always at the bottom. The endless world is centred on (0,0), so EVERYTHING
+// NORTH OF SPAWN HAS NEGATIVE Y -- which sorts BELOW a ground depth of 0, and the
+// ground then draws on top of it. Walking up made the hunter, the trees and the
+// nodes vanish behind the grass, while birds and insects (depth 90000+) carried
+// on rendering perfectly, which is exactly the symptom reported.
+//
+// The ground therefore has to sit below the entire playable range, not merely
+// below the origin. Bounds are +/-WORLD_FAR, so this is unconditionally lower
+// than any object that can ever exist.
+const GROUND_DEPTH = -(WORLD_FAR * 2);
+
 const MOVE_SPEED = 150;
 
 /**
@@ -157,7 +174,7 @@ export class ForestScene extends Phaser.Scene {
     // now repeats under the camera forever. It must be re-sized on viewport
     // resize or it leaves bare colour at the edges on a rotated phone.
     this.bg = this.add.tileSprite(0, 0, this.scale.width, this.scale.height, 'ground')
-      .setOrigin(0).setScrollFactor(0).setDepth(0);
+      .setOrigin(0).setScrollFactor(0).setDepth(GROUND_DEPTH);
     this.scale.on('resize', (size) => this.bg.setSize(size.width, size.height));
 
     // Trees and props are added to the scene (not a container) so each can
@@ -1625,4 +1642,5 @@ export class ForestScene extends Phaser.Scene {
     this.tweens.add({ targets: t, alpha: 0, delay: 1600, duration: 400, onComplete: () => t.destroy() });
   }
 }
+
 
