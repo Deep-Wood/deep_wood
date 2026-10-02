@@ -1030,11 +1030,13 @@ export class ForestScene extends Phaser.Scene {
     // --- tool rows, each with its repair / equip action
     // Interacting with the card keeps it awake.
     for (const id of ['belt-claim-slot', 'belt-shop']) {
-      // hudKeepAwake() was left here when the one-shot note replaced the idle
-      // fade. It was no longer exported, so every click on the claim button or
-      // a shop buy button threw ReferenceError: hudKeepAwake is not defined --
-      // which is exactly the path the player needs working. Caught by Sentry in
-      // production, not by the checks: the harness never clicked these.
+      // The idle-fade version of this handler called the keep-awake helper.
+      // When the one-shot note replaced the fade that helper was deleted, and
+      // this call was left behind -- so every click on CLAIM or a shop buy
+      // button threw a ReferenceError on the one path a player cannot work
+      // around. Caught by Sentry in production, not by the checks: the harness
+      // asserted these buttons existed and never pressed one. The call text is
+      // deliberately not quoted here so a grep for it stays meaningful.
       q(id)?.addEventListener('click', () => retireWalletFoot(), true);
     }
 
