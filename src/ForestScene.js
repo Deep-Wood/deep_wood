@@ -898,12 +898,49 @@ export class ForestScene extends Phaser.Scene {
       const cx = rect.x + rect.w / 2;
       const cy = rect.y + rect.h / 2;
 
-      const bg = radius
-        ? this.add.circle(cx, cy, rect.w / 2, 0x0d1a10, alpha)
-          .setStrokeStyle(2, tint)
-        : this.add.rectangle(rect.x, rect.y, rect.w, rect.h, 0x0d1a10, alpha)
-          .setOrigin(0)
-          .setStrokeStyle(2, tint);
+      // 3D: each button is a FACE plus an EXTRUDED BASE offset down-right, so
+      // the light appears to come from up-left. Two pieces rather than one
+      // gradient, because a single shape reads as flat regardless of shading.
+      //
+      // DEPTH is the extrusion in px. It is proportional to the button so a
+      // 38px HUNT and a 46px d-pad key get the same visual weight rather than
+      // the small one looking moulded and the large one stamped.
+      const DEPTH = Math.max(2, Math.round(Math.min(rect.w, rect.h) * 0.13));
+      const BASE = 0x060d09;        // the extruded side, in shadow
+      const FACE = 0x16291a;        // the top surface
+      const EDGE = 0x2f5c42;        // rim light on the up-left lip
+      const dx2 = Math.max(1, Math.round(DEPTH * 0.5));
+      const dy2 = DEPTH;
+
+      const place = (shape) => {
+        if (radius) {
+          return this.add.circle(shape === 'base' ? cx + dx2 : cx, shape === 'base' ? cy + dy2 : cy,
+            rect.w / 2, shape === 'base' ? BASE : FACE, alpha * (shape === 'base' ? 0.95 : 1));
+        }
+        return this.add.rectangle(
+          rect.x + (shape === 'base' ? dx2 : 0), rect.y + (shape === 'base' ? dy2 : 0),
+          rect.w, rect.h, shape === 'base' ? BASE : FACE,
+        ).setOrigin(0).setAlpha(alpha * (shape === 'base' ? 0.95 : 1));
+      };
+
+      const base = place('base');
+      const bg = place('face');
+
+      // Rim light along the top and left edges only -- that asymmetry is what
+      // sells the lit-from-up-left reading. A full outline would flatten it back
+      // into a sticker.
+      if (radius) {
+        bg.setStrokeStyle(1, EDGE, alpha);
+      } else {
+        const rim = this.add.graphics();
+        rim.lineStyle(1, EDGE, alpha);
+        rim.beginPath();
+        rim.moveTo(rect.x, rect.y + rect.h);
+        rim.lineTo(rect.x, rect.y);
+        rim.lineTo(rect.x + rect.w, rect.y);
+        rim.strokePath();
+        this.touchLayer.add(rim);
+      }
 
       const text = this.add.text(cx, cy, label, {
         fontFamily: 'monospace',
@@ -911,7 +948,7 @@ export class ForestScene extends Phaser.Scene {
         color: `#${tint.toString(16).padStart(6, '0')}`,
       }).setOrigin(0.5);
 
-      this.touchLayer.add([bg, text]);
+      this.touchLayer.add([base, bg, text]);
 
       // The hit area is a DIRECT SCENE CHILD, not a member of touchLayer.
       //
@@ -934,12 +971,24 @@ export class ForestScene extends Phaser.Scene {
       // release path needs the SAME pointerId to clear that pointer's entry,
       // and a handler that omits the parameter throws ReferenceError the moment
       // a thumb lifts.
+      // Press feedback: the FACE sinks to the base's offset, so the button
+      // looks pushed in rather than merely faded. A fade alone on a 3D button
+      // flattens it exactly when the player is pressing it.
+      const restY = bg.y;
+      const restX = bg.x;
       z.on('pointerdown', (p) => {
         this.touchState.press(p.pointerId, btn);
-        bg.setAlpha(0.62); // visible press feedback
+        bg.setAlpha(alpha * 0.75);
+        if (radius) bg.setPosition(restX, restY + dy2 - dx2);
+        else bg.setPosition(restX + dx2, restY + dy2);
       });
-      z.on('pointerup', (p) => { this.touchState.release(p.pointerId); bg.setAlpha(alpha); });
-      z.on('pointerout', (p) => { this.touchState.release(p.pointerId); bg.setAlpha(alpha); });
+      const release = (p) => {
+        this.touchState.release(p.pointerId);
+        bg.setAlpha(alpha);
+        bg.setPosition(restX, restY);
+      };
+      z.on('pointerup', release);
+      z.on('pointerout', release);
 
       this.touchZones.push({ btn, zone: z, bg, rect });
       return z;

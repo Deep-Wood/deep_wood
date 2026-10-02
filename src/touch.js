@@ -28,14 +28,19 @@
  * bottom-left by the scene when these are visible -- it used to live there and
  * would otherwise sit underneath the d-pad.
  */
+// Was 62px d-pad buttons, a 46px HUNT and 78x32 side buttons. On a 390px-wide
+// phone the d-pad alone spanned 198px -- over half the screen width, which is
+// what made the controls feel like the interface rather than the game. Every
+// dimension is down; the SIZES shrink together with the hit areas, so the
+// tappable target moves with the artwork and the two can never disagree.
 export const TOUCH_LAYOUT = {
-  dpadBtn: 62,
-  dpadGap: 6,
-  huntR: 46,
-  margin: 16,
-  sideBtnW: 78,
-  sideBtnH: 32,
-  sideGap: 10,
+  dpadBtn: 46,
+  dpadGap: 5,
+  huntR: 38,
+  margin: 14,
+  sideBtnW: 60,
+  sideBtnH: 24,
+  sideGap: 8,
 };
 
 /**
