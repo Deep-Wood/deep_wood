@@ -554,14 +554,33 @@ export function makeVignetteTexture(scene) {
   if (scene.textures.exists('vignette')) return 'vignette';
   const S = 256;
   const g = scene.make.graphics({ add: false });
-  // Concentric rounded rects from the outside in, alpha falling off toward the
-  // centre. Cheap to bake, and stretching it to the viewport is invisible
-  // because the gradient is smooth.
-  for (let i = 0; i < 14; i++) {
-    const f = i / 14;
-    const inset = Math.round(f * S * 0.46);
-    g.fillStyle(0x000000, 0.055 * (1 - f * 0.35));
-    g.fillRect(inset, inset, S - inset * 2, S - inset * 2);
+  // Bands of the FRAME ONLY, never the interior.
+  //
+  // The previous version drew 14 nested fillRects starting at inset 0 -- and a
+  // rect at inset 0 covers the entire texture, so every one of the 14 layers
+  // stacked darkness on the CENTRE while the edges got one. Measured alpha came
+  // out 124/255 in the middle and 14 at the edges: a black hole in the middle of
+  // the screen with the hunter sitting in it, which is exactly how it looked.
+  //
+  // Each band is therefore drawn as four strips around a clear inner square, so
+  // alpha is 0 at the centre by construction rather than by tuning.
+  const BANDS = 14;
+  const INNER = Math.round(S * 0.44);   // centre 44% is untouched
+  for (let i = 0; i < BANDS; i++) {
+    const t = i / BANDS;                       // 0 = outermost band
+    const outer = Math.round(t * INNER);
+    const inner = Math.round(((i + 1) / BANDS) * INNER);
+    const band = Math.max(1, outer - inner);
+    // Alpha per band has to be much higher than it looks: each pixel is covered
+    // by at most one or two bands, not all 14. At 0.030 the whole vignette
+    // measured 8/255 at the edge and was invisible -- the fix for the black-hole
+    // version over-corrected, and the check that let it through only asserted
+    // the CENTRE was clear, never that the edge was dark.
+    g.fillStyle(0x000000, 0.115 * (1 - t * 0.55));
+    g.fillRect(0, outer, S, band);                                   // top
+    g.fillRect(0, S - outer - band, S, band);                        // bottom
+    g.fillRect(outer, inner, band, S - inner * 2);                   // left
+    g.fillRect(S - outer - band, inner, band, S - inner * 2);        // right
   }
   g.generateTexture('vignette', S, S);
   g.destroy();

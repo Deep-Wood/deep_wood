@@ -91,6 +91,40 @@ check('desktop hides touch controls', deskVisible === 0, deskVisible + ' visible
 check('no console or page errors', errs.length === 0, errs.slice(0, 3).join(' | ') || 'clean');
 
 await page.screenshot({ path: '/tmp/dw-prod.png' });
+// --- the hunter must be visible, and the vignette must be a FRAME ----------
+// Regression guard. The vignette shipped once as 14 nested fillRects starting at
+// inset 0; a rect at inset 0 covers the whole texture, so all 14 layers stacked
+// darkness on the CENTRE (measured 124/255) and left the edges nearly clear. The
+// hunter sits in the middle of the screen, so it vanished. Checking only "the
+// centre is clear" would pass on a vignette that is simply invisible, so this
+// asserts BOTH ends of the gradient.
+const vig = await page.evaluate(() => {
+  const s = window.__scene;
+  const tex = s.textures.get('vignette');
+  if (!tex) return { missing: true };
+  const src = tex.getSourceImage();
+  const cv = document.createElement('canvas');
+  cv.width = src.width; cv.height = src.height;
+  const c2 = cv.getContext('2d');
+  c2.drawImage(src, 0, 0);
+  const A = (x, y) => c2.getImageData(x, y, 1, 1).data[3];
+  let peak = 0;
+  for (let i = 0; i < src.width; i++) peak = Math.max(peak, A(i, 4));
+  return { centre: A(128, 128), peakEdge: peak };
+});
+check('vignette texture exists', !vig.missing);
+if (!vig.missing) {
+  check('vignette leaves the CENTRE clear', vig.centre <= 8, 'centre alpha ' + vig.centre + '/255');
+  check('vignette is actually dark at the EDGE', vig.peakEdge >= 20, 'peak edge alpha ' + vig.peakEdge + '/255');
+}
+
+const hunter = await page.evaluate(() => {
+  const p = window.__scene.player;
+  return { visible: p.visible, alpha: p.alpha, tex: p.texture && p.texture.key };
+});
+check('the hunter sprite exists and is visible',
+  hunter.visible && hunter.alpha === 1 && hunter.tex === 'hunter', JSON.stringify(hunter));
+
 await browser.close();
 
 console.log(fails ? `\n${fails} CHECK(S) FAILED` : '\nPRODUCTION CHECK PASSED');
