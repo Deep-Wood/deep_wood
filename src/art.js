@@ -39,14 +39,30 @@ export const PAL = {
   hat: 0x7a5c3a, hatLit: 0x9a7a4e, hatDark: 0x5a4128,
   metal: 0x9aa2ab, metalDark: 0x6a727b, wood: 0x8a6a42,
 
-  // trees
-  trunk: 0x5a3d28, trunkLit: 0x6d4a32, trunkDark: 0x422c1c,
-  leaf: 0x2f6b3f, leafLit: 0x3f8a52, leafDark: 0x1f4a2c, leafDeep: 0x163620,
-  pine: 0x27603a, pineLit: 0x348049, pineDark: 0x1a4529,
+  // trees -- NIGHT.
+  //
+  // These were daylight greens: #35502f ground, #2f6b3f leaf, #5a3d28 trunk.
+  // The emblem is a moonlit forest -- desaturated blue-green, deep shadow, one
+  // bioluminescent emerald as the only light source -- so every value here is
+  // pulled down and cooled. Not darker alone: shifted toward teal, because a
+  // dark green forest at night still reads as daylight forest, just underexposed.
+  trunk: 0x2b2118, trunkLit: 0x3b2d20, trunkDark: 0x1a1410,
+  leaf: 0x14382c, leafLit: 0x1e5544, leafDark: 0x0c241c, leafDeep: 0x081811,
+  pine: 0x113025, pineLit: 0x1a4636, pineDark: 0x0a1e17,
+
+  // The moon is a cool light, so the LIT side of a thing is cool and the
+  // shadowed side keeps a trace of the warm ground bounce.
+  moon: 0x9fd8e8,
+  moss: 0x1d4a3a,
 
   // ground
-  ground: 0x35502f, groundAlt: 0x3d5c34, groundDark: 0x2a4126,
-  dirt: 0x5a4630, dirtDark: 0x47361f,
+  ground: 0x11211d, groundAlt: 0x182e28, groundDark: 0x0b1614,
+  dirt: 0x2a2418, dirtDark: 0x1c1811,
+
+  // The glow the emblem is actually built around. Kept hot on purpose: if the
+  // whole scene is night, this is the only thing that is allowed to be bright,
+  // and desaturating it too would leave nothing lit at all.
+  glow: 0x3ff0b0,
 
   // props
   rock: 0x6e6e6e, rockLit: 0x8a8a8a, rockDark: 0x4a4a4a,
@@ -90,7 +106,22 @@ function blank(scene, key) {
   return { tex: t, ctx, done: () => t.refresh() };
 }
 
-function px(ctx, x, y, color) {
+/**
+ * One logical pixel, scaled up to the texture's SCALE.
+ *
+ * `alpha` is optional and defaults to opaque. The moon rim uses it to paint a
+ * partial-alpha highlight over whatever the tree already drew, rather than
+ * needing to know the canopy's exact silhouette.
+ */
+function px(ctx, x, y, color, alpha = 1) {
+  if (alpha < 1) {
+    const prev = ctx.globalAlpha;
+    ctx.globalAlpha = prev * alpha;
+    ctx.fillStyle = toCss(color);
+    ctx.fillRect(x * SCALE, y * SCALE, SCALE, SCALE);
+    ctx.globalAlpha = prev;
+    return;
+  }
   ctx.fillStyle = toCss(color);
   ctx.fillRect(x * SCALE, y * SCALE, SCALE, SCALE);
 }
@@ -342,6 +373,40 @@ export function makeTreeTexture(scene, variant = 0) {
     px(ctx, 8 - Math.round(rx) - 2, cy - 1, lit);
     px(ctx, 8 + Math.round(rx) + 1, cy, mid);
   }
+
+  /* ---- moon rim ----------------------------------------------------------
+   * The single most effective cue that a scene is lit by a moon rather than a
+   * sun: a thin COOL edge on the side facing it, and nothing on the other.
+   * A palette swap alone reads as "underexposed daylight" -- the whole forest
+   * stayed green no matter how far down the values went. The rim is what says
+   * where the light is coming from.
+   *
+   * Upper-left, matching where the old sun highlights already sat, so it costs a
+   * few dozen pixels rather than a second pass over the silhouette. Drawn with
+   * partial alpha over whatever is already there, so it lights the canopy edge
+   * without needing to know the canopy's exact shape.
+   */
+  const rim = (x, y, a) => px(ctx, x, y, PAL.moon, a);
+  if (v === 1) {
+    // pine: the left edge of each tier
+    for (let tier = 0; tier < 4; tier++) {
+      const ty = baseY - 4 - tier * 2;
+      const w = 3 + tier * 2;
+      rim(Math.round(8 - w / 2), ty, 0.55);
+    }
+    rim(7, baseY - 12, 0.7);
+  } else if (v === 3) {
+    rim(7, 3, 0.6); rim(6, 5, 0.45); rim(8, 2, 0.5);
+  } else {
+    rim(4, Math.round(cy), 0.5);
+    rim(5, Math.round(cy) - 2, 0.55);
+    rim(6, Math.round(cy) - 3, 0.6);
+    rim(7, Math.round(cy) - 4, 0.5);
+  }
+  // the trunk catches the same light, one pixel down the left side
+  if (v === 1) rim(7, baseY - 3, 0.5);
+  else if (v === 3) rim(7, baseY - 6, 0.5);
+  else rim(6, baseY - 2, 0.5);
 
   done();
   return key;
