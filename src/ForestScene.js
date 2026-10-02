@@ -80,7 +80,11 @@ function addPanelBackdrop(scene, depth, px, py, pw, ph, onDismiss) {
   // same bug already documented and worked around for the touch zones. The
   // first version of this backdrop was a container child and outside-taps did
   // nothing for exactly that reason.
-  const dim = scene.add.rectangle(0, 0, W, H, 0x050a06, 0.62).setOrigin(0)
+  // 0.62 was my own pick and it was far too heavy: it darkened the whole forest
+  // so heavily that the game above the sheet read as "covered by a card", which
+  // is the complaint this was supposed to fix. Enough to push the world back, not
+  // enough to hide it.
+  const dim = scene.add.rectangle(0, 0, W, H, 0x050a06, 0.38).setOrigin(0)
     .setScrollFactor(0).setDepth(depth).setInteractive({ useHandCursor: true });
   dim.on('pointerdown', (pointer, x, y) => {
     // Ignore taps that land on the panel, so only true outside-taps dismiss it.
@@ -963,6 +967,7 @@ export class ForestScene extends Phaser.Scene {
     this.lbBackdrop?.destroy();
     this.lbBackdrop = null;
     this.lbFrame = null;
+    this.restoreTouch();
     this.leaderboardOpen = false;
   }
 
@@ -1411,6 +1416,7 @@ export class ForestScene extends Phaser.Scene {
     this.beltBackdrop?.destroy();
     this.beltBackdrop = null;
     this.beltFrame = null;
+    this.restoreTouch();
     this.beltRows = [];
     this.beltOpen = false;
   }
@@ -1422,9 +1428,21 @@ export class ForestScene extends Phaser.Scene {
   /**
    * A panel covers the d-pad, so any held direction must be released or the
    * character walks off on its own the moment the panel closes.
+   *
+   * The controls are also HIDDEN while a panel is open. They sit at UI_DEPTH + 2
+   * and the panel at UI_DEPTH, so on a phone the d-pad and HUNT were drawn
+   * straight across the bottom sheet -- which is what made the sheet read as a
+   * full-screen takeover rather than a sheet. Hiding them is also what a modal
+   * should do: the controls are not actionable behind a panel anyway.
    */
   releaseTouch() {
     if (this.touchState) this.touchState.clear();
+    if (this.touchLayer && this.touchVisible) this.touchLayer.setVisible(false);
+  }
+
+  /** Put the controls back. Every close path must pair with releaseTouch(). */
+  restoreTouch() {
+    if (this.touchLayer && this.touchVisible) this.touchLayer.setVisible(true);
   }
 
   /* ---------------- the loop ---------------- */

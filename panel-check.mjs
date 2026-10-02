@@ -23,6 +23,11 @@ const VIEWPORTS = [
 for (const vp of VIEWPORTS) {
   const page = await browser.newPage();
   await page.setViewport({ width: vp.w, height: vp.h });
+  // Force the touch controls on. Without this the harness never builds a
+  // touchLayer, so every assertion about hiding it was silently skipped --
+  // which is how the first version of this check passed while the d-pad was
+  // sitting on top of the sheet.
+  await page.evaluateOnNewDocument(() => { window.__forceTouchControls = true; });
   await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
   await page.waitForFunction('window.__scene && window.__scene.player', { timeout: 30000 });
   await new Promise((r) => setTimeout(r, 1200));
@@ -77,6 +82,18 @@ for (const vp of VIEWPORTS) {
   // tap INSIDE the panel -> must NOT dismiss
   await page.evaluate(() => window.__scene.openBelt());
   await new Promise((r) => setTimeout(r, 400));
+  // Controls must not sit on top of an open modal panel.
+  const ctrl = await page.evaluate(() => {
+    const s = window.__scene;
+    const layer = s.touchLayer;
+    return { touchVisible: s.touchVisible, layerVisible: layer ? layer.visible : null };
+  });
+  if (ctrl.touchVisible) {
+    check(ctrl.layerVisible === false,
+      'touch controls are hidden while the panel is open',
+      `layerVisible=${ctrl.layerVisible}`);
+  }
+
   const inside = await page.evaluate(() => {
     const f = window.__scene.beltFrame;
     return { x: Math.round(f.px + f.pw / 2), y: Math.round(f.py + 30) };
@@ -85,6 +102,16 @@ for (const vp of VIEWPORTS) {
   await new Promise((r) => setTimeout(r, 400));
   const stillOpen = await page.evaluate(() => !!window.__scene.beltPanel);
   check(stillOpen, 'tapping inside the panel does not dismiss it');
+
+  // ...and they must come back when it closes, or the game becomes unplayable.
+  const restored = await page.evaluate(() => {
+    window.__scene.closeBelt();
+    return window.__scene.touchLayer ? window.__scene.touchLayer.visible : null;
+  });
+  if (ctrl.touchVisible) {
+    check(restored === true, 'touch controls return after the panel closes',
+      `layerVisible=${restored}`);
+  }
 
   await page.close();
 }
