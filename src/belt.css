@@ -1,0 +1,46 @@
+
+/* ---------------------------------------------------------------- toolbelt --
+ * Part of the top bar, not an overlay. It sits in the grid's second row so it
+ * takes its own space instead of stacking on top of the season card -- an
+ * earlier attempt drew these rows into the Phaser HUD, which the DOM top bar
+ * then covered, and the whole toolbelt was invisible underneath the wallet
+ * chips.
+ * ------------------------------------------------------------------------ */
+#belt {
+  grid-column: 1 / -1;
+  padding: var(--s2) var(--s3);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+.belt-counts { color: var(--text); font-size: 12px; }
+.belt-mode   { color: var(--warn); font-size: 10px; }
+.belt-tools  { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: 2px; }
+.belt-tool   { color: var(--text); }
+.belt-tool.held { color: var(--ok); }
+.belt-tool.broke { color: var(--bad); }
+.belt-claim  { display: flex; align-items: center; gap: var(--s2); margin-top: var(--s2); flex-wrap: wrap; }
+.belt-msg    { color: var(--warn); font-size: 10px; }
+.belt-msg.ok { color: var(--ok); }
+.belt-msg.bad { color: var(--bad); }
+.belt-shop   { display: flex; flex-wrap: wrap; gap: var(--s3); margin-top: var(--s2); }
+.belt-shop .row { display: flex; align-items: center; gap: var(--s2); }
+.chip.btn {
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 2px 8px;
+}
+.chip.btn:disabled { opacity: 0.45; cursor: default; }
+
+/* A landscape phone is only ~390px tall. At full size the season card plus the
+ * belt took 248px -- 63% of the screen -- which is not a "top bar", it is most
+ * of the game. Short viewports get a tighter belt. */
+@media (max-height: 460px) {
+  #belt { padding: var(--s1) var(--s3); font-size: 10px; line-height: 1.3; }
+  .belt-mode { display: none; }
+  .belt-shop { margin-top: var(--s1); }
+  .belt-claim { margin-top: var(--s1); }
+  .belt-msg { font-size: 9px; }
+}

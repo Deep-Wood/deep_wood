@@ -39,6 +39,7 @@
 
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d1a10'/%3E%3Cpath d='M16 6l6 10-6 10-6-10z' fill='%234a7c59'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="/src/hud.css" />
+  <link rel="stylesheet" href="/src/belt.css" />
 </head>
 <body>
   <div id="game"></div>
@@ -67,6 +68,21 @@
       <div class="chip" id="chainstat"><span class="dot warn"></span><span id="chaintext">checking&hellip;</span></div>
       <button class="chip" id="connect">Connect wallet</button>
     </div>
+
+    <!-- The toolbelt. It is a row in this top bar, not a panel over the game:
+         three earlier versions opened a card (340px fixed, then a 44% bottom
+         sheet, then a right-hand drawer) and the complaint was never the size.
+         Nothing here covers the forest and there is nothing to dismiss. -->
+    <section id="belt" class="card">
+      <div class="belt-counts" id="belt-counts">COMMON 0 &middot; BURNED 0 &middot; FEES 0</div>
+      <div class="belt-mode" id="belt-mode">PREVIEW - simulation only</div>
+      <div class="belt-tools" id="belt-tools"></div>
+      <div class="belt-claim">
+        <button class="chip btn" id="belt-claim">CLAIM</button>
+        <span class="belt-msg" id="belt-msg"></span>
+      </div>
+      <div class="belt-shop" id="belt-shop"></div>
+    </section>
   </div>
 
   <!-- Satchel. Starts hidden and is revealed by renderGems() on the first find.

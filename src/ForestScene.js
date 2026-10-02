@@ -285,6 +285,13 @@ export class ForestScene extends Phaser.Scene {
     // are. As shipped, 3 was a duplicate of 1 and could not answer that.
     this.ambience = SAFE === 1 || SAFE === 2 ? null : createAmbience(this);
     this.setupHud();
+    // The shop lives in the DOM top bar, so the rows are plain descriptors here
+    // and syncBeltDom() renders them.
+    this.shopRows = FOR_SALE.map((rarity) => ({ rarity, label: '', buyLabel: 'buy' }));
+    // The toolbelt rows are built inside setupHud now, so they must be filled
+    // once at boot. They were previously filled as a side effect of opening a
+    // panel, which left the card blank until something happened to happen.
+    this.refreshBelt();
     this.setupTouch();
 
     // Independent of Phaser's delta, which is the value that lies on a slow
@@ -727,10 +734,8 @@ export class ForestScene extends Phaser.Scene {
     // living on the d-pad where it competes with the directions.
     zone('hunt', r.hunt, 'HUNT', { radius: 1, fontSize: 15, alpha: 0.42, tint: 0x3f8a52 });
 
-    // Without these, a phone player cannot reach the toolbelt or the board at
-    // all -- TAB and L are keyboard-only, so the claim/buy path would be
-    // unreachable and the game unplayable on touch.
-    zone('belt', r.belt, 'TOOLBELT', { fontSize: 11, alpha: 0.3 });
+    // Only BOARD. The TOOLBELT button is gone: the toolbelt is permanent rows
+    // in the top card, so there is nothing left to open.
     zone('board', r.board, 'BOARD', { fontSize: 11, alpha: 0.3 });
 
     this.touchLayer.setVisible(this.touchVisible);
@@ -752,6 +757,11 @@ export class ForestScene extends Phaser.Scene {
     const W = this.scale.width, H = this.scale.height;
     this.hud = this.add.container(0, 0).setScrollFactor(0).setDepth(UI_DEPTH);
 
+    // The toolbelt is NOT drawn here. The card the player actually sees --
+    // Season I, Rank, ROI, the chain chip, Connect wallet -- is the DOM top bar
+    // in index.html, and it paints OVER this canvas. Belt rows drawn here were
+    // completely hidden underneath the wallet chips. It lives in that top bar
+    // now; see syncBeltDom().
     const panel = this.add.rectangle(10, 10, 250, 74, 0x0d1a10, 0.82)
       .setOrigin(0).setStrokeStyle(2, 0x3f8a52);
     this.hud.add(panel);
@@ -798,8 +808,8 @@ export class ForestScene extends Phaser.Scene {
     // "press SPACE" is the same defect as having no button: the instruction
     // refers to hardware they do not have.
     const hint = this.hasTouchPad
-      ? 'use the pad to move  -  HUNT to dig  -  TOOLBELT  -  BOARD'
-      : 'WASD move  -  SPACE hunt  -  TAB toolbelt  -  L board';
+      ? 'use the pad to move  -  HUNT to dig  -  BOARD'
+      : 'WASD move  -  SPACE hunt  -  L board';
 
     this.tierText.setText(
       `${tierName}  ${uses} uses   ${fmt(this.belt.common)} Common   ${hint}`
@@ -986,210 +996,147 @@ export class ForestScene extends Phaser.Scene {
   /* ---------------- toolbelt panel ---------------- */
 
   /**
-   * The toolbelt is an inventory, not a modal.
+   * The toolbelt, rendered into the DOM top bar.
    *
-   * Three earlier versions got this wrong the same way: they asked how big the
-   * card should be instead of asking whether there should be a card. 340px
-   * hardcoded (87% of a 390px phone), then a 396px bottom sheet at 44% with a
-   * scrim and the d-pad hidden behind it. All three covered the game, which is
-   * the one thing this must not do.
+   * The card the player actually sees -- Season I, Rank, ROI, the chain chip,
+   * Connect wallet -- is the DOM top bar in index.html, and it paints over the
+   * canvas. An earlier attempt drew the belt rows into the Phaser HUD and they
+   * were entirely invisible underneath the wallet chips.
    *
-   * So: a narrow drawer down the right edge. No backdrop, no scrim, nothing
-   * dimmed, no control hidden. The d-pad is on the left and the drawer never
-   * reaches it, so the game stays 100% visible AND fully playable while the
-   * drawer is open -- you can keep walking and keep hunting.
-   *
-   * It slides out from the right edge rather than appearing, so the intent is
-   * obvious. Tapping the TOOLBELT button again, tapping outside, or the small x
-   * all close it.
+   * So the belt is DOM. It sits in the top bar's own grid row, which means it
+   * takes up space at the top of the screen rather than covering the forest:
+   * nothing is hidden, and there is nothing to open or dismiss. The green
+   * TOOLBELT button is gone entirely.
    */
-  openBelt() {
-    this.releaseTouch();
-    if (this.beltOpen) return;
-    this.beltOpen = true;
-    this.closeLeaderboard();
+  syncBeltDom() {
+    const el = document.getElementById('belt');
+    if (!el) return;
+    const belt = this.belt;
 
-    const W = this.scale.width, H = this.scale.height;
-    const pw = 124;
-    const nTools = this.belt.tools.length;
-    // Height follows the content instead of being a magic number, but never
-    // grows past the viewport.
-    const ph = Math.min(H - 120, 206 + nTools * 30);
-    const px = W - pw;
+    const q = (id) => document.getElementById(id);
+    q('belt-counts').textContent =
+      `COMMON ${fmt(belt.common)} · BURNED ${fmt(belt.burned)} · FEES ${fmt(belt.feesPaid)}`;
 
-    // The drawer lives on the right edge -- which is exactly where the TOOLBELT
-    // and BOARD buttons are (x = W - margin - 78, y = 16). Anchored to the top
-    // it covered both, so the first tap landed on the button that opened it and
-    // simply toggled it shut. The drawer starts below them instead.
-    const side = this.touchRects?.board || this.touchRects?.belt;
-    const topInset = side ? side.y + side.h + 8 : 90;
-    const py = Math.max(10, Math.min(topInset, H - ph - 20));
-    const PAD = 7;
-    const inner = pw - PAD * 2;
+    const m = chainMode();
+    const mode = q('belt-mode');
+    mode.textContent = m === 'onchain'
+      ? 'ON-CHAIN — writes go to the DeepWood contract'
+      : m === 'offline'
+        ? 'OFFLINE — no contract configured'
+        : 'PREVIEW — simulation only, nothing is on-chain';
+    mode.style.color = m === 'onchain' ? 'var(--ok)' : 'var(--warn)';
 
-    const c = this.add.container(0, 0).setScrollFactor(0).setDepth(UI_DEPTH);
-    // Slid out from the right edge: children carry absolute px, so moving the
-    // container by W puts the whole drawer one screen-width off to the right.
-    c.setX(W);
-    c.x = W;
+    // --- tool rows, each with its repair / equip action
+    const tools = q('belt-tools');
+    tools.textContent = '';
+    belt.tools.forEach((t, index) => {
+      const net = expectedHuntWei(DROP_TABLE[t.tier], PRICE) - huntCostWei(t.tier);
+      const row = document.createElement('div');
+      row.className = 'belt-tool'
+        + (t.left === 0 ? ' broke' : (t.active ? ' held' : ''));
+      row.textContent = `T${roman(t.tier)} ${t.left}/${t.max} `
+        + (t.left === 0 ? 'BROKEN' : t.active ? 'HELD' : 'stowed')
+        + ` · net ${eth(net)}`;
 
-    this.beltFrame = { pw, ph, px, py, sheet: false, drawer: true };
-
-    c.add(this.add.rectangle(px + 3, py + 4, pw, ph, 0x000000, 0.4).setOrigin(0));
-    c.add(this.add.rectangle(px, py, pw, ph, 0x0b1710, 0.97).setOrigin(0)
-      .setStrokeStyle(2, 0x3f8a52));
-    c.add(this.add.rectangle(px + 1, py + 1, pw - 2, 20, 0x16281a, 1).setOrigin(0));
-
-    c.add(this.add.text(px + PAD, py + 6, 'TOOLBELT', {
-      fontFamily: 'monospace', fontSize: '9px', color: '#e8f0e0',
-    }));
-
-    // --- gem counts
-    let y = py + 26;
-    const line = (label, get) => {
-      const t = this.add.text(px + PAD, y, '', {
-        fontFamily: 'monospace', fontSize: '9px', color: '#cfe0cf',
-      });
-      c.add(t);
-      y += 15;
-      return t;
-    };
-
-    // Only what the toolbelt actually tracks. A first pass also showed
-    // UNCOMMON and QUARTZ rows, reading belt.uncommon / belt.gems.uncommon --
-    // fields that do not exist. The local belt holds only tools / common /
-    // burned / feesPaid, so those rows rendered as "MON undefined". The
-    // per-rarity balances are on-chain (gemsOf) and appear in the shop rows,
-    // which are priced from the contract.
-    this.beltCommon = line('COMMON', () => this.belt.common);
-    this.beltBurned = line('BURNED', () => this.belt.burned);
-    this.beltFees = line('FEES', () => this.belt.feesPaid);
-
-    // --- on-chain vs local, the one line that must never be ambiguous
-    this.beltMode = this.add.text(px + PAD, y + 2, '', {
-      fontFamily: 'monospace', fontSize: '8px', color: '#d9a441',
-      wordWrap: { width: inner },
-    });
-    c.add(this.beltMode);
-    y += 32;
-
-    // --- owned tools
-    this.beltRows = [];
-    // The per-row action button stays: refreshBelt() drives REPAIR / IN HAND /
-    // EQUIP through it, so dropping it would silently delete the repair path.
-    this.belt.tools.forEach((t, i) => {
-      const row = this.add.text(px + PAD, y, '', {
-        fontFamily: 'monospace', fontSize: '9px', color: '#cfe0cf',
-        lineSpacing: 2,
-      });
-      c.add(row);
-      // Right-aligned on the SECOND line so it cannot collide with the tier line.
-      const btn = this.add.text(px + pw - PAD - 38, y + 12, '', {
-        fontFamily: 'monospace', fontSize: '8px', color: '#fff8d0',
-        backgroundColor: '#2a4d38', padding: { x: 5, y: 3 },
-      }).setInteractive({ useHandCursor: true });
-      c.add(btn);
-      this.beltRows.push({ row, btn, index: i });
-      y += 30;
-    });
-
-    this.beltMsg = this.add.text(px + PAD, y, '', {
-      fontFamily: 'monospace', fontSize: '8px', color: '#d9a441',
-      wordWrap: { width: inner },
-    });
-    c.add(this.beltMsg);
-    y += 26;
-
-    this.claimBtn = this.add.text(px + PAD, y, '', {
-      fontFamily: 'monospace', fontSize: '9px', color: '#fff8d0',
-      backgroundColor: '#2a4d38', padding: { x: 6, y: 4 },
-    }).setInteractive({ useHandCursor: true });
-    c.add(this.claimBtn);
-
-    // Connected -> the chain is the source of truth and the local belt is a
-    // mirror of it. Not connected -> the existing local simulation runs, and the
-    // panel says so. The two must never be confused: granting a tool
-    // locally after an on-chain attempt is what this branch exists to prevent.
-    this.claimBtn.on('pointerdown', () => {
-      const belt = this.belt;
-      const next = belt.tools.reduce((m, t) => Math.max(m, t.tier), 0) + 1;
-      if (next > MAX_TIER) {
-        this.beltMsg.setText('Every tier owned.');
-        this.beltMsg.setColor('#9fbc9f');
-        return;
+      let label = null;
+      if (t.left === 0) {
+        const cost = repairCost(t.tier);
+        const r = canRepair(belt, index);
+        label = document.createElement('button');
+        label.className = 'chip btn';
+        label.textContent = `FIX ${fmt(cost)}`;
+        label.disabled = !r.ok;
+        if (r.ok) label.onclick = () => {
+          const res = repairTool(belt, index);
+          this.beltMsg(`Repaired T${roman(t.tier)} — ${res.fee} to treasury.`, 'ok');
+          this.refreshBelt();
+          this.updateHud();
+        };
+      } else if (!t.active) {
+        label = document.createElement('button');
+        label.className = 'chip btn';
+        label.textContent = 'EQUIP';
+        label.onclick = () => {
+          const res = equip(belt, index);
+          if (!res.ok) { this.beltMsg(res.reason, 'bad'); return; }
+          this.beltMsg(`Equipped T${roman(t.tier)}.`, 'ok');
+          this.refreshBelt();
+          this.updateHud();
+        };
       }
-      const check = canClaim(belt, next);
-      if (!check.ok) {
-        this.beltMsg.setText(check.reason);
-        this.beltMsg.setColor('#d83a5a');
-        return;
-      }
-      if (onchainActive()) {
-        this.claimToolOnchain(next);
-        return;
-      }
-      const res = claimTool(belt, next);
-      this.beltMsg.setText(`Claimed T${roman(next)} - ${res.fee} to treasury.`);
-      this.beltMsg.setColor('#3f8a52');
-      this.flash(`Tier ${roman(next)} tool claimed`);
-      this.refreshBelt();
-      this.updateHud();
+      if (label) row.appendChild(label);
+      tools.appendChild(row);
     });
+
+    // --- claim the next tier
+    const claim = q('belt-claim');
+    const next = belt.tools.reduce((a, t) => Math.max(a, t.tier), 0) + 1;
+    if (next > MAX_TIER) {
+      claim.textContent = 'ALL OWNED';
+      claim.disabled = true;
+    } else {
+      const cost = toolCost(next);
+      const c = canClaim(belt, next);
+      claim.textContent = `CLAIM ${roman(next)} — ${fmt(cost)}`;
+      claim.disabled = !c.ok;
+      claim.onclick = () => this.doClaim(next);
+    }
 
     // --- gem shop. Common and Uncommon only: Rare and above are hunt-only and
     // the contract reverts RarityNotForSale, so offering them would be a lie.
-    y += 24;
-    c.add(this.add.text(px + PAD, y, 'SHOP', {
-      fontFamily: 'monospace', fontSize: '9px', color: '#e8f0e0',
-    }));
-    y += 14;
-
-    this.shopRows = [];
-    for (const rarity of FOR_SALE) {
-      const label = this.add.text(px + PAD, y, '', {
-        fontFamily: 'monospace', fontSize: '8px', color: '#cfe0cf',
-      });
-      c.add(label);
-
-      const buy = this.add.text(px + pw - PAD - 26, y - 2, 'buy', {
-        fontFamily: 'monospace', fontSize: '8px', color: '#fff8d0',
-        backgroundColor: '#2a4d38', padding: { x: 5, y: 3 },
-      }).setInteractive({ useHandCursor: true });
-      c.add(buy);
-      this.shopRows.push({ label, buy, rarity });
-      y += 20;
+    const shop = q('belt-shop');
+    shop.textContent = '';
+    for (const row of this.shopRows || []) {
+      const wrap = document.createElement('div');
+      wrap.className = 'row';
+      const label = document.createElement('span');
+      label.textContent = row.label;
+      const buy = document.createElement('button');
+      buy.className = 'chip btn';
+      buy.textContent = 'buy';
+      buy.onclick = () => this.buyGemsOnchain(row.rarity, 1);
+      wrap.append(label, buy);
+      shop.appendChild(wrap);
     }
+  }
 
-    for (const row of this.shopRows) {
-      row.buy.on('pointerdown', () => this.buyGemsOnchain(row.rarity, 1));
+  /** A one-line status under the claim button. */
+  beltMsg(text, kind = '') {
+    const el = document.getElementById('belt-msg');
+    if (!el) return;
+    el.textContent = text;
+    el.className = 'belt-msg' + (kind ? ' ' + kind : '');
+  }
+
+  /**
+   * Claim the next tier. Connected -> the chain is the source of truth and the
+   * local belt is a mirror of it. Not connected -> the existing local
+   * simulation runs, and the card says so. The two must never be confused:
+   * granting a tool locally after an on-chain attempt is what this branch
+   * exists to prevent.
+   */
+  doClaim(next) {
+    const belt = this.belt;
+    if (next > MAX_TIER) {
+      this.beltMsg('Every tier owned.', 'ok');
+      return;
     }
+    const check = canClaim(belt, next);
+    if (!check.ok) { this.beltMsg(check.reason, 'bad'); return; }
+    if (onchainActive()) { this.claimToolOnchain(next); return; }
+    const res = claimTool(belt, next);
+    this.beltMsg(`Claimed T${roman(next)} — ${res.fee} to treasury.`, 'ok');
+    this.flash(`Tier ${roman(next)} tool claimed`);
+    this.refreshBelt();
+    this.updateHud();
+  }
 
-    this.beltClose = this.add.text(px + pw - 16, py + 6, 'X', {
-      fontFamily: 'monospace', fontSize: '9px', color: '#9fbc9f',
-    }).setInteractive({ useHandCursor: true });
-    c.add(this.beltClose);
-    this.beltClose.on('pointerdown', () => this.closeBelt());
-
-    this.beltPanel = c;
-
-    // Slide out from the right edge.
-    this.tweens.add({ targets: c, x: 0, duration: 160, ease: 'Cubic.easeOut' });
-
-    // Tapping the forest closes the drawer. There is no backdrop to catch the
-    // tap, so this is a scene-level handler that ignores taps landing inside the
-    // drawer's own bounds -- which is what keeps the buy buttons clickable.
-    const outside = (p) => {
-      const f = this.beltFrame;
-      if (!f) return;
-      if (p.x >= f.px && p.x <= f.px + f.pw && p.y >= f.py && p.y <= f.py + f.ph) return;
-      this.closeBelt();
-    };
-    this.beltOutside = outside;
-    this.input.on('pointerdown', outside);
-
+  openBelt() {
     this.refreshBelt();
     this.refreshShopPrices();
   }
+
+  closeBelt() { /* nothing to close: the toolbelt is a row in the top bar */ }
 
   /**
    * Buy one gem on chain. Price comes from the contract's own priceOf, never
@@ -1199,19 +1146,16 @@ export class ForestScene extends Phaser.Scene {
   async buyGemsOnchain(rarity, count) {
     if (this.busy) return;
     if (!onchainActive()) {
-      this.beltMsg.setText('Connect a wallet to buy gems on chain.');
-      this.beltMsg.setColor('#d83a5a');
+      this.beltMsg('Connect a wallet to buy gems on chain.', 'bad');
       return;
     }
     this.busy = true;
-    this.beltMsg.setText('Buying on chain...');
-    this.beltMsg.setColor('#d9a441');
+    this.beltMsg('Buying on chain...');
 
     const price = await priceFor(rarity);
     if (price === null) {
       this.busy = false;
-      this.beltMsg.setText('Could not read the price from the contract.');
-      this.beltMsg.setColor('#d83a5a');
+      this.beltMsg('Could not read the price from the contract.', 'bad');
       return;
     }
 
@@ -1219,12 +1163,9 @@ export class ForestScene extends Phaser.Scene {
     this.busy = false;
 
     if (!r.ok) {
-      this.beltMsg.setText(
-        r.code === 'reverted'
+      this.beltMsg(r.code === 'reverted'
           ? 'Purchase reverted on chain - nothing credited.'
-          : `Purchase failed: ${r.reason || r.code}`
-      );
-      this.beltMsg.setColor('#d83a5a');
+          : `Purchase failed: ${r.reason || r.code}`, 'bad');
       this.refreshBelt();
       this.updateHud();
       return;
@@ -1232,10 +1173,7 @@ export class ForestScene extends Phaser.Scene {
 
     // Confirmed: the contract's gem balance actually rose. Mirror it.
     this.belt.common += count;
-    this.beltMsg.setText(
-      `Bought ${count} ${RARITY_NAME_ONSALE[rarity]} for ${eth(r.spentWei)} (tx ${String(r.hash).slice(0, 10)}...).`
-    );
-    this.beltMsg.setColor('#3f8a52');
+    this.beltMsg(`Bought ${count} ${RARITY_NAME_ONSALE[rarity]} for ${eth(r.spentWei)} (tx ${String(r.hash).slice(0, 10)}...).`, 'ok');
     this.refreshBelt();
     this.updateHud();
   }
@@ -1245,6 +1183,13 @@ export class ForestScene extends Phaser.Scene {
     if (!this.shopRows || !this.shopRows.length) return;
     for (const row of this.shopRows) {
       const p = await priceFor(row.rarity);
+      // The label is a plain string now: the shop lives in the DOM top bar, so
+      // there is no Phaser Text to write into and nothing to destroy across the
+      // await. syncBeltDom() renders whatever string is here.
+      row.label = p === null
+        ? `${RARITY_NAME_ONSALE[row.rarity]} — price unavailable`
+        : `${RARITY_NAME_ONSALE[row.rarity]} ${eth(p)}`;
+      if (row.buyLabel) row.buyLabel = onchainActive() ? 'buy' : 'connect';
 
       // The await above yields, and anything can happen before it resumes: the
       // panel can be closed, rebuilt, or the scene torn down. A destroyed Phaser
@@ -1260,19 +1205,8 @@ export class ForestScene extends Phaser.Scene {
       // there because Phaser's internals decide what a destroyed Text still
       // exposes, and an async write to a destroyed object must not be able to
       // take down the frame regardless.
-      if (!row.label || row.label.scene !== this.sys.scene) continue;
-      try {
-        row.label.setText(
-          p === null
-            ? `${RARITY_NAME_ONSALE[row.rarity]} - price unavailable`
-            : `${RARITY_NAME_ONSALE[row.rarity]} ${eth(p)}`
-        );
-        row.buy.setText(onchainActive() ? 'buy' : 'connect');
-      } catch (err) {
-        // The row was destroyed across the await. Nothing to paint.
-        if (this.sys.isActive()) console.warn('shop row destroyed during refresh', err);
-      }
     }
+    this.syncBeltDom();
   }
 
   /**
@@ -1286,8 +1220,7 @@ export class ForestScene extends Phaser.Scene {
     if (this.busy) return;
     this.busy = true;
     this.claimBtn.setText('claiming on chain...');
-    this.beltMsg.setText(`Sending claim for Tier ${roman(tier)}...`);
-    this.beltMsg.setColor('#d9a441');
+    this.beltMsg(`Sending claim for Tier ${roman(tier)}...`);
 
     const r = await claimToolOnchain(tier);
 
@@ -1297,12 +1230,9 @@ export class ForestScene extends Phaser.Scene {
     if (!r.ok) {
       // Explicitly say nothing was granted. A failed on-chain claim must not
       // leave the player believing they have a tool.
-      this.beltMsg.setText(
-        r.code === 'reverted'
+      this.beltMsg(r.code === 'reverted'
           ? 'Claim reverted on chain - nothing granted.'
-          : `Claim failed: ${r.reason || r.code}`
-      );
-      this.beltMsg.setColor('#d83a5a');
+          : `Claim failed: ${r.reason || r.code}`, 'bad');
       this.refreshBelt();
       this.updateHud();
       return;
@@ -1311,8 +1241,7 @@ export class ForestScene extends Phaser.Scene {
     // The contract now reports the tool. Mirror it into the local belt by
     // reading it back, rather than assuming what the grant produced.
     await this.syncBeltFromChain();
-    this.beltMsg.setText(`Tier ${roman(tier)} claimed on chain (tx ${String(r.hash).slice(0, 10)}...).`);
-    this.beltMsg.setColor('#3f8a52');
+    this.beltMsg(`Tier ${roman(tier)} claimed on chain (tx ${String(r.hash).slice(0, 10)}...).`, 'ok');
     this.flash(`Tier ${roman(tier)} tool claimed on chain`);
     this.refreshBelt();
     this.updateHud();
@@ -1350,7 +1279,12 @@ export class ForestScene extends Phaser.Scene {
   }
 
   refreshBelt() {
-    if (!this.beltPanel) return;
+    if (!document.getElementById('belt')) return;
+    this.syncBeltDom();
+  }
+
+  /** Legacy belt summary, kept for the shop-price refresh. */
+  refreshBeltLegacy() {
     const belt = this.belt;
 
     // Mode must be visible in the panel itself, not just the topbar. A player
@@ -1368,9 +1302,12 @@ export class ForestScene extends Phaser.Scene {
       this.beltMode.setColor(m === 'onchain' ? '#3f8a52' : '#d9a441');
     }
 
-    this.beltCommon.setText(`COMMON  ${fmt(belt.common)}`);
-    this.beltBurned.setText(`BURNED  ${fmt(belt.burned)}`);
-    this.beltFees.setText(`FEES    ${fmt(belt.feesPaid)}`);
+    // One compact counts line. beltBurned / beltFees were rows created by the
+    // deleted drawer, so referencing them here threw at boot and took the whole
+    // scene down with it.
+    this.beltCommon.setText(
+      `COMMON ${fmt(belt.common)}  BURNED ${fmt(belt.burned)}  FEES ${fmt(belt.feesPaid)}`,
+    );
 
     for (const { row, btn, index } of this.beltRows) {
       const t = belt.tools[index];
@@ -1392,8 +1329,7 @@ export class ForestScene extends Phaser.Scene {
         if (r.ok) {
           btn.on('pointerdown', () => {
             const res = repairTool(belt, index);
-            this.beltMsg.setText(`Repaired Tier ${roman(t.tier)} - burned ${fmt(cost)} Common, ${res.fee} to treasury.`);
-            this.beltMsg.setColor('#3f8a52');
+            this.beltMsg(`Repaired Tier ${roman(t.tier)} - burned ${fmt(cost)} Common, ${res.fee} to treasury.`, 'ok');
             this.refreshBelt();
             this.updateHud();
           });
@@ -1411,12 +1347,10 @@ export class ForestScene extends Phaser.Scene {
         btn.on('pointerdown', () => {
           const res = equip(belt, index);
           if (!res.ok) {
-            this.beltMsg.setText(res.reason);
-            this.beltMsg.setColor('#d83a5a');
+            this.beltMsg(res.reason, 'bad');
             return;
           }
-          this.beltMsg.setText(`Equipped Tier ${roman(t.tier)}.`);
-          this.beltMsg.setColor('#3f8a52');
+          this.beltMsg(`Equipped Tier ${roman(t.tier)}.`, 'ok');
           this.refreshBelt();
           this.updateHud();
         });
@@ -1438,29 +1372,14 @@ export class ForestScene extends Phaser.Scene {
       this.claimBtn.setBackgroundColor(c.ok ? '#2a4d38' : '#1a2a1a');
       this.claimBtn.removeAllListeners('pointerdown');
       if (!c.ok) {
-        this.beltMsg.setText(c.reason);
-        this.beltMsg.setColor('#d9a441');
+        this.beltMsg(c.reason);
       }
     }
   }
 
-  closeBelt() {
-    if (!this.beltPanel) return;
-    this.releaseTouch();
-    this.beltPanel.destroy(true);
-    this.beltPanel = null;
-    // The backdrop is a scene child, NOT inside beltPanel, so destroy(true)
-    // does not reach it. Without this it would linger as an invisible
-    // full-screen input blocker over the whole game.
-    this.beltBackdrop?.destroy();
-    this.beltBackdrop = null;
-    this.beltFrame = null;
-    this.beltRows = [];
-    this.beltOpen = false;
-  }
-
+  /** Kept for the TAB key: refreshes the top card's toolbelt rows. */
   toggleBelt() {
-    if (this.beltPanel) this.closeBelt(); else this.openBelt();
+    this.openBelt();
   }
 
   /**
