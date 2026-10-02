@@ -48,7 +48,13 @@ export const UNDERGROWTH_PER_CHUNK = 34;
 // purpose: every one of these is a real sprite in a scene that already carries
 // ~1850 of them.
 export const MUSHROOMS_PER_CHUNK = 26;
-export const CRYSTALS_PER_CHUNK = 4;
+// Was 4. Set to 0: these were pure decoration, but 73 glowing emeralds
+// scattered as scenery read as treasure and undermined the beacon mechanic,
+// where the reward is supposed to be hidden until you dig. Zero here also
+// removes ~146 resident sprites (73 crystals + their halos), which is a real
+// mobile fill-rate saving on top of the read. Nothing about a hunt depended on
+// them -- they never fed settlement or the gem counts.
+export const CRYSTALS_PER_CHUNK = 0;
 
 // Spawn is deliberately kept clear in the origin chunk only. Everywhere else
 // the forest is dense, because "open clearing at 0,0" in every chunk would read

@@ -100,6 +100,11 @@ function addPanelBackdrop(scene, depth, px, py, pw, ph, onDismiss) {
 // gradient rather than a line, high enough that you can still see you are
 // approaching the edge of the loaded world.
 const FADE_ALPHA = 0.45;
+
+// The beacon is a marker on the forest floor, so it is drawn at ~0.34 of its
+// source height (232px -> ~79px), which keeps it clearly shorter than the
+// generated trees (~143px).
+const BEACON_SCALE = 0.34;
 // Retained only for spawn/legacy callers. There is no world extent any more --
 // see WORLD_FAR and the chunk streamer.
 const WORLD_W = 40, WORLD_H = 30;
@@ -639,7 +644,17 @@ export class ForestScene extends Phaser.Scene {
     // Crystals. Not y-sorted with the ground: they are tall enough to read as
     // standing objects, and a crystal that the player passes behind while it
     // looks like it is in front of him looks broken. Sort them like the trees.
-    if (DECORATE && this.textures.exists('crystal')) {
+    // Crystal decoration is RETIRED. 73 glowing emerald crystals were scattered
+    // around the forest as scenery, and every one of them read as treasure
+    // lying about -- which quietly undid the whole beacon design. A beacon that
+    // hides its rarity is pointless when the floor is littered with glowing
+    // gems. Crystals still exist in TWO places that matter: the beacon light
+    // (a cool cyan, not emerald) and the revealed gem sprites, which are the
+    // only place the player should see a treasure colour.
+    //
+    // Skipped at the sprite level rather than in the generator, so the seeded
+    // decoration stream still draws the same sequence and determinism holds.
+    if (false && DECORATE && this.textures.exists('crystal')) {
       const genX = this.has('gen-crystal');
       for (const c of data.crystals || []) {
         const img = this.add.image(c.x, c.y, genX ? 'gen-crystal' : 'crystal')
@@ -672,11 +687,17 @@ export class ForestScene extends Phaser.Scene {
       // soil under the post and left the lantern itself dark. Origin is (0.5,
       // 0.85), so the cap lands roughly 0.8 of the sprite's height above the
       // anchor.
-      const beaconH = this.has('gen-beacon') ? 232 : 64;
-      const capY = spot.y - beaconH * (this.has('gen-beacon') ? 0.78 : 0.25);
+      // The beacon was drawn at its full 232px, which made it TALLER than the
+      // trees it stands among (143px) -- a stake should read as undergrowth
+      // marking the floor, not as the largest thing in the scene. BEACON_SCALE
+      // puts it at roughly a third of tree height, so the light has to be what
+      // draws the eye rather than the silhouette.
+      const genBeacon = this.has('gen-beacon');
+      const beaconH = (genBeacon ? 232 : 64) * (genBeacon ? BEACON_SCALE : 1);
+      const capY = spot.y - beaconH * (genBeacon ? 0.78 : 0.25);
 
       const glow = this.add.image(spot.x, capY, 'glow')
-        .setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.62).setScale(0.9);
+        .setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.55).setScale(0.55);
       glow.setDepth(spot.y - 1);
       this.sortables.push(glow);
       objs.push(glow);
@@ -684,7 +705,7 @@ export class ForestScene extends Phaser.Scene {
       // A second, tighter core so the cap reads as a genuine light source
       // rather than a sprite with a haze behind it.
       const core = this.add.image(spot.x, capY, 'glow')
-        .setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.5).setScale(0.32);
+        .setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.5).setScale(0.2);
       core.setDepth(spot.y - 1);
       this.sortables.push(core);
       objs.push(core);
@@ -694,9 +715,9 @@ export class ForestScene extends Phaser.Scene {
       // what a dug-out site collapses into), but the beacon is what the player
       // sees while hunting. Identical on every site regardless of what is
       // buried -- the rarity is only ever known after `reveal()` rolls it.
-      const genBeacon = this.has('gen-beacon');
       const marker = this.add.image(spot.x, spot.y, genBeacon ? 'gen-beacon' : 'beacon')
         .setOrigin(0.5, 0.85);
+      if (genBeacon) marker.setScale(BEACON_SCALE);
       marker.setData('idx', n.idx);
       marker.setData('epoch', epoch);
       marker.setData('cx', cx);
