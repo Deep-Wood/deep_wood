@@ -1029,6 +1029,9 @@ export class ForestScene extends Phaser.Scene {
     // --- tool rows, each with its repair / equip action
     const tools = q('belt-tools');
     tools.textContent = '';
+    // The claim button lives in the same row as the tools, so the belt is three
+    // rows tall instead of five.
+    const claimSlot = q('belt-claim-slot');
     belt.tools.forEach((t, index) => {
       const net = expectedHuntWei(DROP_TABLE[t.tier], PRICE) - huntCostWei(t.tier);
       const row = document.createElement('div');
@@ -1069,7 +1072,10 @@ export class ForestScene extends Phaser.Scene {
     });
 
     // --- claim the next tier
-    const claim = q('belt-claim');
+    const claim = document.createElement('button');
+    claim.className = 'chip btn';
+    claim.id = 'belt-claim';
+    claimSlot.appendChild(claim);
     const next = belt.tools.reduce((a, t) => Math.max(a, t.tier), 0) + 1;
     if (next > MAX_TIER) {
       claim.textContent = 'ALL OWNED';

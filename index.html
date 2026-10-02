@@ -76,14 +76,18 @@
            sheet, then a right-hand drawer) and the complaint was never the size.
            Nothing here covers the forest and there is nothing to dismiss. -->
       <div id="belt">
-        <div class="belt-counts" id="belt-counts">COMMON 0 &middot; BURNED 0 &middot; FEES 0</div>
-        <div class="belt-mode" id="belt-mode">PREVIEW - simulation only</div>
-        <div class="belt-tools" id="belt-tools"></div>
-        <div class="belt-claim">
-          <button class="chip btn" id="belt-claim">CLAIM</button>
-          <span class="belt-msg" id="belt-msg"></span>
+        <div class="belt-row">
+          <span class="belt-counts" id="belt-counts">COMMON 0 &middot; BURNED 0 &middot; FEES 0</span>
+          <span class="spacer"></span>
+          <span class="belt-mode" id="belt-mode">PREVIEW - simulation only</span>
         </div>
-        <div class="belt-shop" id="belt-shop"></div>
+        <div class="belt-row" id="belt-tools"></div>
+        <div class="belt-row">
+          <span id="belt-claim-slot"></span>
+          <span class="belt-msg" id="belt-msg"></span>
+          <span class="spacer"></span>
+          <span class="belt-shop" id="belt-shop"></span>
+        </div>
       </div>
     </section>
   </div>
@@ -165,9 +169,11 @@
           foot.textContent = seedReady
             ? 'Live contract. Connect a wallet to claim tools, buy gems and settle your own hunts on chain.'
             : 'Live contract. Connect a wallet to claim tools and buy gems on chain. Hunts settle once the season seed is committed.';
-          if (open === false) {
-            foot.textContent = 'Live contract, but Season I is closed right now -- hunts will not settle until the owner opens it.';
-          }
+          // The "Season I is closed, hunts will not settle" notice is gone. It
+          // was a permanent bottom banner across the playfield for a condition
+          // that is the owner's to change and the player's to notice, not to be
+          // told about on every screen. The closed state is still visible where
+          // it matters: the belt's own PREVIEW line and the chain chip.
         }
         return;
       }
