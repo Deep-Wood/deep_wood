@@ -87,6 +87,30 @@ test('client mirror is in sync with the contract', async () => {
 });
 /* ---------------- retry ---------------- */
 
+test('withRetry gives up on a promise that NEVER settles', async () => {
+  // The bug this guards: a hung JSON-RPC read is not a failure, it is a promise
+  // that never resolves, so the retry loop never got a chance to run and the
+  // chain chip sat on "checking..." forever. A hang must cost one attempt, not
+  // the whole session.
+  const t0 = Date.now();
+  const r = await withRetry(() => new Promise(() => {}), 2, 10, 120);
+  const ms = Date.now() - t0;
+  assert.equal(r.ok, false, 'a hanging read must resolve as a failure');
+  assert.match(r.reason, /timed out/, `expected a timeout reason, got: ${r.reason}`);
+  assert.ok(ms < 3000, `must give up quickly, took ${ms}ms`);
+});
+
+test('withRetry recovers when a later attempt succeeds', async () => {
+  let n = 0;
+  const r = await withRetry(async () => {
+    n++;
+    if (n === 1) return { ok: false, reason: 'RPC error: boom' };
+    return { ok: true, chain: { address: '0xabc' } };
+  }, 3, 10, 500);
+  assert.equal(r.ok, true, 'should recover on a later attempt');
+  assert.equal(n, 2, `expected 2 attempts, made ${n}`);
+});
+
 test('withRetry returns the first success without retrying again', async () => {
   let calls = 0;
   const r = await withRetry(async () => {

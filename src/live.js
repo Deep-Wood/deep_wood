@@ -54,7 +54,24 @@ function clientMirror() {
  * @param {number} attempts total tries, including the first
  * @param {number} baseMs first backoff delay; doubles each retry
  */
-export async function withRetry(fn, attempts = 3, baseMs = 400) {
+/**
+ * Per-attempt deadline.
+ *
+ * withRetry only retries on FAILURE, and a fetch that never settles is not a
+ * failure -- it is a promise that never resolves. A single hung JSON-RPC read on
+ * a phone network left the chain chip reading "checking..." indefinitely: no
+ * error, no retry, no fallback, because the await never came back. A state that
+ * is not bounded in time is not a state.
+ */
+function deadline(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+export async function withRetry(fn, attempts = 3, baseMs = 400, attemptMs = 6000) {
   let last;
   for (let i = 0; i < attempts; i++) {
     if (i > 0) {
@@ -63,7 +80,7 @@ export async function withRetry(fn, attempts = 3, baseMs = 400) {
       await new Promise((r) => setTimeout(r, baseMs * 2 ** (i - 1)));
     }
     try {
-      const r = await fn();
+      const r = await deadline(Promise.resolve().then(fn), attemptMs, 'chain read');
       if (r.ok) return r;
       last = r;
       // A definitive answer, not a transport failure: stop and report it.
