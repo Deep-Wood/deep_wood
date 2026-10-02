@@ -47,119 +47,6 @@
   <!-- Identity last: it redefines the tokens hud.css and belt.css were built on. -->
   <link rel="stylesheet" href="/src/identity.css" />
   <script type="module" src="/src/hud-idle.js"></script>
-  <!-- Splash failsafe.
-       Deliberately inline, deliberately NOT in the game bundle. The first
-       version faded the emblem out from ForestScene.create(), which meant a
-       splash that could only be dismissed by the very thing it was covering:
-       any failure to boot left the player staring at the logo with no way out,
-       which is exactly what was reported. This runs regardless of Phaser, of
-       module loading, and of any error in the game. -->
-  <script>
-    (function () {
-      var DONE = 'done', removed = false;
-      function dismiss() {
-        if (removed) return;
-        removed = true;
-        var b = document.getElementById('boot');
-        if (!b) return;
-        b.classList.add(DONE);
-        setTimeout(function () { if (b.parentNode) b.remove(); }, 900);
-      }
-      // 0. Nothing may dismiss the splash until the emblem has painted or
-      //    failed. Both the CSS timer and the canvas handover below are gated
-      //    on this; before it, a phone could lose the race and get a loading
-      //    screen with no logo on it.
-      // A FUNCTION, not a one-shot boolean, and that distinction is the whole
-      // fix. This script is in <head>, so when it first ran, #boot had not been
-      // parsed yet: querySelector returned null, the old code treated "no
-      // element" as "settled", the gate was open from the first millisecond, and
-      // the canvas handover dismissed the splash at t+2.5s with the emblem
-      // still unpainted -- exactly the bug it was written to prevent. Re-checked
-      // on every call, so it cannot be defeated by evaluation order.
-      function emblemSettled() {
-        var img = document.querySelector('#boot .emblem');
-        if (!img) return false;              // not parsed yet: NOT settled
-        return img.complete;                 // loaded, or errored
-      }
-
-      // A FLOOR, as well as a ceiling.
-      //
-      // Gating every exit on the image was necessary but not sufficient: with
-      // the emblem preloaded it settled early, the scene was already built, and
-      // the splash left about 50ms later. Measured in production, three runs,
-      // one sample each. That is a flash, not a title card -- a human does not
-      // register a logo that is on screen for two frames, which is the same
-      // complaint as never showing it at all.
-      //
-      // So once the emblem has painted, the splash is held for a minimum beat.
-      // Nothing may dismiss it before that, including a game that is fully
-      // ready and idling. The player sees the mark, then the forest.
-      var MIN_SHOW_MS = 1400;
-      var paintedAt = null;
-      var originalSettled = emblemSettled;
-      emblemSettled = function () {
-        var ok = originalSettled();
-        if (ok && paintedAt === null) paintedAt = Date.now();
-        return ok;
-      };
-      // The gate callers use. False while the image is out AND before the floor.
-      function mayLeave() {
-        if (!emblemSettled()) return false;
-        if (paintedAt !== null && Date.now() - paintedAt < MIN_SHOW_MS) return false;
-        return true;
-      }
-
-      // 1. hard ceiling. Generous, and only counted once the emblem has
-      //    settled: its job is to rescue a splash that is somehow stuck, not
-      //    to race the logo off screen.
-      // The floor has to be honoured by the hard ceiling too, or a 6s timer
-      // would cut a freshly-painted emblem. Give it the floor plus a margin.
-      setTimeout(dismiss, 6000 + MIN_SHOW_MS);
-      // 2. any uncaught error: a broken game must not hide behind a logo
-      window.addEventListener('error', dismiss);
-      window.addEventListener('unhandledrejection', dismiss);
-      // 3. THE COMMON CASE. Hand over the moment the canvas has painted a real
-      //    frame, not when the whole scene finishes building. Scene
-      //    construction measured ~2.1-2.5s in headless Chromium and longer on a
-      //    phone, so waiting for it made the emblem an opaque loading wall. The
-      //    forest is visible while the rest of the world streams, which is what
-      //    a title card is for.
-      function handover() {
-        if (!mayLeave()) return;   // never cut the logo short, never rush it
-        var c = document.querySelector('#game canvas');
-        if (!c || c.width <= 0) return;
-        // one more frame, so there is something behind the splash
-        requestAnimationFrame(function () {
-          requestAnimationFrame(function () { dismiss(); });
-        });
-      }
-      if (document.readyState === 'loading') {
-        window.addEventListener('DOMContentLoaded', function () {
-          // Phaser appends the canvas asynchronously, so watch for it.
-          var tries = 0;
-          var iv = setInterval(function () {
-            if (document.querySelector('#game canvas') || ++tries > 100) {
-              clearInterval(iv);
-              handover();
-            }
-          }, 50);
-        });
-      } else { handover(); }
-      window.addEventListener('load', function () { setTimeout(handover, 300); });
-      // 4. the game tells us directly, when it can -- but through the SAME
-      //    gate, so the scene cannot cut the logo short either. It was calling
-      //    this straight from create() 120ms in, which landed at ~2.7s and
-      //    added .done while the emblem was still unpainted. That path was the
-      //    one actually firing; the CSS timer and the canvas handover were
-      //    correctly gated and innocent.
-      window.__emblemSettled = emblemSettled;
-      window.__dismissBoot = function () {
-        if (!mayLeave()) return false;   // emblem not painted yet, or too new
-        dismiss();
-        return true;
-      };
-    })();
-  </script>
 </head>
 <body>
   <!-- The emblem, while the forest streams its first chunks. -->
@@ -169,33 +56,65 @@
            page, and the class below is how the splash knows it may leave. -->
       <img class="emblem" src="/launch/hero.jpg" alt="" width="1280" height="698"
            decoding="async" fetchpriority="high" />
-      <script>
-        // The emblem must PAINT before the splash is allowed to leave.
-        //
-        // It did not, and that is why the logo never appeared. The splash was
-        // dismissed by whichever came first: the canvas element existing, or a
-        // 2.0s CSS timer. Neither waited for the image. A 142KB JPEG is racing a
-        // 1.5MB JS bundle, so on a phone the canvas won by a wide margin and the
-        // splash faded out over an empty radial gradient -- a loading screen with
-        // no logo on it. Measured: opacity 0.38 at t+1s, gone by t+2s.
-        (function () {
-          var img = document.querySelector('#boot .emblem');
-          var boot = document.getElementById('boot');
-          if (!img || !boot) return;
-          function ready() { boot.classList.add('emblem-ready'); }
-          if (img.complete && img.naturalWidth > 0) ready();
-          else img.addEventListener('load', ready, { once: true });
-          // A failed or blocked image must not strand the player on a splash
-          // with nothing in it -- treat the error as "ready" and move on.
-          img.addEventListener('error', ready, { once: true });
-        })();
-      </script>
       <div class="wordmark">DEEPWOOD</div>
       <div class="tagline">ENTERING THE HOLLOW</div>
     </div>
   </div>
 
   <div id="game"></div>
+
+  <!-- The splash, in one mechanism.
+       Four gates and two inline scripts replaced this once, and it was worse
+       every time: the logo never painted, then it flashed for 50ms, and the
+       failure mode was always "several exits racing one resource". So there is
+       now exactly one, and it owns the whole lifecycle:
+
+         1. decode() the emblem -- resolves when it is decoded AND paintable,
+            which is the thing that actually has to happen before the splash
+            may go. Rejects on a broken image, which is handled, not thrown.
+         2. then hold for MIN_SHOW_MS, so it is a title card and not a flash.
+         3. hand over, once. finish() is idempotent.
+
+       A single unconditional CEILING runs from the start regardless, because a
+       splash that can strand a player behind a logo is worse than a splash
+       without one. The ceiling is the only thing that can fire before step 2.
+
+       Nothing outside this script touches #boot. The scene no longer has an
+       opinion about the splash at all. -->
+  <script>
+    (function () {
+      var MIN_SHOW_MS = 1500;   // once decoded, stay up this long
+      var CEILING_MS  = 5000;   // absolute, from this script running
+
+      var boot = document.getElementById('boot');
+      var img  = document.querySelector('#boot .emblem');
+      var ceiling = setTimeout(finish, CEILING_MS);
+      var floor = null;
+      var done = false;
+
+      function finish() {
+        if (done) return;
+        done = true;
+        clearTimeout(ceiling);
+        clearTimeout(floor);
+        if (boot) {
+          boot.classList.add('done');
+          setTimeout(function () { if (boot.parentNode) boot.remove(); }, 700);
+        }
+      }
+
+      // A missing or broken image must not throw: the wordmark and tagline are
+      // still there, and the ceiling will clear the splash regardless.
+      var ready = (img && img.decode)
+        ? img.decode().catch(function () {})
+        : Promise.resolve();
+
+      ready.then(function () {
+        if (done) return;              // ceiling already fired
+        floor = setTimeout(finish, MIN_SHOW_MS);
+      });
+    })();
+  </script>
 
   <!-- HUD. One grid owns both top slots so they cannot collide; see
        src/hud.css for the measured overlaps this replaces. -->

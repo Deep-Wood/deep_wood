@@ -12,27 +12,6 @@ import { createAmbience } from './ambience.js';
 import { panelFrame } from './layout.js';
 import { retireWalletFoot } from './hud-idle.js';
 
-/**
- * Tell the splash to go once the forest is actually walkable.
- *
- * This is only the HAPPY path. The splash's exit belongs to the inline
- * failsafe in index.html, which runs even if this module never loads, never
- * finishes create(), or throws on the way -- the first version owned it here,
- * so a game that failed to boot left the player staring at the logo forever.
- * This is a courtesy early exit, not the guarantee.
- */
-function dismissBoot() {
-  const inline = window.__dismissBoot;
-  if (typeof inline === 'function') { inline(); return; }
-  // No inline handler (should not happen): still do not cut the emblem short.
-  const img = document.querySelector('#boot .emblem');
-  if (img && !img.complete) return;
-  const b = document.getElementById('boot');
-  if (!b || b.classList.contains('done')) return;
-  b.classList.add('done');
-  setTimeout(() => b.remove(), 900);
-}
-
 // Bisect switch for the ambience layers. The 2bf3694 deploy added ~730 display
 // objects (205 canopy, 376 undergrowth, 152 shadows) and the character stopped
 // rendering on a phone inside a WebView, where every scrollFactor 0 layer kept
@@ -289,10 +268,12 @@ export class ForestScene extends Phaser.Scene {
       lifespan: 300, quantity: 1, emitting: false,
     }).setDepth(1);
 
-    // The forest is walkable now: fade the emblem out. On the first frame
-    // there is nothing behind it, so this waits one paint rather than firing
-    // inside create().
-    this.time.delayedCall(120, dismissBoot);
+    // The scene deliberately does NOT dismiss the splash. It used to, 120ms
+    // into create(), and that call was the reason the logo never appeared: it
+    // bypassed the splash's own gate and added `.done` at ~2.7s while the
+    // emblem was still unpainted. The splash is owned by one script in
+    // index.html which decodes the image, holds a floor, and has a ceiling. The
+    // game has no opinion about it.
 
     this.commitSeasonNow();
     this.seedRivals();
