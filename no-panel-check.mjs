@@ -111,6 +111,25 @@ for (const vp of VIEWPORTS) {
   });
   check(moved > 2, 'the hunter walks normally', `moved ${moved}px`);
 
+  // Actually CLICK the card's buttons. Sentry caught
+  // "hudKeepAwake is not defined" in production because the harness asserted the
+  // buttons existed and were wired, and never pressed one. Existence is not
+  // reachability.
+  const clicks = await page.evaluate(async () => {
+    const out = [];
+    for (const sel of ['#belt-claim', '#belt-shop button', '#belt-tools button']) {
+      const el = document.querySelector(sel);
+      if (!el) { out.push(`${sel}:absent`); continue; }
+      try { el.click(); out.push(`${sel}:clicked`); }
+      catch (e) { out.push(`${sel}:threw ${e.message}`); }
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    return out;
+  });
+  for (const c of clicks) {
+    check(!/threw/.test(c), 'clicking the card does not throw', c);
+  }
+
   await page.screenshot({ path: `/tmp/card-${vp.name.replace(/\s+/g, '-')}.png` });
   await page.close();
 }
