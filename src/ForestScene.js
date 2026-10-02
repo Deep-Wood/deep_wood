@@ -10,7 +10,7 @@ import Phaser from 'phaser';
 import { buildAllTextures, PAL, rng } from './art.js';
 import { createAmbience } from './ambience.js';
 import { panelFrame } from './layout.js';
-import { hudKeepAwake } from './hud-idle.js';
+import { retireWalletFoot } from './hud-idle.js';
 
 // Bisect switch for the ambience layers. The 2bf3694 deploy added ~730 display
 // objects (205 canopy, 376 undergrowth, 152 shadows) and the character stopped
@@ -1058,6 +1058,8 @@ export class ForestScene extends Phaser.Scene {
         if (r.ok) label.onclick = () => {
           const res = repairTool(belt, index);
           this.beltMsg(`Repaired T${roman(t.tier)} — ${res.fee} to treasury.`, 'ok');
+          // Gems are spent: the satchel has nothing left to say.
+          window.retireSatchel?.();
           this.refreshBelt();
           this.updateHud();
         };
@@ -1118,9 +1120,8 @@ export class ForestScene extends Phaser.Scene {
     if (!el) return;
     el.textContent = text;
     el.className = 'belt-msg' + (kind ? ' ' + kind : '');
-    // A message just arrived, so hold the HUD up long enough to read it instead
-    // of letting the idle timer fade it out from under the player.
-    if (text) hudKeepAwake();
+    // The player acted on the one-time note; it has said what it needed to say.
+    if (text) retireWalletFoot();
   }
 
   /**
@@ -1141,6 +1142,8 @@ export class ForestScene extends Phaser.Scene {
     if (onchainActive()) { this.claimToolOnchain(next); return; }
     const res = claimTool(belt, next);
     this.beltMsg(`Claimed T${roman(next)} — ${res.fee} to treasury.`, 'ok');
+    // Gems are spent: the satchel has nothing left to say.
+    window.retireSatchel?.();
     this.flash(`Tier ${roman(next)} tool claimed`);
     this.refreshBelt();
     this.updateHud();

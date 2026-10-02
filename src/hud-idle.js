@@ -1,55 +1,55 @@
-// The HUD is transient.
+// The bottom wallet note is shown once, then never again.
 //
-// Both cards -- the season/toolbelt card at the top and the wallet note at the
-// bottom -- sat permanently over the playfield. The complaint was not their size
-// but their permanence: a player cannot get them out of the way at all. They
-// carry the same information every time you look, so they show themselves, say
-// it, and get out of the way.
+// It read "Wallet 0xd1bd...848d on chain 46630. Buy gems and claim tools in the
+// shop." and sat permanently across the bottom of the playfield. It is a
+// one-time orientation line: once the player has seen which chain they are on
+// and what the shop is for, repeating it every session is noise.
 //
-// Any input brings them straight back: a tap, a drag, a key, a wheel, a touch.
-// That includes the d-pad, so moving the character restores the HUD and then it
-// fades again -- the player is never left unable to read their own state.
+// One shot per browser, not a fade-and-return. A previous version faded BOTH
+// cards after 5s and brought them back on any tap, which is just a permanent
+// card with extra steps -- the player could never get it out of the way for
+// good. It does NOT come back on tap, on a chain state change, or on reconnect.
 
-const IDLE_MS = 5000;
+const SEEN = 'deepwood.walletfoot.seen';
 
-const SHOW = ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart'];
-
-let timer = null;
-
-function show() {
-  document.body.classList.remove('hud-idle');
-  if (timer) clearTimeout(timer);
-  timer = setTimeout(hide, IDLE_MS);
+/**
+ * Hide the wallet note immediately. Used when the player acts: a message the
+ * player has already read should not still be on screen when they do something
+ * about it.
+ */
+export function retireWalletFoot() {
+  let el = null;
+  try { el = document.getElementById('hint'); } catch { /* no DOM */ }
+  if (!el) return;
+  el.classList.add('retired');
+  el.hidden = true;
 }
 
-function hide() {
-  document.body.classList.add('hud-idle');
-}
+/**
+ * Show the note once, for a beat, then retire it. Subsequent loads in the same
+ * browser hide it before it can ever flash, so there is no "appear once per
+ * visit" behaviour by accident.
+ */
+export function initWalletFootOnce() {
+  let el = null;
+  try { el = document.getElementById('hint'); } catch { /* no DOM */ }
+  if (!el) return;
 
-export function hudKeepAwake(ms = IDLE_MS) {
-  show();
-  // A message just landed (a claim, a purchase, a chain state change) -- hold
-  // the HUD up long enough for the player to actually read it before it goes.
-  if (timer) clearTimeout(timer);
-  timer = setTimeout(hide, ms);
-}
-
-export function startHudIdle() {
-  for (const ev of SHOW) {
-    // passive so this never blocks scrolling or the d-pad's own handling
-    window.addEventListener(ev, show, { passive: true, capture: true });
+  let seen = false;
+  try { seen = localStorage.getItem(SEEN) === '1'; } catch { /* private mode */ }
+  if (seen) {
+    // Seen before: gone before first paint, and permanently.
+    el.hidden = true;
+    el.classList.add('retired');
+    return;
   }
-  // A tab that comes back to the foreground should not show stale state.
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) hide(); else show();
-  });
-  show();
+
+  try { localStorage.setItem(SEEN, '1'); } catch { /* private mode */ }
+  setTimeout(retireWalletFoot, 6000);
 }
 
-// Starts as soon as the module loads, so the HUD behaves this way from the
-// first frame without every caller having to remember to turn it on.
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', startHudIdle, { once: true });
+  document.addEventListener('DOMContentLoaded', initWalletFootOnce, { once: true });
 } else {
-  startHudIdle();
+  initWalletFootOnce();
 }

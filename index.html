@@ -235,7 +235,21 @@
       // screen over the d-pad.
       satchel.classList.toggle('on', rows.length > 0);
       gemlist.innerHTML = rows;
+
+      // Auto-retire after a beat. The satchel is a receipt, not an inventory
+      // panel: it appeared and stayed forever, holding space over the playfield
+      // for gems the player had already dealt with. It now shows itself when a
+      // find lands, then gets out of the way.
+      clearTimeout(retireTimer);
+      retireTimer = setTimeout(() => { satchel.classList.remove('on'); }, 5000);
     }
+    let retireTimer = null;
+
+    // Exposed so the game can retire it the moment gems are actually spent.
+    window.retireSatchel = () => {
+      clearTimeout(retireTimer);
+      satchel.classList.remove('on');
+    };
     renderGems();
 
     // Countdown ring. The season is the only deadline on screen, so it gets the
