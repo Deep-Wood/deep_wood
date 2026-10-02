@@ -60,6 +60,9 @@ for (const vp of VIEWPORTS) {
       // the card must stay inside the viewport
       cardBottom: 0,
       vh: s.scale.height,
+      cardsInHud: document.querySelectorAll('#hud .card').length,
+      beltInSeason: !!document.querySelector('#season #belt'),
+      statusInSeason: !!document.querySelector('#season #status'),
       anyUndefined: [document.getElementById('belt')?.innerText || '']
         .filter((t) => /undefined|NaN/.test(t)),
     };
@@ -69,6 +72,9 @@ for (const vp of VIEWPORTS) {
   check(!g.beltBackdrop, 'no backdrop / scrim over the game');
   check(!g.hasBeltButton, 'the old TOOLBELT green circle is gone');
   check(g.boardButton, 'BOARD button still present');
+  check(g.cardsInHud === 1, 'the top of the screen is ONE card', `${g.cardsInHud} cards`);
+  check(g.beltInSeason, 'the toolbelt is inside the season card');
+  check(g.statusInSeason, 'the chain/wallet chips are inside the season card');
   check(g.domBelt, 'the toolbelt is in the DOM top bar');
   check(/COMMON/.test(g.domCounts), 'carries the gem counts', JSON.stringify(g.domCounts));
   check(g.domMode.length > 0, 'carries the on-chain / preview line', JSON.stringify(g.domMode.slice(0, 28)));

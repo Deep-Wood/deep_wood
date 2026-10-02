@@ -62,26 +62,29 @@
         <div class="stat"><span class="k">Ends in</span><span class="v" id="ends">&mdash;</span></div>
       </div>
       <div class="bar"><i id="seasonbar"></i></div>
-    </section>
 
-    <div id="status">
-      <div class="chip" id="chainstat"><span class="dot warn"></span><span id="chaintext">checking&hellip;</span></div>
-      <button class="chip" id="connect">Connect wallet</button>
-    </div>
-
-    <!-- The toolbelt. It is a row in this top bar, not a panel over the game:
-         three earlier versions opened a card (340px fixed, then a 44% bottom
-         sheet, then a right-hand drawer) and the complaint was never the size.
-         Nothing here covers the forest and there is nothing to dismiss. -->
-    <section id="belt" class="card">
-      <div class="belt-counts" id="belt-counts">COMMON 0 &middot; BURNED 0 &middot; FEES 0</div>
-      <div class="belt-mode" id="belt-mode">PREVIEW - simulation only</div>
-      <div class="belt-tools" id="belt-tools"></div>
-      <div class="belt-claim">
-        <button class="chip btn" id="belt-claim">CLAIM</button>
-        <span class="belt-msg" id="belt-msg"></span>
+      <!-- Chain and wallet live in the same card. They were a second floating
+           panel, which made the top of the screen two stacked boxes for what is
+           one piece of information about the same season. -->
+      <div id="status">
+        <div class="chip" id="chainstat"><span class="dot warn"></span><span id="chaintext">checking&hellip;</span></div>
+        <button class="chip" id="connect">Connect wallet</button>
       </div>
-      <div class="belt-shop" id="belt-shop"></div>
+
+      <!-- The toolbelt, in that same card. It is not a panel over the game:
+           three earlier versions opened one (340px fixed, then a 44% bottom
+           sheet, then a right-hand drawer) and the complaint was never the size.
+           Nothing here covers the forest and there is nothing to dismiss. -->
+      <div id="belt">
+        <div class="belt-counts" id="belt-counts">COMMON 0 &middot; BURNED 0 &middot; FEES 0</div>
+        <div class="belt-mode" id="belt-mode">PREVIEW - simulation only</div>
+        <div class="belt-tools" id="belt-tools"></div>
+        <div class="belt-claim">
+          <button class="chip btn" id="belt-claim">CLAIM</button>
+          <span class="belt-msg" id="belt-msg"></span>
+        </div>
+        <div class="belt-shop" id="belt-shop"></div>
+      </div>
     </section>
   </div>
 

@@ -61,7 +61,9 @@ html, body {
   position: absolute;
   inset: var(--s3) var(--s3) auto var(--s3);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  /* One column: the top of the screen is a single card now, not a card plus a
+     column of chips beside it. */
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
   gap: var(--s3);
   z-index: 9;
@@ -128,8 +130,12 @@ html, body {
 
 /* --- status / wallet column -------------------------------------------- */
 
+/* Inside the season card now, not a second floating panel. */
 #status {
-  display: flex; flex-direction: column; align-items: flex-end; gap: var(--s2);
+  display: flex; flex-direction: row; align-items: center;
+  flex-wrap: wrap; gap: var(--s2);
+  margin-top: var(--s3); padding-top: var(--s3);
+  border-top: 1px solid var(--edge-dim);
 }
 
 .chip {

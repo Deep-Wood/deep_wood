@@ -1,14 +1,13 @@
 
 /* ---------------------------------------------------------------- toolbelt --
- * Part of the top bar, not an overlay. It sits in the grid's second row so it
- * takes its own space instead of stacking on top of the season card -- an
- * earlier attempt drew these rows into the Phaser HUD, which the DOM top bar
- * then covered, and the whole toolbelt was invisible underneath the wallet
- * chips.
+ * Part of the season card, not an overlay and not a second card. It is a
+ * section inside #season, separated by a rule, because season stats, chain
+ * state and the toolbelt are all one thing about the same season and were
+ * being presented as two stacked boxes.
  * ------------------------------------------------------------------------ */
 #belt {
-  grid-column: 1 / -1;
-  padding: var(--s2) var(--s3);
+  margin-top: var(--s3); padding-top: var(--s3);
+  border-top: 1px solid var(--edge-dim);
   font-family: var(--mono);
   font-size: 11px;
   line-height: 1.45;
@@ -38,9 +37,18 @@
  * belt took 248px -- 63% of the screen -- which is not a "top bar", it is most
  * of the game. Short viewports get a tighter belt. */
 @media (max-height: 460px) {
-  #belt { padding: var(--s1) var(--s3); font-size: 10px; line-height: 1.3; }
-  .belt-mode { display: none; }
-  .belt-shop { margin-top: var(--s1); }
+  /* Merged into one card, this is 243px of a 390px screen -- 62%, which is not
+     a top bar. Every rule here buys back vertical space on a short viewport. */
+  #season { padding: var(--s2) var(--s3); }
+  #status { margin-top: var(--s2); padding-top: var(--s2); }
+  .chip    { padding: 2px var(--s2); }
+  #belt {
+    margin-top: var(--s2); padding-top: var(--s2);
+    font-size: 10px; line-height: 1.25;
+  }
+  .belt-mode  { display: none; }
+  .belt-shop  { margin-top: var(--s1); gap: var(--s2); }
   .belt-claim { margin-top: var(--s1); }
-  .belt-msg { font-size: 9px; }
+  .belt-msg   { font-size: 9px; }
+  .belt-counts { font-size: 11px; }
 }
