@@ -45,18 +45,42 @@ await new Promise((r) => setTimeout(r, 4000));
 check('Sentry is contacted ZERO times on a clean page load', inbox.length === 0,
   inbox.length ? `${inbox.length} request(s) before any error` : 'no request before an error');
 
-// Fire a real error carrying a wallet address, the exact thing we must not leak.
+// --- PHASE 1: default behaviour must DISCARD harness noise -----------------
+// This is what keeps the dashboard clean. It runs first, unprompted, so a
+// regression that lets test noise through is caught here rather than noticed
+// weeks later in the Sentry UI.
 await page.evaluate(() => {
   window.__reporter.reportError(
-    Object.assign(new Error('settle failed for 0xd1Bd8e3D34B5f8ed38A56aA804A45B15a3FE848d'), {
-      filename: 'app.js', lineno: 7,
-    }),
+    Object.assign(new Error('settle failed for 0xd1Bd8e3D34B5f8ed38A56aA804A45B15a3FE848d'),
+      { filename: 'app.js', lineno: 7 }),
+    'sentry-e2e',
+  );
+});
+await new Promise((r) => setTimeout(r, 4000));
+check('harness noise is DISCARDED before it leaves the browser (default)', envelopes.length === 0,
+  envelopes.length ? `${envelopes.length} envelope(s) leaked to Sentry` : 'nothing sent');
+
+// --- PHASE 2: opt in, then prove the wire is correct ------------------------
+// The redaction and DSN-routing assertions need a real envelope, so the harness
+// opts in explicitly. Only this script sets the flag, and only on the page it is
+// running against.
+await page.evaluate(() => {
+  // Clear the throttle first. Phase 1 just recorded this exact error, so the
+  // identical one here is correctly collapsed as a repeat and would never
+  // reach Sentry. That is the desired production behaviour -- it is the same
+  // throttle that stops a per-frame throw flooding the quota -- but it makes
+  // the opt-in phase a no-op unless the recorded state is reset.
+  window.__reporter.clear();
+  window.__reporter.allowTestEvents(true);
+  window.__reporter.reportError(
+    Object.assign(new Error('settle failed for 0xd1Bd8e3D34B5f8ed38A56aA804A45B15a3FE848d'),
+      { filename: 'app.js', lineno: 7 }),
     'sentry-e2e',
   );
 });
 await new Promise((r) => setTimeout(r, 6000));
 
-check('Sentry IS contacted after the error', envelopes.length > 0,
+check('Sentry IS contacted once the harness opts in', envelopes.length > 0,
   `${envelopes.length} envelope(s)`);
 
 const e = envelopes[envelopes.length - 1];

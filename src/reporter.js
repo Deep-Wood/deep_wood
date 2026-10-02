@@ -145,6 +145,12 @@ export function createReporter({
 
   return {
     report,
+    /**
+     * Opt in to sending events tagged as harness noise. Off in production; the
+     * e2e harness turns it on so it can inspect a real envelope on the wire,
+     * then the dashboard stays clean on every other run.
+     */
+    allowTestEvents,
     /** Explicit, non-throwing path for errors a .catch() would otherwise eat. */
     reportError: (err, context) => report(err, context, 'error'),
     warn: (msg, context) => report(new Error(msg), context, 'warn'),
@@ -215,6 +221,20 @@ export const SENTRY_DSN =
   (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SENTRY_DSN) || null;
 
 /**
+ * When false (the default and the only state in production), events tagged as
+ * test-harness noise are DISCARDED before they leave the browser.
+ *
+ * This exists because the e2e harness needs to see a real envelope on the wire
+ * to prove the DSN routing and the redaction, but sending that on every CI run
+ * fills the dashboard with events nobody will ever fix. So the harness opts in
+ * explicitly via allowTestEvents(true); nothing else in the game sets it, and
+ * it is not readable from the network -- it lives only in the page it is set on.
+ */
+let _allowTestEvents = false;
+export const allowTestEvents = (v) => { _allowTestEvents = !!v; };
+export const testEventsAllowed = () => _allowTestEvents;
+
+/**
  * Scrub a Sentry event in place. Runs in beforeSend, so this is the LAST thing
  * between a player and Sentry's servers.
  *
@@ -283,7 +303,23 @@ export async function initSentry(dsn = SENTRY_DSN) {
       // at all.
       sendDefaultPii: false,
       tracesSampleRate: 0,
-        beforeSend: scrubEvent,
+          beforeSend: (event, hint) => {
+          // Drop the e2e harness's deliberate error so the dashboard only ever
+          // contains real player errors. Asserted on in CI from the request the
+          // test intercepts in the browser, not on the event arriving here, so
+          // dropping it costs the test nothing.
+          //
+          // Also anything tagged with a TEST_CONTEXT prefix, so adding a new
+          // harness later cannot leak noise by default.
+          const tags = (event && event.tags) || {};
+          const context = String(tags.context || '');
+          const isTest = context.startsWith('sentry-e2e') || context.startsWith('__test_');
+          if (isTest && !_allowTestEvents) {
+            // Returning null is Sentry's documented way to discard an event.
+            return null;
+          }
+          return scrubEvent(event, hint);
+        },
         beforeBreadcrumb: (b) => (b && b.category === 'console' ? null : b),
       });
       return Sentry;
