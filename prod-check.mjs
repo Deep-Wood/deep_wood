@@ -108,8 +108,13 @@ const vig = await page.evaluate(() => {
   const c2 = cv.getContext('2d');
   c2.drawImage(src, 0, 0);
   const A = (x, y) => c2.getImageData(x, y, 1, 1).data[3];
+  // Scan the WHOLE texture for the peak, not one row. Sampling a single row
+  // (y=4, originally) reads 0 because it falls in a gap between bands, so the
+  // check reported "the vignette is invisible" against a vignette peaking at
+  // 54/255. A gradient has to be measured across the gradient.
+  const data = c2.getImageData(0, 0, src.width, src.height).data;
   let peak = 0;
-  for (let i = 0; i < src.width; i++) peak = Math.max(peak, A(i, 4));
+  for (let i = 3; i < data.length; i += 4) if (data[i] > peak) peak = data[i];
   return { centre: A(128, 128), peakEdge: peak };
 });
 check('vignette texture exists', !vig.missing);
