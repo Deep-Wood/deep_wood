@@ -82,10 +82,39 @@
         return img.complete;                 // loaded, or errored
       }
 
+      // A FLOOR, as well as a ceiling.
+      //
+      // Gating every exit on the image was necessary but not sufficient: with
+      // the emblem preloaded it settled early, the scene was already built, and
+      // the splash left about 50ms later. Measured in production, three runs,
+      // one sample each. That is a flash, not a title card -- a human does not
+      // register a logo that is on screen for two frames, which is the same
+      // complaint as never showing it at all.
+      //
+      // So once the emblem has painted, the splash is held for a minimum beat.
+      // Nothing may dismiss it before that, including a game that is fully
+      // ready and idling. The player sees the mark, then the forest.
+      var MIN_SHOW_MS = 1400;
+      var paintedAt = null;
+      var originalSettled = emblemSettled;
+      emblemSettled = function () {
+        var ok = originalSettled();
+        if (ok && paintedAt === null) paintedAt = Date.now();
+        return ok;
+      };
+      // The gate callers use. False while the image is out AND before the floor.
+      function mayLeave() {
+        if (!emblemSettled()) return false;
+        if (paintedAt !== null && Date.now() - paintedAt < MIN_SHOW_MS) return false;
+        return true;
+      }
+
       // 1. hard ceiling. Generous, and only counted once the emblem has
       //    settled: its job is to rescue a splash that is somehow stuck, not
       //    to race the logo off screen.
-      setTimeout(dismiss, 6000);
+      // The floor has to be honoured by the hard ceiling too, or a 6s timer
+      // would cut a freshly-painted emblem. Give it the floor plus a margin.
+      setTimeout(dismiss, 6000 + MIN_SHOW_MS);
       // 2. any uncaught error: a broken game must not hide behind a logo
       window.addEventListener('error', dismiss);
       window.addEventListener('unhandledrejection', dismiss);
@@ -96,7 +125,7 @@
       //    forest is visible while the rest of the world streams, which is what
       //    a title card is for.
       function handover() {
-        if (!emblemSettled()) return;   // never cut the logo short
+        if (!mayLeave()) return;   // never cut the logo short, never rush it
         var c = document.querySelector('#game canvas');
         if (!c || c.width <= 0) return;
         // one more frame, so there is something behind the splash
@@ -125,7 +154,7 @@
       //    correctly gated and innocent.
       window.__emblemSettled = emblemSettled;
       window.__dismissBoot = function () {
-        if (!emblemSettled()) return false;   // emblem not painted yet
+        if (!mayLeave()) return false;   // emblem not painted yet, or too new
         dismiss();
         return true;
       };
