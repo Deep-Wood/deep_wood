@@ -30,6 +30,10 @@ export const CHUNK = 512;
 export const TREES_PER_CHUNK = 7;
 export const PROPS_PER_CHUNK = 26;
 export const NODES_PER_CHUNK = 3;
+// Decoration per chunk. These do not affect gameplay or settlement, so they can
+// be tuned freely; changing them does NOT break the seed guarantee because
+// nothing about a hunt depends on where a fern is.
+export const UNDERGROWTH_PER_CHUNK = 34;
 
 // Spawn is deliberately kept clear in the origin chunk only. Everywhere else
 // the forest is dense, because "open clearing at 0,0" in every chunk would read
@@ -156,7 +160,55 @@ export function describeChunk(seedHex, cx, cy, epoch = 0) {
     });
   }
 
-  return { cx, cy, trees, props, nodes };
+  // --- ambience layers. All of these are derived from the trees above rather
+  // than from their own independent random stream, because a forest reads as
+  // living because things gather AROUND its trees: shade collects under a
+  // canopy, undergrowth crowds a trunk, and clearings stay bare. Scattering
+  // these uniformly is what makes procedural forests look like a sprinkled
+  // texture instead of a place.
+  //
+  // Tree positions are epoch-independent, so all of this is too -- a dig cannot
+  // make the undergrowth rearrange itself under the player's feet.
+
+  // Ground shadows anchor each tree and give it weight against the flat grass.
+  // Derived, not random: one per tree, offset toward the light.
+  const shadows = trees.map((t) => ({ x: t.x + 9, y: t.y - 2, r: t.v }));
+
+  // Canopy sits ABOVE the player in the draw order rather than y-sorted with the
+  // trees, so walking north passes under the leaves instead of behind them.
+  const rCanopy = makeRng(chunkSeed(seedHex, cx, cy) ^ 0x7f4a7c15);
+  const canopy = [];
+  for (const t of trees) {
+    // One big blob per tree plus an occasional spill between two of them.
+    canopy.push({ x: t.x - 6 + rCanopy() * 12, y: t.y - 46 - rCanopy() * 22, s: 0.9 + rCanopy() * 0.5 });
+    if (rCanopy() < 0.45) {
+      canopy.push({ x: t.x + 40 + rCanopy() * 30, y: t.y - 30 - rCanopy() * 26, s: 0.6 + rCanopy() * 0.4 });
+    }
+  }
+
+  // Undergrowth: density falls off with distance to the nearest tree, so tufts
+  // crowd trunks and the open ground between stands stays bare. Rejection
+  // sampling against a distance function rather than its own RNG -- otherwise
+  // it would be uniform scatter wearing a costume.
+  const rUnder = makeRng(chunkSeed(seedHex, cx, cy) ^ 0x1b873593);
+  const undergrowth = [];
+  for (let i = 0; i < UNDERGROWTH_PER_CHUNK; i++) {
+    const x = ox + rUnder() * CHUNK;
+    const y = oy + rUnder() * CHUNK;
+    // shade(t) = 1 at a trunk, ~0 by 150px away
+    let shade = 0;
+    for (const t of trees) {
+      const d = Math.hypot(t.x - x, t.y - y);
+      const s = Math.max(0, 1 - d / 150);
+      if (s > shade) shade = s;
+    }
+    // accept more readily the shadier it is; 15% of open ground still gets a
+    // tuft so the clearing is not sterile
+    if (rUnder() > 0.15 + shade * 0.85) continue;
+    undergrowth.push({ x: Math.round(x), y: Math.round(y), k: Math.floor(rUnder() * 3), shade });
+  }
+
+  return { cx, cy, trees, props, nodes, shadows, canopy, undergrowth };
 }
 
 /** Stable key for a chunk's node, used for local depletion bookkeeping. */

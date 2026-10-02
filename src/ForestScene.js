@@ -8,10 +8,11 @@
  */
 import Phaser from 'phaser';
 import { buildAllTextures, PAL, rng } from './art.js';
+import { createAmbience } from './ambience.js';
 import { rollHunt, RARITY_NAME } from './engine.js';
 import {
   CHUNK, chunkOf, describeChunk, nodeKey,
-  residentChunks, staleChunks,
+  residentChunks, staleChunks, LOAD_RADIUS,
   depletionStore, saveDepletion, epochFor,
 } from './streaming.js';
 import {
@@ -38,6 +39,10 @@ import {
 } from './touch.js';
 
 const TILE = 32;
+// Alpha for the outer hysteresis ring. Low enough that the chunk boundary is a
+// gradient rather than a line, high enough that you can still see you are
+// approaching the edge of the loaded world.
+const FADE_ALPHA = 0.45;
 // Retained only for spawn/legacy callers. There is no world extent any more --
 // see WORLD_FAR and the chunk streamer.
 const WORLD_W = 40, WORLD_H = 30;
@@ -196,6 +201,11 @@ export class ForestScene extends Phaser.Scene {
     // First world stream: the hunter and the node list now exist, so the
     // origin neighbourhood can finally be built.
     this.refreshChunks(true);
+
+    // Ambience is created AFTER the first stream and lives for the life of the
+    // scene. It is camera-global by design -- see ambience.js -- so it must not
+    // be part of any chunk's unload set.
+    this.ambience = createAmbience(this);
     this.setupHud();
     this.setupTouch();
 
@@ -314,6 +324,19 @@ export class ForestScene extends Phaser.Scene {
     for (const [key, [kx, ky]] of wanted) {
       if (!this.chunks.has(key)) this.loadChunk(key, kx, ky);
     }
+
+    // Fade the outer ring. This is the answer to "can you see where a chunk
+    // ends": the boundary is where alpha drops, so there is no hard edge to
+    // notice. Applied here, on the chunk crossing, NOT every frame -- a
+    // per-frame tween across ~1200 objects would cost more than it is worth.
+    const [pcx, pcy] = [cx, cy];
+    for (const [key, c] of this.chunks) {
+      const d = Math.max(Math.abs(c.cx - pcx), Math.abs(c.cy - pcy));
+      const a = d <= LOAD_RADIUS ? 1 : FADE_ALPHA;
+      if (c.fade === a) continue;
+      c.fade = a;
+      for (const o of c.objs) o.setAlpha?.(a * (o.getData?.('baseAlpha') ?? 1));
+    }
   }
 
   loadChunk(key, cx, cy) {
@@ -336,6 +359,39 @@ export class ForestScene extends Phaser.Scene {
     for (const p of data.props) {
       const img = this.add.image(p.x, p.y, `prop${p.k}`)
         .setOrigin(0.5, 0.9).setDepth(p.y).setAlpha(0.92);
+      this.sortables.push(img);
+      objs.push(img);
+    }
+
+    // Ground shadows sit just below their tree in the y-sort so they anchor it
+    // to the grass instead of floating. Derived from tree positions upstream, so
+    // they cost one draw call each and need no RNG here.
+    for (const s of data.shadows || []) {
+      const img = this.add.image(s.x, s.y, 'shadow').setDepth(s.y - 2).setAlpha(0.5);
+      // userData does not exist until setData() is called in Phaser -- assigning to it
+      // directly throws "Cannot set properties of undefined" and takes the whole
+      // scene down at boot. Caught by the reporter on the first run.
+      img.setData('baseAlpha', 0.5);
+      objs.push(img);
+    }
+
+    // Canopy is NOT y-sorted. Fixed at a high depth so the player walks UNDER
+    // the leaves; y-sorting it would slide the canopy behind the player the
+    // moment they stepped north of a tree, which reads as a bug, not a forest.
+    for (const c of data.canopy || []) {
+      const img = this.add.image(c.x, c.y, 'canopy')
+        .setDepth(50000).setAlpha(0.3).setScale(c.s);
+      img.setData('baseAlpha', 0.3);
+      objs.push(img);
+    }
+
+    // Undergrowth is y-sorted with the ground so the player walks in front of
+    // tufts below them and behind them above.
+    for (const u of data.undergrowth || []) {
+      const a = 0.75 + u.shade * 0.25;
+      const img = this.add.image(u.x, u.y, `under${u.k}`)
+        .setOrigin(0.5, 0.95).setDepth(u.y).setAlpha(a);
+      img.setData('baseAlpha', a);
       this.sortables.push(img);
       objs.push(img);
     }
@@ -375,7 +431,7 @@ export class ForestScene extends Phaser.Scene {
       });
     });
 
-    this.chunks.set(key, { objs, nodes });
+    this.chunks.set(key, { objs, nodes, cx, cy, fade: 1 });
   }
 
   unloadChunk(key) {
@@ -1276,6 +1332,9 @@ export class ForestScene extends Phaser.Scene {
     // Stream the world around the player. Early-returns unless a chunk
     // boundary was crossed, so this is one comparison on a normal frame.
     this.refreshChunks();
+
+    // Pollen, birds, insects. One call, no allocation, dt clamped inside.
+    this.ambience?.tick(delta / 1000);
 
     const k = this.keys;
     const t = this.touchState || new TouchState();

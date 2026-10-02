@@ -150,3 +150,65 @@ test('the real on-chain season seed produces a usable forest', () => {
   assert.ok(c.trees.length >= 1);
   assert.ok(c.props.length > 0);
 });
+
+// --- ambience layers --------------------------------------------------------
+
+test('shadows are derived from trees, not independently random', () => {
+  const c = describeChunk(S1, 3, -2);
+  assert.equal(c.shadows.length, c.trees.length);
+  // Invert the exact offset rather than matching loosely on y: two trees in a
+  // chunk can share a y, and a loose match binds the shadow to the wrong one.
+  for (const s of c.shadows) {
+    const t = c.trees.find((x) => x.x + 9 === s.x && x.y - 2 === s.y);
+    assert.ok(t, `every shadow must belong to a tree (${s.x},${s.y})`);
+    assert.equal(s.r, t.v, 'shadow carries its tree variant');
+  }
+});
+
+test('canopy sits above its tree so the player walks under the leaves', () => {
+  const c = describeChunk(S1, 5, 7);
+  assert.ok(c.canopy.length >= c.trees.length, 'at least one canopy blob per tree');
+  for (const k of c.canopy) {
+    // Every blob must belong to SOME tree in this chunk, and be above it: the
+    // whole point is that it is drawn at a fixed depth so a player north of a
+    // trunk passes beneath the canopy rather than in front of it.
+    const owner = c.trees.find((t) => Math.hypot(t.x - k.x, t.y - k.y) < 120);
+    assert.ok(owner, `canopy blob at (${k.x},${k.y}) belongs to no tree`);
+    assert.ok(k.y < owner.y + 20, `canopy at y=${k.y} is not above its tree at y=${owner.y}`);
+  }
+});
+
+test('undergrowth gathers around trees instead of scattering uniformly', () => {
+  const c = describeChunk(S1, 2, 2);
+  assert.ok(c.undergrowth.length > 0, 'some undergrowth must survive rejection sampling');
+  const shaded = c.undergrowth.filter((u) => u.shade > 0.3).length;
+  assert.ok(shaded > 0, 'some undergrowth must sit in shade');
+  // and the shaded fraction must beat a uniform baseline, or the distance
+  // function is doing nothing at all
+  assert.ok(shaded / c.undergrowth.length > 0.15, `only ${shaded}/${c.undergrowth.length} in shade`);
+});
+
+test('ambience layers are epoch-independent, so a dig cannot shuffle the ferns', () => {
+  const a = describeChunk(S1, 1, 1, 0);
+  const b = describeChunk(S1, 1, 1, 5);
+  assert.deepEqual(a.undergrowth, b.undergrowth);
+  assert.deepEqual(a.canopy, b.canopy);
+  assert.deepEqual(a.shadows, b.shadows);
+  // only nodes move between epochs -- that is the respawn
+  assert.notDeepEqual(a.nodes, b.nodes);
+});
+
+test('ambience is reproducible across calls and independent of load order', () => {
+  const first = describeChunk(S1, 9, -4);
+  const other = describeChunk(S1, -8, 6);
+  const again = describeChunk(S1, 9, -4);
+  assert.deepEqual(first, again);
+  assert.notDeepEqual(first.undergrowth, other.undergrowth);
+});
+
+test('a new season seed reshuffles ambience as well as trees', () => {
+  const a = describeChunk(S1, 4, 4);
+  const b = describeChunk('0xdeadbeef', 4, 4);
+  assert.notDeepEqual(a.undergrowth, b.undergrowth);
+  assert.notDeepEqual(a.canopy, b.canopy);
+});

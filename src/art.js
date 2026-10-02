@@ -479,6 +479,129 @@ export function makeSparkTexture(scene) {
 }
 
 /** Soft radial glow, drawn additively behind dig nodes. */
+// --- ambience sprites ------------------------------------------------------
+// Three tiny textures for the camera-global layers. Each is deliberately a
+// couple of pixels: on a 390px phone screen anything larger stops reading as
+// atmosphere and starts reading as an object you could walk into.
+
+/**
+ * Soft elliptical contact shadow. Drawn once and reused for every tree --
+ * a texture atlas of one blob keeps this to a single batched draw call.
+ */
+export function makeShadowTexture(scene) {
+  if (scene.textures.exists('shadow')) return 'shadow';
+  const g = scene.make.graphics({ add: false });
+  // Three nested ellipses approximate a falloff without a gradient texture.
+  for (let i = 3; i >= 1; i--) {
+    g.fillStyle(0x0d1a0c, 0.13);
+    g.fillEllipse(20, 12, 44 - i * 9, 22 - i * 4);
+  }
+  g.generateTexture('shadow', 44, 26);
+  g.destroy();
+  return 'shadow';
+}
+
+/** Leaf mass drawn ABOVE the player. Irregular, so overlapping canopies merge. */
+export function makeCanopyTexture(scene) {
+  if (scene.textures.exists('canopy')) return 'canopy';
+  const g = scene.make.graphics({ add: false });
+  const blobs = [[24, 16, 17], [40, 12, 13], [12, 14, 12], [30, 24, 14], [46, 22, 10]];
+  // A darker underside reads as depth from below; the player is looking up into it.
+  for (const [x, y, r] of blobs) {
+    g.fillStyle(0x14300f, 0.5);
+    g.fillCircle(x, y + 2, r);
+  }
+  for (const [x, y, r] of blobs) {
+    g.fillStyle(0x2b5a1e, 0.55);
+    g.fillCircle(x, y, r);
+  }
+  g.generateTexture('canopy', 60, 40);
+  g.destroy();
+  return 'canopy';
+}
+
+/** Three undergrowth tufts of different silhouette. */
+export function makeUndergrowthTextures(scene) {
+  for (let k = 0; k < 3; k++) {
+    const key = `under${k}`;
+    if (scene.textures.exists(key)) continue;
+    const g = scene.make.graphics({ add: false });
+    const blades = 3 + k * 2;
+    for (let i = 0; i < blades; i++) {
+      const x = 5 + i * (10 / blades) + (k % 2);
+      const h = 7 + ((i * 5 + k * 3) % 8);
+      // Two-tone blade: a lit edge and a dark body, so tufts are not flat.
+      g.lineStyle(2, k === 2 ? 0x3f7a2a : 0x2f6b24, 0.9);
+      g.beginPath(); g.moveTo(x, 14); g.lineTo(x + (i % 2 ? 2 : -2), 14 - h); g.strokePath();
+      g.lineStyle(1, 0x63b047, 0.8);
+      g.beginPath(); g.moveTo(x, 14); g.lineTo(x + (i % 2 ? 2 : -2), 14 - h); g.strokePath();
+    }
+    g.generateTexture(key, 20, 16);
+    g.destroy();
+  }
+}
+
+/**
+ * Vignette, baked ONCE into a texture.
+ *
+ * This used to be a Graphics object redrawing six stroked rects every frame, and
+ * it measured 10.4ms of a 13ms ambience budget for ONE object: Phaser
+ * re-tessellates Graphics geometry per frame, so the cost was fill plus geometry
+ * rebuild rather than a single batched sprite. Baking it makes it exactly one
+ * draw call, which is what a screen-space overlay should be.
+ */
+export function makeVignetteTexture(scene) {
+  if (scene.textures.exists('vignette')) return 'vignette';
+  const S = 256;
+  const g = scene.make.graphics({ add: false });
+  // Concentric rounded rects from the outside in, alpha falling off toward the
+  // centre. Cheap to bake, and stretching it to the viewport is invisible
+  // because the gradient is smooth.
+  for (let i = 0; i < 14; i++) {
+    const f = i / 14;
+    const inset = Math.round(f * S * 0.46);
+    g.fillStyle(0x000000, 0.055 * (1 - f * 0.35));
+    g.fillRect(inset, inset, S - inset * 2, S - inset * 2);
+  }
+  g.generateTexture('vignette', S, S);
+  g.destroy();
+  return 'vignette';
+}
+
+export function makePollenTexture(scene) {
+  const g = scene.make.graphics({ add: false });
+  // Soft, slightly warm -- pollen catching light, not a white pixel.
+  g.fillStyle(0xfff3c4, 1);
+  g.fillCircle(3, 3, 2);
+  g.fillStyle(0xffffff, 0.55);
+  g.fillCircle(3, 3, 1);
+  g.generateTexture('pollen', 6, 6);
+  g.destroy();
+}
+
+/** A two-stroke gull silhouette. Cheap, and reads as a bird at 6px. */
+export function makeBirdTexture(scene) {
+  const g = scene.make.graphics({ add: false });
+  g.lineStyle(2, 0x1c2230, 1);
+  g.beginPath();
+  g.moveTo(0, 4); g.lineTo(5, 0); g.lineTo(9, 4);
+  g.strokePath();
+  g.beginPath();
+  g.moveTo(9, 4); g.lineTo(13, 0); g.lineTo(17, 4);
+  g.strokePath();
+  g.generateTexture('bird', 18, 8);
+  g.destroy();
+}
+
+/** A single near-pixel dot. If this reads as dirt on the lens, turn INSECTS off. */
+export function makeInsectTexture(scene) {
+  const g = scene.make.graphics({ add: false });
+  g.fillStyle(0x2b2a1f, 1);
+  g.fillRect(2, 2, 2, 2);
+  g.generateTexture('insect', 6, 6);
+  g.destroy();
+}
+
 export function makeGlowTexture(scene) {
   const key = 'glow';
   if (scene.textures.exists(key)) return key;
@@ -588,6 +711,16 @@ export function buildAllTextures(scene, worldW = 1280, worldH = 960) {
   makeNodeTexture(scene);
   makeSparkTexture(scene);
   makeGlowTexture(scene);
+  // Ambience sprites are built here too so there is exactly one place where
+  // textures come into existence, and a missing one fails loudly at boot rather
+  // than silently rendering nothing 60 times a second.
+  makeShadowTexture(scene);
+  makeCanopyTexture(scene);
+  makeUndergrowthTextures(scene);
+  makeVignetteTexture(scene);
+  makePollenTexture(scene);
+  makeBirdTexture(scene);
+  makeInsectTexture(scene);
   for (let v = 0; v < 4; v++) makeTreeTexture(scene, v);
   for (let k = 0; k < 4; k++) makePropTexture(scene, k);
   makeGroundTexture(scene, worldW, worldH);
