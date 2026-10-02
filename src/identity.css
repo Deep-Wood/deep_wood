@@ -1,0 +1,243 @@
+/* DeepWood identity — palette, type, and material.
+ *
+ * The emblem is a carved, weathered medallion: midnight-teal forest, walnut and
+ * bronze, one bioluminescent emerald crystal as the focal light, and small
+ * gemstones as punctuation. The UI was a flat green rectangle with a 2px stroke
+ * and monospace text — a terminal, not a forest relic.
+ *
+ * This file rebuilds the shell to match the mark. It is deliberately CSS and one
+ * font only: no gameplay or canvas art is touched here, so nothing about the
+ * hunt can regress while the surface changes.
+ */
+
+/* Cinzel: inscriptional Roman caps, carved and monumental. The closest free
+ * match to the DEEPWOOD wordmark. Self-hosted — a CDN font would be a third
+ * party on the critical path of the first paint, and a privacy leak on a page
+ * whose only network call is meant to be the contract. */
+@font-face {
+  font-family: 'Cinzel';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/launch/fonts/cinzel-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191,
+    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root {
+  /* Midnight teal, not forest green. The old --ink background was #0d1a10, a
+   * green that fought the accent; the emblem's darkness is a desaturated
+   * blue-green, which lets the emerald read as light rather than as paint. */
+  --ink:        #e6f2ee;
+  --dim:        #9dbdb4;
+  --faint:      #62847c;
+
+  --panel:      rgba(9, 20, 23, .90);
+  --panel-solid:#0a1417;
+  --panel-deep: #060e11;
+
+  /* Walnut and aged bronze: the material the emblem is carved from. */
+  --wood:       #241a13;
+  --wood-lit:   #3a2a1d;
+  --bronze:     #7a6236;
+  --bronze-lit: #a8874a;
+
+  /* One bioluminescent accent. The old --edge was a flat #3f8a52 green used
+   * for borders, text, buttons and the progress fill all at once, so nothing
+   * ever felt lit. The crystal is the only light source in the mark and it is
+   * the only glow here. */
+  --edge:       #3ff0b0;
+  --edge-dim:   rgba(63, 240, 176, .26);
+  --edge-deep:  #1c8f6b;
+  --glow:       0 0 10px rgba(63, 240, 176, .30);
+
+  --gold:       #e0a92e;
+  --warn:       #d9a441;
+  --bad:        #d2506a;
+
+  /* Gem ladder, lifted from the stones set around the rim. Rarity is carried by
+   * hue the way the emblem carries it — as a set stone, not as a label. */
+  --gem-quartz:   #dfe6e6;
+  --gem-common:   #6fbf8f;
+  --gem-uncommon: #3fc7c0;
+  --gem-rare:     #4a7fe0;
+  --gem-epic:     #8b5cd6;
+  --gem-legend:   #e0a92e;
+
+  --radius: 12px;
+  --shadow: 0 2px 0 rgba(0,0,0,.5), 0 10px 28px rgba(0,0,0,.45);
+}
+
+/* --- carved material -----------------------------------------------------
+ * The emblem is high relief: dark in the grooves, bright along the raised
+ * bands. A single flat border cannot say that, so the plaque is built from
+ * stacked layers — a dark outer groove, a bronze ridge just inside it, and an
+ * inset shadow so the middle sits down into the wood.
+ * ------------------------------------------------------------------------ */
+.card {
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(58, 42, 29, .55) 0%, rgba(9, 20, 23, .92) 42%),
+    var(--panel);
+  border: 1px solid rgba(0, 0, 0, .6);
+  border-radius: var(--radius);
+  box-shadow:
+    inset 0 0 0 1px var(--bronze),           /* the bronze ridge      */
+    inset 0 2px 6px rgba(0, 0, 0, .55),       /* the face sits down    */
+    inset 0 -1px 0 rgba(168, 135, 74, .35),   /* light catching the lip */
+    var(--shadow);
+  backdrop-filter: blur(3px);
+}
+
+/* Grain. A single tiny inline SVG of fractal noise, tiled at low opacity — it
+ * costs one data URI and no request, and it is the difference between "dark
+ * rectangle" and "a surface that was cut from something". */
+.card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: .05;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* The crystal's light spilling over the top edge of the plaque. */
+.card::after {
+  content: '';
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  top: -1px;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg,
+    transparent, var(--edge) 45%, rgba(126, 249, 208, .9) 50%,
+    var(--edge) 55%, transparent);
+  box-shadow: 0 0 8px rgba(63, 240, 176, .45);
+}
+
+/* --- type ----------------------------------------------------------------
+ * Cinzel for anything that is a name, a label, or a season. The monospace is
+ * demoted to figures and addresses, which is the only thing it was ever good
+ * at — running it for headings is what made the UI read as a CLI.
+ * ------------------------------------------------------------------------ */
+.card-title,
+.season-head .card-title,
+.stat .k,
+.belt-msg,
+#boot .wordmark,
+#boot .tagline {
+  font-family: 'Cinzel', Georgia, serif;
+}
+
+.card-title {
+  font-size: 11px;
+  letter-spacing: .18em;
+  color: var(--bronze-lit);
+  font-weight: 600;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, .7);
+}
+
+.stat .k { color: var(--faint); letter-spacing: .14em; font-size: 9px; }
+.stat .v { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+/* --- compass medallion ---------------------------------------------------
+ * The emblem's centre is a compass star inside concentric carved rings. The
+ * countdown is the only thing in the HUD with a deadline, so it is the one
+ * element that should wear that shape: the ticks and rings make it read as the
+ * medallion's hub, and the arc still reads as a clock.
+ * ------------------------------------------------------------------------ */
+.ring { width: 26px; height: 26px; flex: none; }
+.ring .track { stroke: rgba(122, 98, 54, .38); fill: none; }
+.ring .fill  { stroke: var(--edge); fill: none; filter: drop-shadow(0 0 3px rgba(63,240,176,.55)); }
+.ring .tick  { stroke: rgba(168, 135, 74, .55); }
+.ring .hub   { fill: var(--edge); }
+.ring.warn .fill { stroke: var(--warn); }
+
+/* --- chips and gems ------------------------------------------------------
+ * A gem in the mark is smooth and glossy against rough wood; a chip is the
+ * metal equivalent — the same double groove as a plaque, in miniature.
+ * ------------------------------------------------------------------------ */
+.chip {
+  background: linear-gradient(180deg, rgba(58, 42, 29, .5), rgba(9, 20, 23, .9));
+  border: 1px solid rgba(0, 0, 0, .55);
+  box-shadow:
+    inset 0 0 0 1px rgba(122, 98, 54, .5),
+    inset 0 1px 2px rgba(0, 0, 0, .5),
+    var(--shadow);
+  color: var(--ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+button.chip:hover {
+  border-color: var(--bronze-lit);
+  box-shadow: inset 0 0 0 1px var(--edge), inset 0 1px 2px rgba(0,0,0,.5), var(--glow);
+  background: linear-gradient(180deg, rgba(63, 240, 176, .16), rgba(9, 20, 23, .92));
+}
+button.chip:active { transform: translateY(1px); }
+.chip b { color: var(--gold); }
+
+.dot.ok   { background: var(--edge);   box-shadow: 0 0 6px var(--edge); }
+.dot.warn { background: var(--warn);   box-shadow: 0 0 6px rgba(217, 164, 65, .6); }
+.dot.bad  { background: var(--bad);    box-shadow: 0 0 6px rgba(210, 80, 106, .6); }
+
+.bar { background: rgba(0, 0, 0, .55); box-shadow: inset 0 0 0 1px rgba(122, 98, 54, .3); }
+.bar > i {
+  background: linear-gradient(90deg, var(--edge-deep), var(--edge) 70%, var(--gem-uncommon));
+  box-shadow: 0 0 8px rgba(63, 240, 176, .5);
+}
+
+#satchel, #hint { border-radius: var(--radius); }
+.gem .n { color: var(--dim); }
+
+/* --- boot ----------------------------------------------------------------
+ * The emblem, on the emblem's own background, for as long as the forest takes
+ * to stream its first chunks. It is the one moment the brand and the game are
+ * the same image.
+ * ------------------------------------------------------------------------ */
+#boot {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(ellipse at 50% 45%, #0d2226 0%, #060e11 62%, #030708 100%);
+  transition: opacity .7s ease, visibility .7s;
+}
+#boot.done { opacity: 0; visibility: hidden; pointer-events: none; }
+
+#boot .emblem {
+  width: min(320px, 62vw);
+  border-radius: 50%;
+  /* the crystal is the only light in the mark, so it is the only glow here too */
+  filter: drop-shadow(0 0 26px rgba(63, 240, 176, .22));
+  animation: boot-breathe 4.5s ease-in-out infinite;
+}
+@keyframes boot-breathe {
+  0%, 100% { filter: drop-shadow(0 0 22px rgba(63, 240, 176, .18)); }
+  50%      { filter: drop-shadow(0 0 34px rgba(63, 240, 176, .30)); }
+}
+
+#boot .wordmark {
+  margin-top: var(--s4);
+  font-size: 15px;
+  letter-spacing: .42em;
+  text-indent: .42em;   /* offset the trailing letter-space so it stays centred */
+  color: var(--bronze-lit);
+  text-shadow: 0 0 12px rgba(63, 240, 176, .35), 0 1px 0 #000;
+  text-align: center;
+}
+#boot .tagline {
+  margin-top: var(--s2);
+  font-size: 9px;
+  letter-spacing: .26em;
+  color: var(--faint);
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #boot .emblem { animation: none; }
+  #boot { transition: opacity .01s linear; }
+}

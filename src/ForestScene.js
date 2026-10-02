@@ -12,6 +12,14 @@ import { createAmbience } from './ambience.js';
 import { panelFrame } from './layout.js';
 import { retireWalletFoot } from './hud-idle.js';
 
+/** Fade the emblem out once the forest is actually walkable, not merely loaded. */
+function dismissBoot() {
+  const b = document.getElementById('boot');
+  if (!b || b.classList.contains('done')) return;
+  b.classList.add('done');
+  setTimeout(() => b.remove(), 900);
+}
+
 // Bisect switch for the ambience layers. The 2bf3694 deploy added ~730 display
 // objects (205 canopy, 376 undergrowth, 152 shadows) and the character stopped
 // rendering on a phone inside a WebView, where every scrollFactor 0 layer kept
@@ -267,6 +275,11 @@ export class ForestScene extends Phaser.Scene {
       speed: { min: 5, max: 20 }, scale: { start: 0.15, end: 0 },
       lifespan: 300, quantity: 1, emitting: false,
     }).setDepth(1);
+
+    // The forest is walkable now: fade the emblem out. On the first frame
+    // there is nothing behind it, so this waits one paint rather than firing
+    // inside create().
+    this.time.delayedCall(120, dismissBoot);
 
     this.commitSeasonNow();
     this.seedRivals();
@@ -781,10 +794,16 @@ export class ForestScene extends Phaser.Scene {
     });
     this.hud.add(this.tierText);
 
-    // find log, bottom left
+    // find log, bottom left.
+    // wordWrap is load-bearing: the idle line is 57 characters of monospace and
+    // ran straight off the right edge of a 390px phone, so the tail ("press
+    // SPACE") was cropped and the instruction was unreadable. It is clamped to
+    // the screen minus its own margin and padding, and the real width is
+    // recomputed on resize.
     this.logText = this.add.text(12, H - 96, '', {
       fontFamily: 'monospace', fontSize: '12px', color: '#cfe0cf',
-      backgroundColor: '#0d1a10cc', padding: { x: 8, y: 6 },
+      backgroundColor: '#060e11cc', padding: { x: 8, y: 6 },
+      wordWrap: { width: Math.max(120, W - 40), useAdvancedWrap: true },
     });
     this.hud.add(this.logText);
 
@@ -824,6 +843,17 @@ export class ForestScene extends Phaser.Scene {
       const name = RARITY_NAME[f.rarity] || 'Quartz';
       return `found ${name} x${f.count}  =  ${(Number(f.valueWei) / 1e18).toFixed(5)} ETH`;
     });
+    // The wrap width is fixed at construction from the width at that moment, so
+    // a rotate or a window resize would leave it stale and the line would crop
+    // again. Re-clamp whenever the HUD text is rebuilt. The applied width is
+    // tracked here rather than read back off the Text: Phaser does not expose
+    // wordWrap as a readable property, and `this.logText.wordWrap.width` threw
+    // "Cannot read properties of undefined" and took the whole scene down.
+    const logMax = Math.max(120, this.scale.width - 40);
+    if (this._logWrap !== logMax) {
+      this._logWrap = logMax;
+      this.logText.setWordWrapWidth(logMax, true);
+    }
     this.logText.setText(lines.length ? lines.join('\n')
       : (this.hasTouchPad
         ? 'no finds yet - walk to a glowing stone and tap HUNT'

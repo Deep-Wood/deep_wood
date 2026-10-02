@@ -24,8 +24,27 @@ if (!fs.existsSync(src)) {
 
 fs.mkdirSync(out, { recursive: true });
 let n = 0;
-for (const f of fs.readdirSync(src)) {
-  fs.copyFileSync(path.join(src, f), path.join(out, f));
-  n++;
+
+/**
+ * Recursive, because /launch now holds a subdirectory: the self-hosted Cinzel
+ * webfont lives at launch/fonts/ so the emblem's typeface is served from our
+ * own origin rather than a font CDN. The first version of this script used a
+ * bare copyFileSync over readdirSync and the build died on
+ * EISDIR: illegal operation on a directory, copyfile '.../launch/fonts'.
+ */
+function copyInto(from, to) {
+  fs.mkdirSync(to, { recursive: true });
+  for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
+    const s = path.join(from, entry.name);
+    const d = path.join(to, entry.name);
+    if (entry.isDirectory()) {
+      copyInto(s, d);
+    } else if (entry.isFile()) {
+      fs.copyFileSync(s, d);
+      n++;
+    }
+  }
 }
+
+copyInto(src, out);
 console.log(`copy-launch: ${n} file(s) -> dist/launch/`);

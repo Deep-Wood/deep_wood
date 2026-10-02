@@ -40,9 +40,20 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d1a10'/%3E%3Cpath d='M16 6l6 10-6 10-6-10z' fill='%234a7c59'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="/src/hud.css" />
   <link rel="stylesheet" href="/src/belt.css" />
+  <!-- Identity last: it redefines the tokens hud.css and belt.css were built on. -->
+  <link rel="stylesheet" href="/src/identity.css" />
   <script type="module" src="/src/hud-idle.js"></script>
 </head>
 <body>
+  <!-- The emblem, while the forest streams its first chunks. -->
+  <div id="boot">
+    <div>
+      <img class="emblem" src="/launch/hero.jpg" alt="" width="1280" height="698" />
+      <div class="wordmark">DEEPWOOD</div>
+      <div class="tagline">ENTERING THE HOLLOW</div>
+    </div>
+  </div>
+
   <div id="game"></div>
 
   <!-- HUD. One grid owns both top slots so they cannot collide; see
@@ -51,10 +62,26 @@
     <section id="season" class="card">
       <div class="season-head">
         <span class="card-title">Season I &middot; Verdant Hollow</span>
+        <!-- The emblem's hub: a compass rose inside concentric carved rings.
+             The arc is still the countdown -- ticks and hub only make it read as
+             the medallion's centre rather than as another progress bar. -->
         <svg class="ring" viewBox="0 0 36 36" aria-hidden="true">
-          <circle class="track" cx="18" cy="18" r="15.5" fill="none" stroke-width="3"></circle>
-          <circle class="fill" cx="18" cy="18" r="15.5" fill="none" stroke-width="3"
+          <g class="ticks">
+            <line class="tick" x1="18" y1="1.5"  x2="18" y2="4.5"></line>
+            <line class="tick" x1="18" y1="31.5" x2="18" y2="34.5"></line>
+            <line class="tick" x1="1.5"  y1="18" x2="4.5"  y2="18"></line>
+            <line class="tick" x1="31.5" y1="18" x2="34.5" y2="18"></line>
+            <line class="tick" x1="6"   y1="6"   x2="8"   y2="8"></line>
+            <line class="tick" x1="28"  y1="28"  x2="30"  y2="30"></line>
+            <line class="tick" x1="30"  y1="6"   x2="28"  y2="8"></line>
+            <line class="tick" x1="8"   y1="28"  x2="6"   y2="30"></line>
+          </g>
+          <circle class="track" cx="18" cy="18" r="15.5" fill="none" stroke-width="2.2"></circle>
+          <circle class="fill" cx="18" cy="18" r="15.5" fill="none" stroke-width="2.2"
                   stroke-linecap="round" stroke-dasharray="97.4" stroke-dashoffset="0"></circle>
+          <circle class="track" cx="18" cy="18" r="9" fill="none" stroke-width=".8"></circle>
+          <!-- the crystal, at the hub -->
+          <circle class="hub" cx="18" cy="18" r="2.4"></circle>
         </svg>
       </div>
       <div class="season-grid">
