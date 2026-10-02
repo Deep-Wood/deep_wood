@@ -9,6 +9,26 @@
 import Phaser from 'phaser';
 import { buildAllTextures, PAL, rng } from './art.js';
 import { createAmbience } from './ambience.js';
+
+// Bisect switch for the ambience layers. The 2bf3694 deploy added ~730 display
+// objects (205 canopy, 376 undergrowth, 152 shadows) and the character stopped
+// rendering on a phone inside a WebView, where every scrollFactor 0 layer kept
+// drawing and every world object did not -- the signature of a render budget
+// being hit rather than a logic error, which is exactly the kind of thing a
+// headless harness cannot reproduce.
+//
+// ?safe=1  -> no ambience objects at all (plain pre-2bf3694 forest)
+// ?safe=2  -> chunk decoration only, no camera-global layers
+// ?safe=3  -> camera-global layers only, no chunk decoration
+//
+// If ?safe=1 brings the hunter back, the ambience work is the cause and the fix
+// is to cut object count rather than to hunt for a bug that is not there.
+const SAFE = (() => {
+  const v = new URLSearchParams(window.location.search).get('safe');
+  return v ? Number(v) : 0;
+})();
+/** Whether the per-chunk decoration layers load at all. */
+const DECORATE = SAFE !== 1 && SAFE !== 3;
 import { rollHunt, RARITY_NAME } from './engine.js';
 import {
   CHUNK, chunkOf, describeChunk, nodeKey,
@@ -205,7 +225,7 @@ export class ForestScene extends Phaser.Scene {
     // Ambience is created AFTER the first stream and lives for the life of the
     // scene. It is camera-global by design -- see ambience.js -- so it must not
     // be part of any chunk's unload set.
-    this.ambience = createAmbience(this);
+    this.ambience = SAFE === 1 || SAFE === 3 ? null : createAmbience(this);
     this.setupHud();
     this.setupTouch();
 
@@ -366,7 +386,7 @@ export class ForestScene extends Phaser.Scene {
     // Ground shadows sit just below their tree in the y-sort so they anchor it
     // to the grass instead of floating. Derived from tree positions upstream, so
     // they cost one draw call each and need no RNG here.
-    for (const s of data.shadows || []) {
+    if (DECORATE) for (const s of data.shadows || []) {
       const img = this.add.image(s.x, s.y, 'shadow').setDepth(s.y - 2).setAlpha(0.5);
       // userData does not exist until setData() is called in Phaser -- assigning to it
       // directly throws "Cannot set properties of undefined" and takes the whole
@@ -378,7 +398,7 @@ export class ForestScene extends Phaser.Scene {
     // Canopy is NOT y-sorted. Fixed at a high depth so the player walks UNDER
     // the leaves; y-sorting it would slide the canopy behind the player the
     // moment they stepped north of a tree, which reads as a bug, not a forest.
-    for (const c of data.canopy || []) {
+    if (DECORATE) for (const c of data.canopy || []) {
       const img = this.add.image(c.x, c.y, 'canopy')
         .setDepth(50000).setAlpha(0.3).setScale(c.s);
       img.setData('baseAlpha', 0.3);
@@ -387,7 +407,7 @@ export class ForestScene extends Phaser.Scene {
 
     // Undergrowth is y-sorted with the ground so the player walks in front of
     // tufts below them and behind them above.
-    for (const u of data.undergrowth || []) {
+    if (DECORATE) for (const u of data.undergrowth || []) {
       const a = 0.75 + u.shade * 0.25;
       const img = this.add.image(u.x, u.y, `under${u.k}`)
         .setOrigin(0.5, 0.95).setDepth(u.y).setAlpha(a);
