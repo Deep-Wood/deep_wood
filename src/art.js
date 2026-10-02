@@ -468,28 +468,82 @@ export function makeGems(scene) {
  */
 export function makeNodeTexture(scene) {
   const key = 'node';
-  const { ctx, done } = blank(scene, key);
+  const { tex, ctx, done } = blank(scene, key);
+  const s = S * SCALE;                  // 16 * 4 = 64 real px
+  const cx = s / 2;
 
-  rect(ctx, 3, 12, 10, 2, PAL.dirtDark);
-  rect(ctx, 2, 13, 12, 2, PAL.dirt);
-  rect(ctx, 4, 14, 8, 1, PAL.dirtDark);
+  // NEAREST is correct for the pixel-art sprites -- every other texture in this
+  // file is hard-edged rectangles on purpose. It is wrong here: this node is a
+  // downsampled generated image, and nearest-neighbour at 96 -> ~34px throws
+  // away rows and columns of pixels and leaves visible aliasing. Linear is the
+  // only thing that makes composited art look like art.
+  tex.setFilter(Phaser.Textures.FilterMode.LINEAR);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.clearRect(0, 0, s, s);
 
-  rect(ctx, 2, 11, 2, 2, PAL.rockDark);
-  rect(ctx, 12, 12, 2, 2, PAL.rockDark);
-  px(ctx, 2, 11, PAL.rock);
-  px(ctx, 12, 12, PAL.rock);
+  // --- disturbed soil: a soft mound, not a stack of hard rectangles --------
+  // The previous version drew the soil as rect() rows. Once the generated
+  // crystal went in on top, those rows read as a cut stump with a crystal
+  // growing out of it. Soft gradients have no such silhouette.
+  const mound = ctx.createRadialGradient(cx, s * 0.80, s * 0.04, cx, s * 0.80, s * 0.46);
+  mound.addColorStop(0, 'rgba(58,46,36,0.95)');
+  mound.addColorStop(0.55, 'rgba(40,33,27,0.80)');
+  mound.addColorStop(1, 'rgba(22,26,24,0)');
+  ctx.fillStyle = mound;
+  ctx.beginPath();
+  ctx.ellipse(cx, s * 0.80, s * 0.46, s * 0.26, 0, 0, Math.PI * 2);
+  ctx.fill();
 
-  rect(ctx, 6, 6, 4, 6, PAL.crystal);
-  rect(ctx, 6, 6, 2, 6, PAL.crystalLit);
-  rect(ctx, 9, 8, 1, 4, shade(PAL.crystal, -40));
-  px(ctx, 7, 5, PAL.crystalLit);
-  px(ctx, 8, 5, PAL.crystal);
-  rect(ctx, 6, 11, 4, 1, shade(PAL.crystal, -25));
+  // a few pebbles, kept low contrast so they never compete with the crystal
+  for (const [px, py, pr] of [[0.26, 0.80, 0.055], [0.72, 0.83, 0.045], [0.62, 0.74, 0.032]]) {
+    ctx.fillStyle = 'rgba(94,104,100,0.55)';
+    ctx.beginPath();
+    ctx.ellipse(cx * 0 + s * px, s * py, s * pr, s * pr * 0.72, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const gen = scene.textures.exists('gen-crystal')
+    ? scene.textures.get('gen-crystal').getSourceImage()
+    : null;
+
+  if (gen && gen.width) {
+    // --- the crystal is the subject, so it gets most of the frame ---------
+    const h = Math.round(s * 0.86);
+    const w = Math.round(h * (gen.width / gen.height));
+    const dx = Math.round((s - w) / 2);
+    const dy = Math.round(s * 0.13);
+
+    // ground-contact shadow so it is bedded in the soil, not floating on it
+    const sh = ctx.createRadialGradient(cx, s * 0.86, 1, cx, s * 0.86, s * 0.22);
+    sh.addColorStop(0, 'rgba(8,12,11,0.72)');
+    sh.addColorStop(1, 'rgba(8,12,11,0)');
+    ctx.fillStyle = sh;
+    ctx.beginPath();
+    ctx.ellipse(cx, s * 0.86, s * 0.22, s * 0.09, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // bioluminescent pool cast by the crystal onto the soil
+    const glow = ctx.createRadialGradient(cx, s * 0.72, 1, cx, s * 0.72, s * 0.40);
+    glow.addColorStop(0, 'rgba(90,220,190,0.34)');
+    glow.addColorStop(1, 'rgba(90,220,190,0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, s, s);
+
+    ctx.drawImage(gen, dx, dy, w, h);
+  } else {
+    // Fallback keeps the node readable if the asset ever fails to load.
+    rect(ctx, 3, 12, 10, 2, PAL.dirtDark);
+    rect(ctx, 2, 13, 12, 2, PAL.dirt);
+    rect(ctx, 6, 6, 4, 6, PAL.crystal);
+    rect(ctx, 6, 6, 2, 6, PAL.crystalLit);
+    px(ctx, 7, 5, PAL.crystalLit);
+    rect(ctx, 6, 11, 4, 1, shade(PAL.crystal, -25));
+  }
 
   done();
   return key;
 }
-
 /** Scatter props: 0 bush, 1 rock, 2 grass tuft, 3 flowers. */
 export function makePropTexture(scene, kind = 0) {
   const key = `prop${kind}`;
@@ -679,6 +733,73 @@ export function makeMushroomTexture(scene) {
 }
 
 /** A faceted emerald crystal, half-buried, with a baked inner glow. */
+/**
+ * A beacon: the surveyor's mark planted at a dig site.
+ *
+ * Deliberately carries NO rarity information. Every beacon looks identical --
+ * same shape, same cold bronze, same glow -- because if it hinted at the reward
+ * the dig would stop being a gamble and become a formality, and the player
+ * would be scanning for colour instead of exploring. The rarity is only ever
+ * known once `reveal()` rolls it, which is why the five gem textures stay
+ * separate and are chosen there.
+ *
+ * A pale ring on the ground reads as "marked, dig here" without advertising
+ * what is underneath.
+ */
+export function makeBeaconTexture(scene) {
+  const key = 'beacon';
+  if (scene.textures.exists(key)) return key;
+  const { ctx, done } = blank(scene, key);
+  const s = S * SCALE;
+  const cx = s / 2;
+
+  // NEAREST is right for this one: it is hard-edged pixel art, not downsampled
+  // generated art. The node texture needs LINEAR, this does not.
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, s, s);
+
+  // --- ground ring: the "this is a marked site" cue ----------------------
+  // Two concentric arcs, brightest at the front so it reads as lit from below.
+  for (const [r, a, col] of [[0.40, 0.55, '144,192,176'], [0.30, 0.34, '120,170,158']]) {
+    ctx.strokeStyle = `rgba(${col},${a})`;
+    ctx.lineWidth = Math.max(1, s * 0.035);
+    ctx.beginPath();
+    ctx.ellipse(cx, s * 0.74, s * r, s * r * 0.42, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // --- the post: a stake driven into the soil ---------------------------
+  const post = (x, w, y0, y1, col) => {
+    ctx.fillStyle = col; ctx.fillRect(x, y0, w, y1 - y0);
+  };
+  const px = Math.round(s * 0.44), pw = Math.max(2, Math.round(s * 0.055));
+  post(px, pw, Math.round(s * 0.30), Math.round(s * 0.76), '#6d7a72');
+  post(px + 1, Math.max(1, pw - 2), Math.round(s * 0.30), Math.round(s * 0.76), '#93a49a');
+  // cross-brace, so it reads as built rather than a bare stick
+  post(px - Math.round(s * 0.07), pw, Math.round(s * 0.42),
+    Math.round(s * 0.42) + Math.max(1, Math.round(s * 0.045)), '#6d7a72');
+
+  // --- bronze cap: the one warm accent, identical on every beacon --------
+  ctx.fillStyle = '#c79a4e';
+  ctx.fillRect(px - Math.round(s * 0.045), Math.round(s * 0.27),
+    pw + Math.round(s * 0.09), Math.max(2, Math.round(s * 0.07)));
+  ctx.fillStyle = '#e6c383';
+  ctx.fillRect(px - Math.round(s * 0.045), Math.round(s * 0.27),
+    pw + Math.round(s * 0.09), Math.max(1, Math.round(s * 0.028)));
+
+  // --- cold lantern glow at the cap -------------------------------------
+  // Cool on purpose. If this were warm it would be the only warm thing in the
+  // forest and would read as "treasure", which is the signal we are avoiding.
+  const gl = ctx.createRadialGradient(px + pw / 2, s * 0.30, 1, px + pw / 2, s * 0.30, s * 0.22);
+  gl.addColorStop(0, 'rgba(150,225,215,0.55)');
+  gl.addColorStop(1, 'rgba(150,225,215,0)');
+  ctx.fillStyle = gl;
+  ctx.fillRect(0, 0, s, s);
+
+  done();
+  return key;
+}
+
 export function makeCrystalTexture(scene) {
   if (scene.textures.exists('crystal')) return 'crystal';
   const g = scene.make.graphics({ add: false });
@@ -957,7 +1078,6 @@ export const GROUND_TILE = 512;
 
 export function buildAllTextures(scene, worldW = 1280, worldH = 960) {
   makeHunterTexture(scene);
-  makeGems(scene);
   makeNodeTexture(scene);
   makeSparkTexture(scene);
   makeGlowTexture(scene);
@@ -973,6 +1093,7 @@ export function buildAllTextures(scene, worldW = 1280, worldH = 960) {
   makeFireflyTexture(scene);
   makeStarTexture(scene);
   makeMoonTexture(scene);
+  makeBeaconTexture(scene);
   makeMushroomTexture(scene);
   makeCrystalTexture(scene);
   makePollenTexture(scene);

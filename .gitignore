@@ -8,3 +8,10 @@ dist/
 # .env.production IS committed: it holds only public addresses and a public
 # RPC, no credentials. See the file header.
 !/.env.production
+
+# Art source material. These are the full-resolution generations and the
+# keyed intermediates -- 33MB of 1024px originals that the shipped game never
+# reads. public/art/ holds the resized, game-ready set (686KB) and IS committed,
+# because that is what the bundle serves.
+art-src/
+src/assets/

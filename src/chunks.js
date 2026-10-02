@@ -29,7 +29,16 @@ export const CHUNK = 512;
 /** Per-chunk density. Tuned so a 3x3 loaded ring reads as forest, not park. */
 export const TREES_PER_CHUNK = 7;
 export const PROPS_PER_CHUNK = 26;
-export const NODES_PER_CHUNK = 3;
+// One dig site per 512px chunk. Was 3, which with LOAD_RADIUS 1 put ~27 sites
+// on screen -- the forest read as littered rather than hunted, and a find cost
+// a few steps instead of a walk. At 1 it is ~9 visible, so travelling between
+// beacons is the cost of a gem.
+//
+// Placement maths is untouched (same seeded stream, same rejection sampling
+// against trees and other nodes), and settlement never depended on density:
+// `rollHunt` keys off huntIndex, not location. This changes the RATE of earning
+// and nothing about determinism.
+export const NODES_PER_CHUNK = 1;
 // Decoration per chunk. These do not affect gameplay or settlement, so they can
 // be tuned freely; changing them does NOT break the seed guarantee because
 // nothing about a hunt depends on where a fern is.
@@ -147,12 +156,23 @@ export function describeChunk(seedHex, cx, cy, epoch = 0) {
   // stable for the lifetime of the chunk.
   const rNodes = makeRng(chunkSeed(seedHex, cx, cy) ^ (0x51ed270b + epoch * 0x9e3779b9));
   const nodes = [];
+  // Retry budget per site. With NODES_PER_CHUNK = 1 a single rejection left the
+  // chunk with NO beacon at all -- and because the same seed reproduces it,
+  // that chunk was permanently unhuntable at every epoch. Measured before this
+  // fix: chunk(1,1) produced 0 nodes at epoch 0 AND at epoch 5, and chunk(2,2)
+  // had one site at epoch 0 and none at epoch 5, i.e. digging emptied it forever.
+  // So a site now RETRIES against a fresh draw rather than giving up, and the
+  // loop always runs NODES_PER_CHUNK times.
+  const NODE_ATTEMPTS = 24;
   for (let i = 0; i < NODES_PER_CHUNK; i++) {
-    const x = ox + 64 + rNodes() * (CHUNK - 128);
-    const y = oy + 64 + rNodes() * (CHUNK - 128);
-    if (nodes.some((n) => Math.hypot(n.x - x, n.y - y) < 70)) continue;
-    if (trees.some((t) => Math.hypot(t.x - x, t.y - y) < 64)) continue;
-    nodes.push({ x: Math.round(x), y: Math.round(y), idx: i, epoch });
+    for (let a = 0; a < NODE_ATTEMPTS; a++) {
+      const x = ox + 64 + rNodes() * (CHUNK - 128);
+      const y = oy + 64 + rNodes() * (CHUNK - 128);
+      if (nodes.some((n) => Math.hypot(n.x - x, n.y - y) < 70)) continue;
+      if (trees.some((t) => Math.hypot(t.x - x, t.y - y) < 64)) continue;
+      nodes.push({ x: Math.round(x), y: Math.round(y), idx: i, epoch });
+      break;
+    }
   }
 
   // --- props: pure decoration, separate stream, cheap.

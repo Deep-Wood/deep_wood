@@ -181,6 +181,45 @@ export class ForestScene extends Phaser.Scene {
     this.huntsPerPlayer = 200; // planned ceiling, which is what the root covers
   }
 
+  /**
+   * Real art assets, generated through GMI Cloud (see art-src/ and the
+   * dw_assets.py pipeline).
+   *
+   * Everything here is OPTIONAL. Every one of these has a procedural fallback
+   * in art.js, and the scene picks the drawn texture whenever the file is
+   * missing, so a CDN hiccup degrades to the old look instead of an empty
+   * forest. That fallback is why the loads are wrapped rather than allowed to
+   * throw.
+   */
+  preload() {
+    const load = (key, url) => {
+      try {
+        this.load.image(key, url);
+      } catch (e) {
+        /* the procedural bake will cover for it */
+      }
+    };
+    for (let i = 1; i <= 4; i++) load(`gen-ground-${i}`, `art/ground-${i}.jpg`);
+    load('gen-backdrop', 'art/backdrop.jpg');
+    load('gen-tree-a', 'art/tree-a.png');
+    load('gen-tree-b', 'art/tree-b.png');
+    load('gen-mushroom', 'art/mushroom.png');
+    load('gen-crystal', 'art/crystal.png');
+    load('gen-hunter', 'art/hunter.png');
+    load('gen-beacon', 'art/beacon.png');
+    // One generated sprite per rarity, so the reveal shows painted gems rather
+    // than pixel art. Squared to a common 84x84 at asset-prep time so all five
+    // read at the same visual weight.
+    load('gen-gem-0', 'art/gem-quartz.png');
+    load('gen-gem-1', 'art/gem-amber.png');
+    load('gen-gem-2', 'art/gem-sapphire.png');
+    load('gen-gem-3', 'art/gem-ruby.png');
+    load('gen-gem-4', 'art/gem-diamond.png');
+  }
+
+  /** True when the generated art for a role actually loaded. */
+  has(key) { return this.textures.exists(key); }
+
   create() {
     buildAllTextures(this, WORLD_W * TILE, WORLD_H * TILE);
     // Animations can only be registered AFTER the generated spritesheet
@@ -210,9 +249,31 @@ export class ForestScene extends Phaser.Scene {
     // TileSprite at scrollFactor 0 rather than a world-sized image: the ground
     // now repeats under the camera forever. It must be re-sized on viewport
     // resize or it leaves bare colour at the edges on a rotated phone.
-    this.bg = this.add.tileSprite(0, 0, this.scale.width, this.scale.height, 'ground')
+    // Pick one of the four generated ground variants per session. One tile
+    // repeating is what shows its beat on a phone screen no matter how it is
+    // disguised (verified at 390px: the repetition is obvious, not subtle), so
+    // the real fix is that this choice is not the same every load.
+    const grounds = [1, 2, 3, 4].filter((i) => this.has(`gen-ground-${i}`));
+    const groundKey = grounds.length
+      ? `gen-ground-${grounds[(Math.random() * grounds.length) | 0]}`
+      : 'ground';
+    this.bg = this.add.tileSprite(0, 0, this.scale.width, this.scale.height, groundKey)
       .setOrigin(0).setScrollFactor(0).setDepth(GROUND_DEPTH);
     this.scale.on('resize', (size) => this.bg.setSize(size.width, size.height));
+
+    // Macro layer: the big scenic generation, blurred and dimmed, tiled at a
+    // different scale from the base and drifting slightly slower. It removes
+    // the low-frequency sameness of a single repeating tile. Additive-free and
+    // cheap -- one extra full-screen draw.
+    if (this.has('gen-backdrop')) {
+      this.macro = this.add.tileSprite(0, 0, this.scale.width, this.scale.height, 'gen-backdrop')
+        .setOrigin(0)
+        .setScrollFactor(0)
+        .setDepth(GROUND_DEPTH + 1)
+        .setAlpha(0.16)
+        .setTileScale(2.4, 2.4);
+      this.scale.on('resize', (size) => this.macro.setSize(size.width, size.height));
+    }
 
     // Trees and props are added to the scene (not a container) so each can
     // carry a depth used for y-sorting. A container would render its children
@@ -248,9 +309,28 @@ export class ForestScene extends Phaser.Scene {
     // --- the hunter
     // Position is set from a resolved frame, not from a bare texture key.
     this.player = this.physics.add.sprite(0, 0, 'hunter', 0);
+
     // The generated sheet is 16 logical px at 4x = 64px. The world tile is
     // 32px, so draw the character at 0.5 to keep it tile-sized.
     this.player.setScale(0.5);
+
+    // Swap in the generated hunter, AFTER the setScale above so it is not
+    // overwritten by it. He is a single still, so the four-frame walk animations
+    // cannot apply -- the drawn sheet stays loaded but is no longer the visual.
+    // Physics is untouched: still the same 10px body the balance and every
+    // collision test were tuned against.
+    // `genHunter` gates the animation calls below. Both animatePlayer() and
+    // animateIdle() write the player's texture every single frame -- one via
+    // anims.play(), the other via setFrame() -- and both target the DRAWN sheet.
+    // Setting the texture here without gating them meant the generated hunter
+    // lasted less than one frame, which looked exactly like the swap never
+    // happened.
+    if (this.has('gen-hunter')) {
+      this.genHunter = true;
+      this.player.setTexture('gen-hunter');
+      this.player.setOrigin(0.5, 0.72);
+      this.player.setScale(0.62);
+    }
     this.player.setCollideWorldBounds(true);
     // Collision box at the character's feet. Offsets are in SOURCE pixels of
     // the 64x64 sheet; the box is 10x8 source px, so it must sit at the
@@ -447,8 +527,34 @@ export class ForestScene extends Phaser.Scene {
     const data = describeChunk(this.seasonSeed, cx, cy);
     const objs = [];
 
+    // Two generated trees instead of four drawn ones. They are 2x the size the
+    // game draws at and get halved here, so they stay crisp on a high-DPI phone
+    // without changing the collider geometry the balance depends on.
+    const treeKeys = ['gen-tree-a', 'gen-tree-b'].filter((k) => this.has(k));
+    const treeScale = treeKeys.length ? 0.78 : 1;
     for (const t of data.trees) {
-      const img = this.add.image(t.x, t.y, `tree${t.v}`).setOrigin(0.5, 0.9).setDepth(t.y);
+      const key = treeKeys.length ? treeKeys[t.v % treeKeys.length] : `tree${t.v}`;
+      const img = this.add.image(t.x, t.y, key).setOrigin(0.5, 0.9).setDepth(t.y);
+      if (treeKeys.length) {
+        // Vary the scale per tree. Every generated tree was drawn at exactly
+        // 0.78, so 149 identical sizes repeated two silhouettes in lockstep --
+        // which is the same repetition problem as a single tiling ground, and
+        // the reason the forest read as copy-pasted next to crystals (63
+        // distinct sizes) and mushrooms (146).
+        //
+        // Derived from the tree's OWN seeded record (v, x, y) rather than a
+        // fresh RNG draw, so the same tree is always the same size: chunk
+        // placement, determinism and settlement are all untouched. Only the
+        // drawn size changes.
+        // Non-negative modulo. JS `%` keeps the sign of the dividend, and
+        // world coordinates go negative, so a plain `% 37` produced jitter down
+        // to -0.36 and trees as small as 0.367 -- well under the intended floor
+        // of 0.64, so saplings appeared. `((n % 37) + 37) % 37` is always in
+        // [0, 37).
+        const seed = t.v * 7 + Math.round(t.x) * 13 + Math.round(t.y) * 29;
+        const jitter = (((seed % 37) + 37) % 37) / 100;
+        img.setScale(treeScale * (0.82 + jitter));
+      }
       this.sortables.push(img);
       objs.push(img);
       // Trunk-only collider, matching the old fixed world exactly: a 20x14 box
@@ -461,6 +567,13 @@ export class ForestScene extends Phaser.Scene {
     }
 
     for (const p of data.props) {
+      // The drawn rock (kind 1) is retired. It was four grey rectangles in a
+      // neutral 0x6e6e6e with no hue in it, which read as a concrete block
+      // against a blue-green forest rather than as stone. Skipping it here
+      // rather than in the generator keeps the seeded prop stream intact: the
+      // RNG draws the same sequence either way, so chunk placement and
+      // determinism are untouched and only the sprite disappears.
+      if (p.k === 1) continue;
       const img = this.add.image(p.x, p.y, `prop${p.k}`)
         .setOrigin(0.5, 0.9).setDepth(p.y).setAlpha(0.92);
       this.sortables.push(img);
@@ -509,10 +622,14 @@ export class ForestScene extends Phaser.Scene {
     // sprite already carries. The `glow` flag still varies cap brightness and
     // scale, which is where it was doing the work anyway.
     if (DECORATE && this.textures.exists('mushroom')) {
+      const genShroom = this.has('gen-mushroom');
       for (const m of data.mushrooms || []) {
         const a = 0.55 + m.s * 0.35;
-        const img = this.add.image(m.x, m.y, 'mushroom')
-          .setOrigin(0.5, 0.95).setDepth(m.y).setAlpha(a).setScale(m.s);
+        const img = this.add.image(m.x, m.y, genShroom ? 'gen-mushroom' : 'mushroom')
+          .setOrigin(0.5, 0.95).setDepth(m.y).setAlpha(a)
+          // the generated cluster is a whole clump, so it sits smaller than the
+          // one-mushroom sprite it replaces
+          .setScale(genShroom ? m.s * 0.55 : m.s);
         img.setData('baseAlpha', a);
         this.sortables.push(img);
         objs.push(img);
@@ -523,9 +640,11 @@ export class ForestScene extends Phaser.Scene {
     // standing objects, and a crystal that the player passes behind while it
     // looks like it is in front of him looks broken. Sort them like the trees.
     if (DECORATE && this.textures.exists('crystal')) {
+      const genX = this.has('gen-crystal');
       for (const c of data.crystals || []) {
-        const img = this.add.image(c.x, c.y, 'crystal')
-          .setOrigin(0.5, 0.9).setDepth(c.y - 6).setAlpha(0.9).setScale(c.s);
+        const img = this.add.image(c.x, c.y, genX ? 'gen-crystal' : 'crystal')
+          .setOrigin(0.5, 0.9).setDepth(c.y - 6).setAlpha(0.9)
+          .setScale(genX ? c.s * 0.62 : c.s);
         img.setData('baseAlpha', 0.9);
         this.sortables.push(img);
         objs.push(img);
@@ -547,13 +666,37 @@ export class ForestScene extends Phaser.Scene {
       const spot = epoch === 0 ? n : describeChunk(this.seasonSeed, cx, cy, epoch).nodes.find((q) => q.idx === n.idx);
       if (!spot) return;
 
-      const glow = this.add.image(spot.x, spot.y + 6, 'glow')
-        .setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.5).setScale(0.75);
+      // The light sits at the beacon's CAP, not at its base. The old glow was
+      // pinned to `spot.y + 6` -- dirt level -- which was correct when the
+      // marker was a flat ground decal, and wrong for a tall stake: it lit the
+      // soil under the post and left the lantern itself dark. Origin is (0.5,
+      // 0.85), so the cap lands roughly 0.8 of the sprite's height above the
+      // anchor.
+      const beaconH = this.has('gen-beacon') ? 232 : 64;
+      const capY = spot.y - beaconH * (this.has('gen-beacon') ? 0.78 : 0.25);
+
+      const glow = this.add.image(spot.x, capY, 'glow')
+        .setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.62).setScale(0.9);
       glow.setDepth(spot.y - 1);
       this.sortables.push(glow);
       objs.push(glow);
 
-      const marker = this.add.image(spot.x, spot.y, 'node').setOrigin(0.5, 0.85);
+      // A second, tighter core so the cap reads as a genuine light source
+      // rather than a sprite with a haze behind it.
+      const core = this.add.image(spot.x, capY, 'glow')
+        .setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.5).setScale(0.32);
+      core.setDepth(spot.y - 1);
+      this.sortables.push(core);
+      objs.push(core);
+
+      // A dig site is marked by a BEACON, not by showing the gem. The node
+      // texture is retained underneath (it is what the dig pulse animates and
+      // what a dug-out site collapses into), but the beacon is what the player
+      // sees while hunting. Identical on every site regardless of what is
+      // buried -- the rarity is only ever known after `reveal()` rolls it.
+      const genBeacon = this.has('gen-beacon');
+      const marker = this.add.image(spot.x, spot.y, genBeacon ? 'gen-beacon' : 'beacon')
+        .setOrigin(0.5, 0.85);
       marker.setData('idx', n.idx);
       marker.setData('epoch', epoch);
       marker.setData('cx', cx);
@@ -569,7 +712,11 @@ export class ForestScene extends Phaser.Scene {
         yoyo: true, repeat: -1, ease: 'Sine.inOut',
       });
       this.tweens.add({
-        targets: glow, alpha: 0.32, duration: 1100 + n.idx * 53,
+        targets: glow, alpha: 0.40, duration: 1100 + n.idx * 53,
+        yoyo: true, repeat: -1, ease: 'Sine.inOut',
+      });
+      this.tweens.add({
+        targets: core, alpha: 0.28, duration: 760 + n.idx * 41,
         yoyo: true, repeat: -1, ease: 'Sine.inOut',
       });
     });
@@ -1620,6 +1767,12 @@ export class ForestScene extends Phaser.Scene {
   }
 
   animatePlayer(vx, vy) {
+    // The generated hunter is a single still with no walk cycle, so there is
+    // nothing to play. Facing still has to work, so mirror it instead.
+    if (this.genHunter) {
+      if (vx !== 0) this.player.setFlipX(vx < 0);
+      return;
+    }
     let frame = 0;
     if (Math.abs(vx) > Math.abs(vy)) frame = vx < 0 ? 1 : 2;
     else frame = vy < 0 ? 3 : 0;
@@ -1631,6 +1784,11 @@ export class ForestScene extends Phaser.Scene {
   }
 
   animateIdle(vx, vy) {
+    if (this.genHunter) {
+      // same story: setFrame() would drag him back onto the drawn sheet.
+      if (vx !== 0) this.player.setFlipX(vx < 0);
+      return;
+    }
     // face the last direction, standing pose
     let frame = 0;
     if (this._face !== undefined) frame = this._face;
@@ -1730,16 +1888,29 @@ export class ForestScene extends Phaser.Scene {
     burst.explode(8);
 
     // the gem pops up and floats
-    const gem = this.add.image(node.x, node.y, `gem${topRarity}`).setDepth(10);
-    this.tweens.add({
-      targets: gem, y: node.y - 34, duration: 420, ease: 'Back.out',
-      onComplete: () => {
-        this.tweens.add({
-          targets: gem, y: node.y - 60, alpha: 0, duration: 420,
-          onComplete: () => gem.destroy(),
-        });
-      },
-    });
+    // The revealed gem is the GENERATED sprite for its rarity. The drawn
+    // pixel-art gem is retired and no longer even baked -- it used to be
+    // `gem${topRarity}` with the generated art as an optional override, which
+    // meant the old gem could reappear any time an asset failed to load. Now
+    // there is one gem per rarity and it is the painted one. If the asset is
+    // missing the burst above still plays and the find still logs.
+    const genGem = `gen-gem-${topRarity}`;
+    if (this.has(genGem)) {
+      const gem = this.add.image(node.x, node.y, genGem)
+        .setDepth(10)
+        // The generated gems are 84px; the drawn sheet was 16 logical px, so
+        // scale back to roughly the size the old sprite occupied.
+        .setScale(0.42);
+      this.tweens.add({
+        targets: gem, y: node.y - 34, duration: 420, ease: 'Back.out',
+        onComplete: () => {
+          this.tweens.add({
+            targets: gem, y: node.y - 60, alpha: 0, duration: 420,
+            onComplete: () => gem.destroy(),
+          });
+        },
+      });
+    }
 
     // collapse the spent node
     this.tweens.add({

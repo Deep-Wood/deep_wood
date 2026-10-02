@@ -76,9 +76,14 @@ test('world objects really do sort on raw world Y', () => {
     /this\.player\.setDepth\(this\.player\.y\)/,
     'the hunter must y-sort on its own Y',
   );
+  // The texture key moved into a `key` variable when the generated tree art
+  // landed, so this now matches either the literal `tree${t.v}` or a resolved
+  // key -- what it is actually pinning is that the tree's IMAGE is positioned at
+  // (t.x, t.y) AND given depth t.y. Both forms satisfy that invariant; only the
+  // first satisfied the old regex.
   assert.match(
     SRC,
-    /add\.image\(t\.x, t\.y, `tree\$\{t\.v\}`\)[\s\S]{0,80}?setDepth\(t\.y\)/,
+    /add\.image\(t\.x, t\.y, (?:key|`tree\$\{t\.v\}`)\)[\s\S]{0,80}?setDepth\(t\.y\)/,
     'trees must y-sort on their own Y',
   );
 });
