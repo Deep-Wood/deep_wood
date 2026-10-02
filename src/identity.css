@@ -204,9 +204,21 @@ button.chip:active { transform: translateY(1px); }
   display: grid;
   place-items: center;
   background: radial-gradient(ellipse at 50% 45%, #0d2226 0%, #060e11 62%, #030708 100%);
-  transition: opacity .7s ease, visibility .7s;
+  transition: opacity .55s ease, visibility .55s;
+  /* The splash is on a timer of its own, in CSS, and that is the point.
+     It used to be dismissed from ForestScene.create(), which meant it stayed
+     fully opaque for as long as Phaser took to build the scene -- measured at
+     ~3s in headless Chromium, longer on a real phone, and the report was
+     "I see only the bootscreen and nothing else". JS may dismiss it EARLIER
+     when the game is ready, but it must never be the reason the game is
+     revealed. Hard out at 2.0s regardless of game state. */
+  animation: boot-out .6s ease 1.4s forwards;
 }
-#boot.done { opacity: 0; visibility: hidden; pointer-events: none; }
+#boot.done { opacity: 0; visibility: hidden; pointer-events: none; animation: none; }
+
+@keyframes boot-out {
+  to { opacity: 0; visibility: hidden; pointer-events: none; }
+}
 
 #boot .emblem {
   width: min(320px, 62vw);

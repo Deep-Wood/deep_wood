@@ -43,6 +43,62 @@
   <!-- Identity last: it redefines the tokens hud.css and belt.css were built on. -->
   <link rel="stylesheet" href="/src/identity.css" />
   <script type="module" src="/src/hud-idle.js"></script>
+  <!-- Splash failsafe.
+       Deliberately inline, deliberately NOT in the game bundle. The first
+       version faded the emblem out from ForestScene.create(), which meant a
+       splash that could only be dismissed by the very thing it was covering:
+       any failure to boot left the player staring at the logo with no way out,
+       which is exactly what was reported. This runs regardless of Phaser, of
+       module loading, and of any error in the game. -->
+  <script>
+    (function () {
+      var DONE = 'done', removed = false;
+      function dismiss() {
+        if (removed) return;
+        removed = true;
+        var b = document.getElementById('boot');
+        if (!b) return;
+        b.classList.add(DONE);
+        setTimeout(function () { if (b.parentNode) b.remove(); }, 900);
+      }
+      // 1. hard ceiling, measured from the document, not from the game.
+      //    The CSS animation already forces this at 2.0s; this is the belt to
+      //    its braces for browsers that drop animations.
+      setTimeout(dismiss, 2500);
+      // 2. any uncaught error: a broken game must not hide behind a logo
+      window.addEventListener('error', dismiss);
+      window.addEventListener('unhandledrejection', dismiss);
+      // 3. THE COMMON CASE. Hand over the moment the canvas has painted a real
+      //    frame, not when the whole scene finishes building. Scene
+      //    construction measured ~2.1-2.5s in headless Chromium and longer on a
+      //    phone, so waiting for it made the emblem an opaque loading wall. The
+      //    forest is visible while the rest of the world streams, which is what
+      //    a title card is for.
+      function handover() {
+        var c = document.querySelector('#game canvas');
+        if (!c || c.width <= 0) return;
+        // one more frame, so there is something behind the splash
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () { dismiss(); });
+        });
+      }
+      if (document.readyState === 'loading') {
+        window.addEventListener('DOMContentLoaded', function () {
+          // Phaser appends the canvas asynchronously, so watch for it.
+          var tries = 0;
+          var iv = setInterval(function () {
+            if (document.querySelector('#game canvas') || ++tries > 100) {
+              clearInterval(iv);
+              handover();
+            }
+          }, 50);
+        });
+      } else { handover(); }
+      window.addEventListener('load', function () { setTimeout(handover, 300); });
+      // 4. the game tells us directly, when it can
+      window.__dismissBoot = dismiss;
+    })();
+  </script>
 </head>
 <body>
   <!-- The emblem, while the forest streams its first chunks. -->

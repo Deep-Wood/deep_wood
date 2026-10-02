@@ -12,8 +12,18 @@ import { createAmbience } from './ambience.js';
 import { panelFrame } from './layout.js';
 import { retireWalletFoot } from './hud-idle.js';
 
-/** Fade the emblem out once the forest is actually walkable, not merely loaded. */
+/**
+ * Tell the splash to go once the forest is actually walkable.
+ *
+ * This is only the HAPPY path. The splash's exit belongs to the inline
+ * failsafe in index.html, which runs even if this module never loads, never
+ * finishes create(), or throws on the way -- the first version owned it here,
+ * so a game that failed to boot left the player staring at the logo forever.
+ * This is a courtesy early exit, not the guarantee.
+ */
 function dismissBoot() {
+  const inline = window.__dismissBoot;
+  if (typeof inline === 'function') { inline(); return; }
   const b = document.getElementById('boot');
   if (!b || b.classList.contains('done')) return;
   b.classList.add('done');
