@@ -553,6 +553,93 @@ export function makeSparkTexture(scene) {
 }
 
 /**
+ * Fog wisps, for the parallax layers.
+ *
+ * Horizontal soft bands rather than a blob: real ground fog lies in sheets, and
+ * a texture that is uniformly cloudy reads as a smudge on the lens instead of
+ * air with depth in it. Each wisp is an elongated ellipse with a soft falloff,
+ * baked once and then stretched wide, which is why this is a texture and not a
+ * Graphics loop -- Phaser rebuilds Graphics geometry every frame, and the
+ * vignette already proved that costs 10ms/frame at full-screen size.
+ *
+ * The ink is COLD and barely there. Fog at night is lit by the moon, not by the
+ * sun, and the temptation is to make it a bright grey band, which reads as
+ * smoke. It is a slight lift out of the dark, and it occludes more than it
+ * illuminates.
+ */
+export function makeFogTexture(scene) {
+  if (scene.textures.exists('fog')) return 'fog';
+  const S = 2;
+  const W = 256, H = 64;
+  const g = scene.make.graphics({ add: false });
+  g.clear();
+  // Six overlapping soft ellipses, warm-free and low-alpha. Overlap is what
+  // makes it look like drifting sheets rather than six distinct puffs.
+  for (let i = 0; i < 6; i++) {
+    const cx = 26 + i * 41;
+    const cy = H / 2 + Math.sin(i * 1.7) * 11;
+    const rx = 44 + Math.sin(i * 2.3) * 12;
+    const ry = 15 + Math.cos(i * 1.1) * 6;
+    g.fillStyle(0x8fb8c4, 0.030);
+    g.fillEllipse(cx, cy, rx, ry);
+    g.fillStyle(0xa8d4dc, 0.022);
+    g.fillEllipse(cx + 9, cy - 3, rx * 0.7, ry * 0.7);
+  }
+  g.generateTexture('fog', W, H);
+  g.destroy();
+  return 'fog';
+}
+
+/**
+ * A firefly: a warm core with a cool-green halo, because the emblem's
+ * bioluminescence is green and its fireflies are the warmer counterpoint.
+ * Two colours because a single-colour dot either reads as a dead pixel or as a
+ * lightbulb, depending on size, and at 3-5px you have no room to be subtle.
+ */
+export function makeFireflyTexture(scene) {
+  if (scene.textures.exists('firefly')) return 'firefly';
+  const g = scene.make.graphics({ add: false });
+  g.clear();
+  g.fillStyle(0x3ff0b0, 0.10); g.fillCircle(7, 7, 6.5);
+  g.fillStyle(0x7ef9a0, 0.28); g.fillCircle(7, 7, 3.4);
+  g.fillStyle(0xe8ffd0, 0.95); g.fillCircle(7, 7, 1.3);
+  g.generateTexture('firefly', 14, 14);
+  g.destroy();
+  return 'firefly';
+}
+
+/** A single star. Deliberately 2px: at phone scale, less is a smudge. */
+export function makeStarTexture(scene) {
+  if (scene.textures.exists('star')) return 'star';
+  const g = scene.make.graphics({ add: false });
+  g.clear();
+  g.fillStyle(0xdff2ff, 0.55); g.fillRect(0, 0, 2, 2);
+  g.fillStyle(0xffffff, 0.95); g.fillRect(0, 0, 1, 1);
+  g.generateTexture('star', 2, 2);
+  g.destroy();
+  return 'star';
+}
+
+/**
+ * The crescent moon from the emblem, small enough to sit in a corner of the
+ * sky above the canopy. Baked once; it is one sprite, so it costs nothing.
+ */
+export function makeMoonTexture(scene) {
+  if (scene.textures.exists('moonmark')) return 'moonmark';
+  const g = scene.make.graphics({ add: false });
+  g.clear();
+  g.fillStyle(0xdff2ff, 0.22); g.fillCircle(18, 18, 15);
+  g.fillStyle(0xeaf7ff, 0.85); g.fillCircle(18, 18, 11);
+  // Punch the crescent by overdrawing the disc with the sky tint. This is not
+  // a true alpha cut-out, but the sky layer behind it is a flat near-black, so
+  // the seam is invisible at the one size it is ever drawn.
+  g.fillStyle(0x08120f, 1); g.fillCircle(23, 15, 10);
+  g.generateTexture('moonmark', 36, 36);
+  g.destroy();
+  return 'moonmark';
+}
+
+/**
  * The hunter's lantern.
  *
  * With the palette moved to night, 87% of the frame now sits below luminance 40
@@ -565,6 +652,49 @@ export function makeSparkTexture(scene) {
  * is also the emblem's own idea -- a bioluminescent source in a moonlit wood --
  * and it gives the player a moving point of interest to steer by.
  */
+/**
+ * Three bioluminescent mushrooms on one transparent strip, drawn small.
+ *
+ * Two pixels of stem and a domed cap, with the cap glowing. The glow is baked
+ * INTO the sprite rather than being a second additive sprite per mushroom:
+ * twice the objects for the same picture, and this scene cannot afford it.
+ * Mushrooms that need a real pool of light on the ground get a separate halo
+ * sprite, but only the flagged subset does.
+ */
+export function makeMushroomTexture(scene) {
+  if (scene.textures.exists('mushroom')) return 'mushroom';
+  const g = scene.make.graphics({ add: false });
+  g.clear();
+  for (let k = 0; k < 3; k++) {
+    const bx = 5 + k * 7, by = 13;
+    const capW = 4 + k * 0.6, capH = 2.6 - k * 0.3;
+    g.fillStyle(0x0d1a16, 1); g.fillRect(bx, by - 1, 1, 2);      // stem
+    g.fillStyle(0x2f8f70, 0.5); g.fillEllipse(bx, by - 2, capW * 1.5, capH * 1.5); // halo
+    g.fillStyle(0x3ff0b0, 1); g.fillEllipse(bx, by - 2, capW, capH);              // cap
+    g.fillStyle(0xd8fff0, 0.9); g.fillRect(bx - 0.5, by - 2.5, 1, 1);             // catchlight
+  }
+  g.generateTexture('mushroom', 24, 16);
+  g.destroy();
+  return 'mushroom';
+}
+
+/** A faceted emerald crystal, half-buried, with a baked inner glow. */
+export function makeCrystalTexture(scene) {
+  if (scene.textures.exists('crystal')) return 'crystal';
+  const g = scene.make.graphics({ add: false });
+  g.clear();
+  g.fillStyle(0x3ff0b0, 0.14); g.fillEllipse(8, 11, 13, 7);      // ground glow
+  g.fillStyle(0x1d7a5e, 1);
+  g.fillTriangle(8, 1, 3, 11, 8, 11);                            // left facet
+  g.fillTriangle(8, 1, 13, 11, 8, 11);                           // right facet
+  g.fillStyle(0x3ff0b0, 0.85);
+  g.fillTriangle(8, 1, 8, 11, 5, 9);                             // lit sliver
+  g.fillStyle(0xd8fff0, 0.9); g.fillRect(7, 3, 1, 2);            // tip catchlight
+  g.generateTexture('crystal', 16, 14);
+  g.destroy();
+  return 'crystal';
+}
+
 export function makeLanternTexture(scene) {
   if (scene.textures.exists('lantern')) return 'lantern';
   const g = scene.make.graphics({ add: false });
@@ -839,6 +969,12 @@ export function buildAllTextures(scene, worldW = 1280, worldH = 960) {
   makeUndergrowthTextures(scene);
   makeVignetteTexture(scene);
   makeLanternTexture(scene);
+  makeFogTexture(scene);
+  makeFireflyTexture(scene);
+  makeStarTexture(scene);
+  makeMoonTexture(scene);
+  makeMushroomTexture(scene);
+  makeCrystalTexture(scene);
   makePollenTexture(scene);
   makeBirdTexture(scene);
   makeInsectTexture(scene);

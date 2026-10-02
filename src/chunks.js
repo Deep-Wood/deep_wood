@@ -34,6 +34,12 @@ export const NODES_PER_CHUNK = 3;
 // be tuned freely; changing them does NOT break the seed guarantee because
 // nothing about a hunt depends on where a fern is.
 export const UNDERGROWTH_PER_CHUNK = 34;
+// Attempts, not results -- rejection sampling against tree proximity discards
+// most of them, so the resident count lands well below these. Kept modest on
+// purpose: every one of these is a real sprite in a scene that already carries
+// ~1850 of them.
+export const MUSHROOMS_PER_CHUNK = 26;
+export const CRYSTALS_PER_CHUNK = 4;
 
 // Spawn is deliberately kept clear in the origin chunk only. Everywhere else
 // the forest is dense, because "open clearing at 0,0" in every chunk would read
@@ -208,7 +214,53 @@ export function describeChunk(seedHex, cx, cy, epoch = 0) {
     undergrowth.push({ x: Math.round(x), y: Math.round(y), k: Math.floor(rUnder() * 3), shade });
   }
 
-  return { cx, cy, trees, props, nodes, shadows, canopy, undergrowth };
+  // --- bioluminescent life -------------------------------------------------
+  // The emblem's mushrooms are the scene's light source, so where they appear
+  // matters more than it would for inert decoration. Same rule as undergrowth:
+  // they want shade and damp, so they cluster against trunks and thin out in
+  // the open. Scattered uniformly they read as stickers on the grass.
+  //
+  // They are DETERMINISTIC, unlike the drifting ambience. Two players walking
+  // the same chunk see the same mushrooms in the same places, which is what
+  // makes the forest feel like a place rather than a screensaver.
+  const rShroom = makeRng(chunkSeed(seedHex, cx, cy) ^ 0x27d4eb2f);
+  const mushrooms = [];
+  for (let i = 0; i < MUSHROOMS_PER_CHUNK; i++) {
+    const x = ox + rShroom() * CHUNK;
+    const y = oy + rShroom() * CHUNK;
+    let shade = 0;
+    for (const t of trees) {
+      const s = Math.max(0, 1 - Math.hypot(t.x - x, t.y - y) / 110);
+      if (s > shade) shade = s;
+    }
+    if (rShroom() > 0.10 + shade * 0.90) continue;
+    mushrooms.push({
+      x: Math.round(x), y: Math.round(y),
+      k: Math.floor(rShroom() * 3),
+      s: 0.75 + rShroom() * 0.6,
+      // only the larger caps glow, so a patch has a few real lights in it
+      glow: rShroom() < 0.45,
+    });
+  }
+
+  // Crystals are rarer and want to be more exposed than mushrooms do -- they are
+  // the emblem's anchor, and something that glows is worth seeing from a
+  // distance. Placed in clearings rather than under trunks.
+  const rCrystal = makeRng(chunkSeed(seedHex, cx, cy) ^ 0x165667b1);
+  const crystals = [];
+  for (let i = 0; i < CRYSTALS_PER_CHUNK; i++) {
+    const x = ox + rCrystal() * CHUNK;
+    const y = oy + rCrystal() * CHUNK;
+    let shade = 0;
+    for (const t of trees) {
+      const s = Math.max(0, 1 - Math.hypot(t.x - x, t.y - y) / 120);
+      if (s > shade) shade = s;
+    }
+    if (shade > 0.45) continue;                 // keep clearings clear
+    crystals.push({ x: Math.round(x), y: Math.round(y), s: 0.8 + rCrystal() * 0.5 });
+  }
+
+  return { cx, cy, trees, props, nodes, shadows, canopy, undergrowth, mushrooms, crystals };
 }
 
 /** Stable key for a chunk's node, used for local depletion bookkeeping. */

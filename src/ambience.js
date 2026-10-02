@@ -16,6 +16,8 @@
 // no allocation in the update path, no per-frame object creation, and insects
 // behind a single flag so they can be deleted without touching anything else.
 
+import Phaser from 'phaser';
+
 // --- tunables --------------------------------------------------------------
 // INSECTS is the one-line kill switch. If they read as visual noise on a small
 // screen, flip this to false and nothing else needs to change.
@@ -27,6 +29,27 @@ export const AMBIENCE = {
   BIRD_SPEED: 46,        // px/s, slow: birds crossing a clearing are a moment, not traffic
   BIRD_ALTITUDE: -260,   // above the canopy
   VIGNETTE_ALPHA: 0.42,
+
+  // --- night ---------------------------------------------------------------
+  // The emblem is a moonlit wood with air in it. Fog is the depth cue; the
+  // fireflies are the only warm moving thing in a scene that is otherwise
+  // entirely cool, which is what makes them read as alive rather than as
+  // particles.
+  //
+  // FOG_LAYERS is the parallax stack. `factor` is how much of the camera's
+  // movement the layer inherits: 0.12 drifts lazily and reads as far away, 0.55
+  // tracks nearly with you and reads as fog you are standing in. The spread
+  // between them IS the parallax -- with one layer you get a moving overlay, and
+  // that is not depth, it is a texture that slides.
+  FOG_LAYERS: [
+    { y: 0.30, alpha: 0.30, scale: 2.3, factor: 0.12, speed: 5.5, flip: false },
+    { y: 0.48, alpha: 0.42, scale: 2.0, factor: 0.26, speed: -8.0, flip: true },
+    { y: 0.66, alpha: 0.34, scale: 1.7, factor: 0.55, speed: 11.0, flip: false },
+    { y: 0.84, alpha: 0.46, scale: 1.4, factor: 0.78, speed: -15.0, flip: true },
+  ],
+  FIREFLIES: 16,
+  FIREFLY_BLINK: 1.9,    // Hz-ish; not a sine, see the layer
+  STARS: 26,
 };
 
 /** Deterministic-ish helpers for a layer that only needs cheap variance. */
@@ -41,6 +64,124 @@ export function createAmbience(scene) {
   const cam = cameras.main;
   const layers = [];
   const drifters = [];
+
+  // ---- fog ----------------------------------------------------------------
+  // Four sheets at different depths. Each is a sprite wider than the viewport,
+  // positioned in screen space but OFFSET BY THE CAMERA'S OWN SCROLL scaled by
+  // `factor` -- that offset is the parallax. A layer with factor 0.12 slides a
+  // tenth as fast as you walk and reads as distant haze; one at 0.78 nearly
+  // keeps pace and reads as fog you are inside of.
+  //
+  // Horizontal wrap rather than a static overlay, so walking continuously does
+  // not walk you out of the end of the fog.
+  const fog = [];
+  if (scene.textures.exists('fog')) {
+    for (const cfg of AMBIENCE.FOG_LAYERS) {
+      const span = cam.width * cfg.scale;
+      const img = add.image(0, 0, 'fog')
+        .setOrigin(0, 0)
+        .setScrollFactor(0)
+        .setDepth(90500 + fog.length * 10)
+        .setAlpha(cfg.alpha)
+        .setDisplaySize(span, span * 0.25)
+        .setFlipX(cfg.flip);
+      fog.push({ img, span, factor: cfg.factor, speed: cfg.speed, y: cam.height * cfg.y, off: 0 });
+      layers.push(img);
+    }
+    drifters.push((dt) => {
+      const sx = cam.scrollX, sy = cam.scrollY;
+      for (const f of fog) {
+        f.off += f.speed * dt;
+        // wrap over the sprite's own span, then offset by a fraction of the
+        // camera scroll. Two modulo-free writes per layer per frame.
+        let x = (((f.off + sx * f.factor) % f.span) + f.span) % f.span;
+        x -= f.span * 0.35;   // keep the sheet centred-ish, not jammed left
+        f.img.setPosition(x, f.y + sy * f.factor * 0.4);
+      }
+    });
+  }
+
+  // ---- stars + moon -------------------------------------------------------
+  // Only visible where the canopy opens up, which is most of a top-down forest.
+  // Scroll factor 0.35: the sky is technically very far away, but pinning it at
+  // 0 makes it look like wallpaper glued to the glass, and 0.35 is the point
+  // where the eye stops noticing and starts believing.
+  const stars = [];
+  if (scene.textures.exists('star')) {
+    for (let i = 0; i < AMBIENCE.STARS; i++) {
+      const s = add.image(0, 0, 'star')
+        .setScrollFactor(0.35)
+        .setDepth(90200)
+        .setAlpha(rand(0.25, 0.95))
+        .setScale(rand(0.8, 1.5));
+      stars.push({
+        img: s,
+        ox: rand(-120, cam.width + 120), oy: rand(-260, cam.height * 0.55),
+        ph: rand(0, 6.28),
+      });
+      layers.push(s);
+    }
+    if (scene.textures.exists('moonmark')) {
+      const moon = add.image(cam.width * 0.78, cam.height * 0.14, 'moonmark')
+        .setScrollFactor(0.35)
+        .setDepth(90210)
+        .setAlpha(0.75)
+        .setScale(1.4);
+      layers.push(moon);
+    }
+    drifters.push((dt) => {
+      const t = nowSec();
+      for (const s of stars) {
+        // Very slow twinkle. A per-star phase offset stops them pulsing in
+        // unison, which is the tell that they are a sine wave and not a sky.
+        const tw = 0.72 + Math.sin(t * 0.7 + s.ph) * 0.28;
+        s.img.setAlpha(s.img.alpha * 0 + 0.55 * tw);
+        s.img.setPosition(
+          s.ox + cam.scrollX * -0.35 * 0.65,
+          s.oy + cam.scrollY * -0.35 * 0.65,
+        );
+      }
+    });
+  }
+
+  // ---- fireflies ----------------------------------------------------------
+  // The one warm thing in a cool scene. They drift on a slow Lissajous like the
+  // insects, but they BLINK, and the blink is what separates a firefly from a
+  // dot: a steady light reads as a pixel defect, a light that pulses in and out
+  // of darkness reads as a living thing you are looking at.
+  //
+  // The blink is a thresholded sine rather than a smooth fade, so each one is
+  // dark for most of its cycle and flares briefly. Smooth fading makes all 16
+  // look like the same dim smudge; this makes them sparkle out of step.
+  const fireflies = [];
+  if (scene.textures.exists('firefly')) {
+    for (let i = 0; i < AMBIENCE.FIREFLIES; i++) {
+      const f = add.image(0, 0, 'firefly')
+        .setScrollFactor(0)
+        .setBlendMode(Phaser.BlendModes.ADD)
+        .setDepth(91500)
+        .setScale(rand(0.5, 1.25));
+      fireflies.push({
+        img: f,
+        ox: rand(0, cam.width), oy: rand(0, cam.height),
+        ph: rand(0, 6.28), sp: rand(0.18, 0.5), amp: rand(14, 46),
+        br: rand(0.45, 1.15),
+      });
+      layers.push(f);
+    }
+    drifters.push((dt) => {
+      const t = nowSec();
+      for (const f of fireflies) {
+        const x = f.ox + Math.sin(t * f.sp + f.ph) * f.amp;
+        const y = f.oy + Math.sin(t * f.sp * 0.63 + f.ph * 2.1) * f.amp * 0.55;
+        const s = Math.sin(t * AMBIENCE.FIREFLY_BLINK + f.ph * 3);
+        // thresholded: dark most of the time, a sharp flare as it peaks
+        const on = s > 0.72 ? 1 : s > 0.3 ? (s - 0.3) / 0.42 : 0;
+        f.img.setPosition(x, y);
+        f.img.setAlpha(on * f.br);
+      }
+    });
+  }
 
   // ---- vignette ------------------------------------------------------------
   // A screen-space darkening at the edges. Costs one texture and no update,
@@ -170,6 +311,9 @@ export function createAmbience(scene) {
         pollen: pollen.length,
         birds: birds.length,
         insects: insects.length,
+        fog: fog.length,
+        stars: stars.length,
+        fireflies: fireflies.length,
         total: layers.length,
       };
     },
@@ -179,6 +323,7 @@ export function createAmbience(scene) {
       layers.length = 0;
       drifters.length = 0;
       pollen.length = 0; birds.length = 0; insects.length = 0;
+      fog.length = 0; stars.length = 0; fireflies.length = 0;
     },
   };
 }

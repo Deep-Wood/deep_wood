@@ -500,6 +500,45 @@ export class ForestScene extends Phaser.Scene {
       objs.push(img);
     }
 
+    // Bioluminescent mushrooms. Y-sorted with the ground like the undergrowth,
+    // so the player walks in front of the ones below him and behind the ones
+    // above.
+    //
+    // No additive halo sprite. There was one per mushroom, and measured across
+    // the 25-chunk resident set that was ~230 extra objects for a glow the cap
+    // sprite already carries. The `glow` flag still varies cap brightness and
+    // scale, which is where it was doing the work anyway.
+    if (DECORATE && this.textures.exists('mushroom')) {
+      for (const m of data.mushrooms || []) {
+        const a = 0.55 + m.s * 0.35;
+        const img = this.add.image(m.x, m.y, 'mushroom')
+          .setOrigin(0.5, 0.95).setDepth(m.y).setAlpha(a).setScale(m.s);
+        img.setData('baseAlpha', a);
+        this.sortables.push(img);
+        objs.push(img);
+      }
+    }
+
+    // Crystals. Not y-sorted with the ground: they are tall enough to read as
+    // standing objects, and a crystal that the player passes behind while it
+    // looks like it is in front of him looks broken. Sort them like the trees.
+    if (DECORATE && this.textures.exists('crystal')) {
+      for (const c of data.crystals || []) {
+        const img = this.add.image(c.x, c.y, 'crystal')
+          .setOrigin(0.5, 0.9).setDepth(c.y - 6).setAlpha(0.9).setScale(c.s);
+        img.setData('baseAlpha', 0.9);
+        this.sortables.push(img);
+        objs.push(img);
+        const halo = this.add.image(c.x, c.y, 'glow')
+          .setBlendMode(Phaser.BlendModes.ADD)
+          .setDepth(c.y - 7)
+          .setAlpha(0.22)
+          .setScale(0.9 * c.s);
+        halo.setData('baseAlpha', 0.22);
+        objs.push(halo);
+      }
+    }
+
     const nodes = [];
     data.nodes.forEach((n) => {
       // A dug node reappears at a new spot: render at the epoch this chunk's
