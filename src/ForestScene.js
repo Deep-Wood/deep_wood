@@ -654,6 +654,9 @@ export class ForestScene extends Phaser.Scene {
 
     const W = this.scale.width, H = this.scale.height;
     const r = touchRects(W, H);
+    // Kept on the scene so the toolbelt drawer can position itself clear of the
+    // TOOLBELT / BOARD buttons instead of covering them.
+    this.touchRects = r;
 
     // Rebuild rather than mutate: the rectangles all change on resize and
     // tracking nine zones' geometry by hand is how they end up mismatched.
@@ -967,7 +970,8 @@ export class ForestScene extends Phaser.Scene {
     this.lbBackdrop?.destroy();
     this.lbBackdrop = null;
     this.lbFrame = null;
-    this.restoreTouch();
+    if (this.lbOutside) this.input.off('pointerdown', this.lbOutside);
+    this.lbOutside = null;
     this.leaderboardOpen = false;
   }
 
@@ -982,11 +986,22 @@ export class ForestScene extends Phaser.Scene {
   /* ---------------- toolbelt panel ---------------- */
 
   /**
-   * The workshop. Claim the next tier, repair a broken tool, or swap which
-   * one is in hand. Opened with TAB, or automatically when a tool breaks.
+   * The toolbelt is an inventory, not a modal.
    *
-   * Every button runs the same canClaim/canRepair guards the contract uses,
-   * so an action that is disabled here would revert onchain.
+   * Three earlier versions got this wrong the same way: they asked how big the
+   * card should be instead of asking whether there should be a card. 340px
+   * hardcoded (87% of a 390px phone), then a 396px bottom sheet at 44% with a
+   * scrim and the d-pad hidden behind it. All three covered the game, which is
+   * the one thing this must not do.
+   *
+   * So: a narrow drawer down the right edge. No backdrop, no scrim, nothing
+   * dimmed, no control hidden. The d-pad is on the left and the drawer never
+   * reaches it, so the game stays 100% visible AND fully playable while the
+   * drawer is open -- you can keep walking and keep hunting.
+   *
+   * It slides out from the right edge rather than appearing, so the intent is
+   * obvious. Tapping the TOOLBELT button again, tapping outside, or the small x
+   * all close it.
    */
   openBelt() {
     this.releaseTouch();
@@ -995,100 +1010,111 @@ export class ForestScene extends Phaser.Scene {
     this.closeLeaderboard();
 
     const W = this.scale.width, H = this.scale.height;
-    // Taller than the old 300: the panel now carries a mode banner and a gem
-    // shop. Sized to the content below rather than clipping the last row.
-    // 340 was a desktop number. At 390px wide it covered 87% of the screen, so
-    // the frame is now computed from the viewport -- see panelFrame().
-    const { pw, ph, px, py, sheet } = panelFrame(W, H, 340, 396);
+    const pw = 124;
+    const nTools = this.belt.tools.length;
+    // Height follows the content instead of being a magic number, but never
+    // grows past the viewport.
+    const ph = Math.min(H - 120, 206 + nTools * 30);
+    const px = W - pw;
 
-    // UI_DEPTH sits above EVERY world object. World sprites use their own y
-    // as depth for y-sorting, so the range runs 0..WORLD_H*TILE (0..960).
-    // A panel at depth 150 was in the middle of that range and trees below it
-    // drew over the text.
+    // The drawer lives on the right edge -- which is exactly where the TOOLBELT
+    // and BOARD buttons are (x = W - margin - 78, y = 16). Anchored to the top
+    // it covered both, so the first tap landed on the button that opened it and
+    // simply toggled it shut. The drawer starts below them instead.
+    const side = this.touchRects?.board || this.touchRects?.belt;
+    const topInset = side ? side.y + side.h + 8 : 90;
+    const py = Math.max(10, Math.min(topInset, H - ph - 20));
+    const PAD = 7;
+    const inner = pw - PAD * 2;
+
     const c = this.add.container(0, 0).setScrollFactor(0).setDepth(UI_DEPTH);
+    // Slid out from the right edge: children carry absolute px, so moving the
+    // container by W puts the whole drawer one screen-width off to the right.
+    c.setX(W);
+    c.x = W;
 
-    // Drop shadow, then a fully opaque body. At 0.95 the forest still showed
-    // through the text and made the panel unreadable against bright foliage.
-    // Backdrop first so it renders behind the body AND sits behind it in the
-    // input order; the body below is made interactive to absorb panel taps.
-    if (sheet) {
-      this.beltBackdrop = addPanelBackdrop(
-        this, UI_DEPTH - 1, px, py, pw, ph, () => this.closeBelt(),
-      );
-    }
-    // Exposed so panel-check.mjs asserts the real geometry instead of guessing
-    // which of the panel's four rectangles is the body.
-    this.beltFrame = { pw, ph, px, py, sheet };
+    this.beltFrame = { pw, ph, px, py, sheet: false, drawer: true };
 
-    c.add(this.add.rectangle(px + 4, py + 5, pw, ph, 0x000000, 0.45).setOrigin(0));
-    c.add(this.add.rectangle(px, py, pw, ph, 0x0b1710, 1).setOrigin(0)
+    c.add(this.add.rectangle(px + 3, py + 4, pw, ph, 0x000000, 0.4).setOrigin(0));
+    c.add(this.add.rectangle(px, py, pw, ph, 0x0b1710, 0.97).setOrigin(0)
       .setStrokeStyle(2, 0x3f8a52));
-    // header strip
-    c.add(this.add.rectangle(px + 1, py + 1, pw - 2, 26, 0x16281a, 1).setOrigin(0));
+    c.add(this.add.rectangle(px + 1, py + 1, pw - 2, 20, 0x16281a, 1).setOrigin(0));
 
-    c.add(this.add.text(px + 14, py + 12, 'TOOLBELT', {
-      fontFamily: 'monospace', fontSize: '15px', color: '#e8f0e0',
+    c.add(this.add.text(px + PAD, py + 6, 'TOOLBELT', {
+      fontFamily: 'monospace', fontSize: '9px', color: '#e8f0e0',
     }));
 
-    this.beltCommon = this.add.text(px + 14, py + 32, '', {
-      fontFamily: 'monospace', fontSize: '12px', color: '#9fbc9f',
-    });
-    c.add(this.beltCommon);
+    // --- gem counts
+    let y = py + 26;
+    const line = (label, get) => {
+      const t = this.add.text(px + PAD, y, '', {
+        fontFamily: 'monospace', fontSize: '9px', color: '#cfe0cf',
+      });
+      c.add(t);
+      y += 15;
+      return t;
+    };
 
-    // Mode banner: the single most important line in the panel. Everything
-    // below either touches the contract or is a local simulation, and the
-    // player must be able to tell which at a glance.
-    this.beltMode = this.add.text(px + 14, py + 50, '', {
-      fontFamily: 'monospace', fontSize: '10px', color: '#d9a441',
-      wordWrap: { width: pw - 28 },
+    // Only what the toolbelt actually tracks. A first pass also showed
+    // UNCOMMON and QUARTZ rows, reading belt.uncommon / belt.gems.uncommon --
+    // fields that do not exist. The local belt holds only tools / common /
+    // burned / feesPaid, so those rows rendered as "MON undefined". The
+    // per-rarity balances are on-chain (gemsOf) and appear in the shop rows,
+    // which are priced from the contract.
+    this.beltCommon = line('COMMON', () => this.belt.common);
+    this.beltBurned = line('BURNED', () => this.belt.burned);
+    this.beltFees = line('FEES', () => this.belt.feesPaid);
+
+    // --- on-chain vs local, the one line that must never be ambiguous
+    this.beltMode = this.add.text(px + PAD, y + 2, '', {
+      fontFamily: 'monospace', fontSize: '8px', color: '#d9a441',
+      wordWrap: { width: inner },
     });
     c.add(this.beltMode);
+    y += 32;
 
     // --- owned tools
-    // Starts below the mode banner (which occupies py+50..py+66).
-    let y = py + 72;
     this.beltRows = [];
+    // The per-row action button stays: refreshBelt() drives REPAIR / IN HAND /
+    // EQUIP through it, so dropping it would silently delete the repair path.
     this.belt.tools.forEach((t, i) => {
-      const row = this.add.text(px + 14, y, '', {
-        fontFamily: 'monospace', fontSize: '12px', color: '#cfe0cf',
+      const row = this.add.text(px + PAD, y, '', {
+        fontFamily: 'monospace', fontSize: '9px', color: '#cfe0cf',
+        lineSpacing: 2,
       });
       c.add(row);
-      this.beltRows.push({ row, index: i });
-
-      // Equip / Repair button on the right of each row
-      const btn = this.add.text(px + pw - 90, y - 2, '', {
-        fontFamily: 'monospace', fontSize: '11px', color: '#fff8d0',
-        backgroundColor: '#2a4d38', padding: { x: 8, y: 4 },
+      // Right-aligned on the SECOND line so it cannot collide with the tier line.
+      const btn = this.add.text(px + pw - PAD - 38, y + 12, '', {
+        fontFamily: 'monospace', fontSize: '8px', color: '#fff8d0',
+        backgroundColor: '#2a4d38', padding: { x: 5, y: 3 },
       }).setInteractive({ useHandCursor: true });
       c.add(btn);
-      this.beltRows[i].btn = btn;
-
-      y += 22;
+      this.beltRows.push({ row, btn, index: i });
+      y += 30;
     });
 
-    // --- claim the next tier
-    this.beltMsg = this.add.text(px + 14, y + 6, '', {
-      fontFamily: 'monospace', fontSize: '11px', color: '#d9a441',
-      wordWrap: { width: pw - 28 },
+    this.beltMsg = this.add.text(px + PAD, y, '', {
+      fontFamily: 'monospace', fontSize: '8px', color: '#d9a441',
+      wordWrap: { width: inner },
     });
     c.add(this.beltMsg);
-    y += 34;
+    y += 26;
 
-    this.claimBtn = this.add.text(px + 14, y, '', {
-      fontFamily: 'monospace', fontSize: '12px', color: '#fff8d0',
-      backgroundColor: '#2a4d38', padding: { x: 10, y: 6 },
+    this.claimBtn = this.add.text(px + PAD, y, '', {
+      fontFamily: 'monospace', fontSize: '9px', color: '#fff8d0',
+      backgroundColor: '#2a4d38', padding: { x: 6, y: 4 },
     }).setInteractive({ useHandCursor: true });
     c.add(this.claimBtn);
 
     // Connected -> the chain is the source of truth and the local belt is a
-    // mirror of it. Not connected -> the existing local simulation runs, and
-    // the panel says so. The two must never be confused: granting a tool
+    // mirror of it. Not connected -> the existing local simulation runs, and the
+    // panel says so. The two must never be confused: granting a tool
     // locally after an on-chain attempt is what this branch exists to prevent.
     this.claimBtn.on('pointerdown', () => {
       const belt = this.belt;
       const next = belt.tools.reduce((m, t) => Math.max(m, t.tier), 0) + 1;
       if (next > MAX_TIER) {
-        this.beltMsg.setText('Every tier owned. Nothing left to claim.');
+        this.beltMsg.setText('Every tier owned.');
         this.beltMsg.setColor('#9fbc9f');
         return;
       }
@@ -1103,32 +1129,31 @@ export class ForestScene extends Phaser.Scene {
         return;
       }
       const res = claimTool(belt, next);
-      this.beltMsg.setText(`Claimed Tier ${roman(next)} - burned ${fmt(toolCost(next))} Common, ${res.fee} to treasury.`);
+      this.beltMsg.setText(`Claimed T${roman(next)} - ${res.fee} to treasury.`);
       this.beltMsg.setColor('#3f8a52');
       this.flash(`Tier ${roman(next)} tool claimed`);
       this.refreshBelt();
       this.updateHud();
     });
 
-    // --- gem shop
-    // Only Common and Uncommon: Rare and above are hunt-only and the contract
-    // reverts RarityNotForSale for them, so offering them would be a lie.
-    y += 30;
-    c.add(this.add.text(px + 14, y, 'GEM SHOP', {
-      fontFamily: 'monospace', fontSize: '11px', color: '#e8f0e0',
+    // --- gem shop. Common and Uncommon only: Rare and above are hunt-only and
+    // the contract reverts RarityNotForSale, so offering them would be a lie.
+    y += 24;
+    c.add(this.add.text(px + PAD, y, 'SHOP', {
+      fontFamily: 'monospace', fontSize: '9px', color: '#e8f0e0',
     }));
-    y += 16;
+    y += 14;
 
     this.shopRows = [];
     for (const rarity of FOR_SALE) {
-      const label = this.add.text(px + 14, y, `${RARITY_NAME_ONSALE[rarity]} ...`, {
-        fontFamily: 'monospace', fontSize: '11px', color: '#cfe0cf',
+      const label = this.add.text(px + PAD, y, '', {
+        fontFamily: 'monospace', fontSize: '8px', color: '#cfe0cf',
       });
       c.add(label);
 
-      const buy = this.add.text(px + pw - 92, y - 2, 'buy', {
-        fontFamily: 'monospace', fontSize: '11px', color: '#fff8d0',
-        backgroundColor: '#2a4d38', padding: { x: 8, y: 4 },
+      const buy = this.add.text(px + pw - PAD - 26, y - 2, 'buy', {
+        fontFamily: 'monospace', fontSize: '8px', color: '#fff8d0',
+        backgroundColor: '#2a4d38', padding: { x: 5, y: 3 },
       }).setInteractive({ useHandCursor: true });
       c.add(buy);
       this.shopRows.push({ label, buy, rarity });
@@ -1139,15 +1164,29 @@ export class ForestScene extends Phaser.Scene {
       row.buy.on('pointerdown', () => this.buyGemsOnchain(row.rarity, 1));
     }
 
-    // Close button, then finalize the panel and paint it once.
-    // --- close
-    this.beltClose = this.add.text(px + pw - 30, py + 10, 'X', {
-      fontFamily: 'monospace', fontSize: '14px', color: '#9fbc9f',
+    this.beltClose = this.add.text(px + pw - 16, py + 6, 'X', {
+      fontFamily: 'monospace', fontSize: '9px', color: '#9fbc9f',
     }).setInteractive({ useHandCursor: true });
     c.add(this.beltClose);
     this.beltClose.on('pointerdown', () => this.closeBelt());
 
     this.beltPanel = c;
+
+    // Slide out from the right edge.
+    this.tweens.add({ targets: c, x: 0, duration: 160, ease: 'Cubic.easeOut' });
+
+    // Tapping the forest closes the drawer. There is no backdrop to catch the
+    // tap, so this is a scene-level handler that ignores taps landing inside the
+    // drawer's own bounds -- which is what keeps the buy buttons clickable.
+    const outside = (p) => {
+      const f = this.beltFrame;
+      if (!f) return;
+      if (p.x >= f.px && p.x <= f.px + f.pw && p.y >= f.py && p.y <= f.py + f.ph) return;
+      this.closeBelt();
+    };
+    this.beltOutside = outside;
+    this.input.on('pointerdown', outside);
+
     this.refreshBelt();
     this.refreshShopPrices();
   }
@@ -1329,24 +1368,24 @@ export class ForestScene extends Phaser.Scene {
       this.beltMode.setColor(m === 'onchain' ? '#3f8a52' : '#d9a441');
     }
 
-    this.beltCommon.setText(
-      `Common ${fmt(belt.common)}   burned ${fmt(belt.burned)}   fees ${fmt(belt.feesPaid)}`
-    );
+    this.beltCommon.setText(`COMMON  ${fmt(belt.common)}`);
+    this.beltBurned.setText(`BURNED  ${fmt(belt.burned)}`);
+    this.beltFees.setText(`FEES    ${fmt(belt.feesPaid)}`);
 
     for (const { row, btn, index } of this.beltRows) {
       const t = belt.tools[index];
       const net = expectedHuntWei(DROP_TABLE[t.tier], PRICE) - huntCostWei(t.tier);
       const state = t.left === 0 ? 'BROKEN' : t.active ? 'in hand' : 'stowed';
       row.setText(
-        `Tier ${roman(t.tier)}  ${t.left}/${t.max}  ${state}\n` +
-        `   net ${eth(net)}/hunt`
+        `T${roman(t.tier)} ${t.left}/${t.max} ${state === 'in hand' ? 'HELD' : state === 'stowed' ? 'OFF' : 'BROKE'}\n` +
+        `net ${eth(net)}`
       );
       row.setColor(t.left === 0 ? '#d83a5a' : t.active ? '#fff8d0' : '#9fbc9f');
 
       if (t.left === 0) {
         const cost = repairCost(t.tier);
         const r = canRepair(belt, index);
-        btn.setText(`REPAIR ${fmt(cost)}`);
+        btn.setText(`FIX ${fmt(cost)}`);
         btn.setColor(r.ok ? '#fff8d0' : '#7a8a7a');
         btn.setBackgroundColor(r.ok ? '#2a4d38' : '#1a2a1a');
         btn.removeAllListeners('pointerdown');
@@ -1387,14 +1426,14 @@ export class ForestScene extends Phaser.Scene {
     // claim button
     const next = belt.tools.reduce((m, t) => Math.max(m, t.tier), 0) + 1;
     if (next > MAX_TIER) {
-      this.claimBtn.setText('ALL TIERS OWNED');
+      this.claimBtn.setText('ALL OWNED');
       this.claimBtn.setColor('#7a8a7a');
       this.claimBtn.setBackgroundColor('#1a2a1a');
       this.claimBtn.removeAllListeners('pointerdown');
     } else {
       const cost = toolCost(next);
       const c = canClaim(belt, next);
-      this.claimBtn.setText(`CLAIM TIER ${roman(next)}  -  ${fmt(cost)} COMMON`);
+      this.claimBtn.setText(`CLAIM ${roman(next)} - ${fmt(cost)}`);
       this.claimBtn.setColor(c.ok ? '#fff8d0' : '#7a8a7a');
       this.claimBtn.setBackgroundColor(c.ok ? '#2a4d38' : '#1a2a1a');
       this.claimBtn.removeAllListeners('pointerdown');
@@ -1416,7 +1455,6 @@ export class ForestScene extends Phaser.Scene {
     this.beltBackdrop?.destroy();
     this.beltBackdrop = null;
     this.beltFrame = null;
-    this.restoreTouch();
     this.beltRows = [];
     this.beltOpen = false;
   }
@@ -1426,23 +1464,15 @@ export class ForestScene extends Phaser.Scene {
   }
 
   /**
-   * A panel covers the d-pad, so any held direction must be released or the
-   * character walks off on its own the moment the panel closes.
+   * A panel over the d-pad would swallow a held direction, so it is released.
    *
-   * The controls are also HIDDEN while a panel is open. They sit at UI_DEPTH + 2
-   * and the panel at UI_DEPTH, so on a phone the d-pad and HUNT were drawn
-   * straight across the bottom sheet -- which is what made the sheet read as a
-   * full-screen takeover rather than a sheet. Hiding them is also what a modal
-   * should do: the controls are not actionable behind a panel anyway.
+   * The controls are deliberately NOT hidden. That was needed when the toolbelt
+   * was a bottom sheet sitting across them; the toolbelt is now a narrow drawer
+   * on the right edge that never reaches the d-pad, so the game stays playable
+   * while it is open and the player should be able to keep walking.
    */
   releaseTouch() {
     if (this.touchState) this.touchState.clear();
-    if (this.touchLayer && this.touchVisible) this.touchLayer.setVisible(false);
-  }
-
-  /** Put the controls back. Every close path must pair with releaseTouch(). */
-  restoreTouch() {
-    if (this.touchLayer && this.touchVisible) this.touchLayer.setVisible(true);
   }
 
   /* ---------------- the loop ---------------- */
