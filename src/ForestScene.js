@@ -225,7 +225,12 @@ export class ForestScene extends Phaser.Scene {
     // Ambience is created AFTER the first stream and lives for the life of the
     // scene. It is camera-global by design -- see ambience.js -- so it must not
     // be part of any chunk's unload set.
-    this.ambience = SAFE === 1 || SAFE === 3 ? null : createAmbience(this);
+    // SAFE 2 is "chunk decoration only" and must keep the ambience OFF, which it
+    // was not doing. SAFE 3 is the discriminator: camera-global layers only, with
+    // every chunk decoration object gone. If the hunter returns under ?safe=3 the
+    // chunk objects are at fault; if it stays broken, the camera-global layers
+    // are. As shipped, 3 was a duplicate of 1 and could not answer that.
+    this.ambience = SAFE === 1 || SAFE === 2 ? null : createAmbience(this);
     this.setupHud();
     this.setupTouch();
 
