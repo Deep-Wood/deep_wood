@@ -7,7 +7,7 @@
 //   node --test src/reporter.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createReporter, REPORT_ENDPOINT } from './reporter.js';
+import { createReporter, REPORT_ENDPOINT, scrubEvent, SENTRY_DSN } from './reporter.js';
 
 const err = (msg, extra = {}) => Object.assign(new Error(msg), extra);
 
@@ -199,4 +199,75 @@ test('no endpoint is configured by default', () => {
   // A build must not ship a silent third-party endpoint. If someone adds
   // VITE_ERROR_REPORT_URL this test is the reminder that it changed.
   assert.equal(REPORT_ENDPOINT, null);
+});
+
+test('no Sentry DSN under the test runner, so tests never ship real events', () => {
+  // node --test has no Vite env, so this must be null. It is the guard that
+  // stops a test run from reporting into the live project.
+  assert.equal(SENTRY_DSN, null);
+});
+
+// --- Sentry event scrubbing ------------------------------------------------
+
+test('scrubEvent redacts addresses out of a real Sentry event shape', () => {
+  // This is the last thing between a player and Sentry's servers, so it has to
+  // handle the fields Sentry actually populates, not just message/stack.
+  const ev = {
+    message: 'swap failed for 0xd1Bd8e3D34B5f8ed38A56aA804A45B15a3FE848d',
+    exception: {
+      values: [{
+        type: 'TypeError',
+        value: 'no account 0x1234567890abcdef1234567890abcdef12345678',
+        module: 'src/wallet.js',
+        stacktrace: {
+          frames: [{ filename: 'app.js', absPath: '/x/0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd', function: 'swap' }],
+        },
+      }],
+    },
+    extra: { to: '0xd1Bd8e3D34B5f8ed38A56aA804A45B15a3FE848d', kind: 'swap' },
+    breadcrumbs: [{ message: 'clicked 0xd1Bd8e3D34B5f8ed38A56aA804A45B15a3FE848d', data: { acct: '0xd1Bd8e3D34B5f8ed38A56aA804A45B15a3FE848d' } }],
+  };
+  const out = scrubEvent(ev);
+  const blob = JSON.stringify(out);
+  assert.ok(!blob.includes('d1Bd8e3D34B5f8ed38A56aA804A45B15a3FE848d'), 'address leaked');
+  assert.ok(!blob.includes('1234567890abcdef'), 'address leaked from exception value');
+  assert.ok(!blob.includes('abcdefabcdefabcdefabcdefabcdefabcdefabcd'), 'address leaked from frame absPath');
+  // Non-address fields must survive, or the event becomes useless for triage.
+  assert.equal(out.extra.kind, 'swap');
+  assert.equal(out.exception.values[0].type, 'TypeError');
+  assert.equal(out.exception.values[0].stacktrace.frames[0].function, 'swap');
+});
+
+test('scrubEvent tolerates a partial or unusual event', () => {
+  assert.doesNotThrow(() => scrubEvent({}));
+  assert.doesNotThrow(() => scrubEvent({ exception: { values: [{}] } }));
+  assert.doesNotThrow(() => scrubEvent({ extra: null }));
+  assert.equal(scrubEvent(null), null);
+});
+
+// --- Sentry sink -----------------------------------------------------------
+
+test('errors reach the attached Sentry sink, through the same throttle', async () => {
+  const sent = [];
+  const r = createReporter({ now: () => 1000, repeatWindowMs: 60_000 });
+  r.attachSentry({ captureException: (e) => { sent.push(e.message); } });
+  const line = { filename: 'a.js', lineno: 3 };
+  for (let i = 0; i < 5; i++) r.reportError(err('same thing', line));
+  assert.equal(sent.length, 1, 'repeats must collapse before reaching Sentry');
+  r.reportError(err('a different thing', line));
+  assert.equal(sent.length, 2);
+});
+
+test('a throwing Sentry sink cannot break reporting', () => {
+  const r = createReporter();
+  r.attachSentry({ captureException: () => { throw new Error('sentry exploded'); } });
+  assert.doesNotThrow(() => r.reportError(err('still captured')));
+  assert.equal(r.ring().length, 1);
+});
+
+test('hasSentry reflects whether a sink is attached', () => {
+  const r = createReporter();
+  assert.equal(r.hasSentry(), false);
+  r.attachSentry({ captureException: () => {} });
+  assert.equal(r.hasSentry(), true);
 });

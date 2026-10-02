@@ -24,7 +24,7 @@ const REDACT = [
   [/("(?:privateKey|mnemonic|seed|secret|passphrase)"\s*:\s*)"[^"]*"/gi, '$1"<redacted>"'],
 ];
 
-function scrub(s) {
+export function scrub(s) {
   if (typeof s !== 'string') return s;
   let out = s;
   for (const [re, rep] of REDACT) out = out.replace(re, rep);
@@ -44,6 +44,7 @@ export function createReporter({
   repeatWindowMs = 5 * 60 * 1000,
   now = () => Date.now(),
   fetchImpl = typeof fetch === 'function' ? fetch.bind(globalThis) : null,
+  sentry = null,   // set later by attachSentry()
 } = {}) {
   const ring = [];               // most recent errors, newest last
   const seen = new Map();        // fingerprint -> timestamp of last send
@@ -109,8 +110,28 @@ export function createReporter({
     }
   }
 
+  // Feed Sentry through the same throttle gate as the fetch transport, so a
+  // throwing loop cannot produce thousands of events on either. The entry is
+  // already scrubbed, and Sentry's own beforeSend scrubs again -- deliberately
+  // redundant rather than trusting a single layer.
+  const toSentry = (entry, original) => {
+    if (!sentry) return;
+    try {
+      sentry.captureException(original instanceof Error ? original : new Error(entry.message), {
+        level: entry.level,
+        tags: { context: entry.context || 'none' },
+        extra: { message: entry.message, file: entry.file, line: entry.line },
+      });
+    } catch { /* telemetry must never throw into the page */ }
+  };
+
+  /** Attach Sentry after initSentry() resolves, since it is a dynamic import. */
+  const attachSentry = (sdk) => { sentry = sdk; };
+  const hasSentry = () => !!sentry;
+
   const report = (err, context, level) => {
     const entry = rec(err, context, level);
+    if (sentry && throttleOk(entry)) toSentry(entry, err);
     // Always console first: the local log is the ground truth and must not
     // depend on any third party being configured or reachable.
     if (typeof console !== 'undefined') {
@@ -129,6 +150,8 @@ export function createReporter({
     warn: (msg, context) => report(new Error(msg), context, 'warn'),
     ring: () => ring.slice(),
     clear: () => { ring.length = 0; seen.clear(); },
+    attachSentry,
+    hasSentry,
     install(target) {
       const w = target || (typeof window !== 'undefined' ? window : null);
       if (!w) return false;
@@ -178,3 +201,103 @@ export function createReporter({
 /** Endpoint from build-time env; null in dev or when unset. */
 export const REPORT_ENDPOINT =
   (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_ERROR_REPORT_URL) || null;
+
+/**
+ * Sentry DSN, injected at build time only.
+ *
+ * A DSN is PUBLISHABLE and lives in the committed bundle on purpose. It
+ * identifies the project and lets anyone send events, but it cannot read your
+ * data and grants no access. This is the opposite of an RPC key or a private
+ * key, which must never be committed. Keep it out of .env.local only if you
+ * want local dev errors to stay on the machine.
+ */
+export const SENTRY_DSN =
+  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SENTRY_DSN) || null;
+
+/**
+ * Scrub a Sentry event in place. Runs in beforeSend, so this is the LAST thing
+ * between a player and Sentry's servers.
+ *
+ * Sentry's own "send default PII" setting is off by default and must stay off,
+ * but one toggle is not a guarantee -- a stack frame filename or a custom extra
+ * key can carry an address without Sentry ever labelling it as one. So the
+ * redaction is applied here too, at the boundary, and is deliberately
+ * repetitive with the local scrub rather than trusting either layer alone.
+ */
+export function scrubEvent(event) {
+  if (!event || typeof event !== 'object') return event;
+  if (event.message) event.message = scrub(String(event.message));
+  if (event.logger) event.logger = scrub(String(event.logger));
+  // Exception values and their stack frames are the paths that actually leak:
+  // a frame filename is arbitrary text from the page.
+  for (const ex of [].concat(event.exception?.values || [])) {
+    if (ex?.value) ex.value = scrub(String(ex.value));
+    if (ex?.module) ex.module = scrub(String(ex.module));
+    for (const f of [].concat(ex?.stacktrace?.frames || [])) {
+      if (f?.filename) f.filename = scrub(String(f.filename));
+      if (f?.absPath) f.absPath = scrub(String(f.absPath));
+      if (f?.function) f.function = scrub(String(f.function));
+    }
+  }
+  if (event.extra && typeof event.extra === 'object') {
+    for (const k of Object.keys(event.extra)) {
+      if (typeof event.extra[k] === 'string') event.extra[k] = scrub(event.extra[k]);
+    }
+  }
+  if (event.breadcrumbs) {
+    for (const b of event.breadcrumbs) {
+      if (b?.message) b.message = scrub(String(b.message));
+      if (b?.data && typeof b.data === 'object') {
+        for (const k of Object.keys(b.data)) {
+          if (typeof b.data[k] === 'string') b.data[k] = scrub(b.data[k]);
+        }
+      }
+    }
+  }
+  return event;
+}
+
+/**
+ * Initialise Sentry. Separate from createReporter so the reporter's behaviour
+ * and its tests never depend on the SDK being present or configured, and so
+ * this can be skipped entirely when there is no DSN.
+ *
+ * beforeBreadcrumb drops console noise; the game is frame-driven and would
+ * otherwise bury a real error under thousands of breadcrumbs.
+ */
+export async function initSentry(dsn = SENTRY_DSN) {
+  if (!dsn) return null;
+  // LAZY ON PURPOSE. The Sentry chunk is 142 KB gzipped on top of Phaser's
+  // 360 KB -- 28% -- and an eager import makes every player download it on
+  // every load, for a service they may never need. Instead this returns a stub
+  // that does the real import on the FIRST error, so a session where nothing
+  // breaks never fetches the SDK at all.
+  let sdkPromise = null;
+  const load = () => {
+    if (!sdkPromise) sdkPromise = import('@sentry/browser').then((Sentry) => {
+      Sentry.init({
+      dsn,
+      // Nothing identifies a player. No user id, no IP-derived default beyond
+      // Sentry's own, no session replay. A wallet address in a stack trace is
+      // scrubbed below, but the simplest privacy win is not to attach identity
+      // at all.
+      sendDefaultPii: false,
+      tracesSampleRate: 0,
+        beforeSend: scrubEvent,
+        beforeBreadcrumb: (b) => (b && b.category === 'console' ? null : b),
+      });
+      return Sentry;
+    }).catch((e) => {
+      // Never let telemetry break the game.
+      console.warn('[deepwood] sentry unavailable:', e && e.message);
+      return null;
+    });
+    return sdkPromise;
+  };
+
+  // The stub is shaped like the SDK so call sites do not change; it is attached
+  // eagerly, but costs nothing until captureException is actually called.
+  return {
+    captureException: (err, ctx) => load().then((S) => S && S.captureException(err, ctx)),
+  };
+}

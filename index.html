@@ -85,9 +85,13 @@
        log only -- see src/reporter.js. No third party is contacted unless
        VITE_ERROR_REPORT_URL is set at build time. -->
   <script type="module">
-    import { createReporter, REPORT_ENDPOINT } from '/src/reporter.js';
+    import { createReporter, REPORT_ENDPOINT, initSentry } from '/src/reporter.js';
     window.__reporter = createReporter({ endpoint: REPORT_ENDPOINT });
     window.__reporter.install(window);
+    // Dynamic import, so Sentry is only fetched when a DSN is configured. If it
+    // is absent or fails, the game is unaffected -- telemetry must never be a
+    // reason the game does not start.
+    initSentry().then((sdk) => { if (sdk) window.__reporter.attachSentry(sdk); });
   </script>
   <script type="module" src="/src/main.js"></script>
   <script type="module">

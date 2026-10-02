@@ -21,6 +21,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@sentry/browser": "^11.2.0",
     "js-sha3": "^0.9.3",
     "phaser": "^3.90.0"
   },
