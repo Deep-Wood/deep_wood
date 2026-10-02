@@ -9,6 +9,7 @@
 import Phaser from 'phaser';
 import { buildAllTextures, PAL, rng } from './art.js';
 import { createAmbience } from './ambience.js';
+import { panelFrame } from './layout.js';
 
 // Bisect switch for the ambience layers. The 2bf3694 deploy added ~730 display
 // objects (205 canopy, 376 undergrowth, 152 shadows) and the character stopped
@@ -59,6 +60,37 @@ import {
 } from './touch.js';
 
 const TILE = 32;
+
+/**
+ * Dim the forest behind a sheet-mode panel and let a tap out there close it.
+ *
+ * The backdrop is added to the panel container FIRST, so it sits behind the body
+ * in the display list. That also decides input order: the body rectangle is made
+ * interactive immediately afterwards, so taps on the panel itself are swallowed
+ * rather than falling through to the backdrop and dismissing it.
+ */
+function addPanelBackdrop(scene, depth, px, py, pw, ph, onDismiss) {
+  const W = scene.scale.width, H = scene.scale.height;
+  // A DIRECT SCENE CHILD, deliberately not a member of the panel container.
+  //
+  // Adding a Game Object to a Container after setInteractive() registers it
+  // against the scene and again against the container, leaving the InputPlugin
+  // with two entries at identical coordinates. With the default topOnly, the
+  // duplicate shadows the original and the handler silently never fires -- the
+  // same bug already documented and worked around for the touch zones. The
+  // first version of this backdrop was a container child and outside-taps did
+  // nothing for exactly that reason.
+  const dim = scene.add.rectangle(0, 0, W, H, 0x050a06, 0.62).setOrigin(0)
+    .setScrollFactor(0).setDepth(depth).setInteractive({ useHandCursor: true });
+  dim.on('pointerdown', (pointer, x, y) => {
+    // Ignore taps that land on the panel, so only true outside-taps dismiss it.
+    if (x >= px && x <= px + pw && y >= py && y <= py + ph) return;
+    onDismiss();
+  });
+  return dim;
+}
+
+
 // Alpha for the outer hysteresis ring. Low enough that the chunk boundary is a
 // gradient rather than a line, high enough that you can still see you are
 // approaching the edge of the loaded world.
@@ -799,10 +831,18 @@ export class ForestScene extends Phaser.Scene {
     this.releaseTouch();
 
     const W = this.scale.width, H = this.scale.height;
-    const pw = 430, ph = 396;
-    const cx = (W - pw) / 2, cy = (H - ph) / 2;
+    // Was a hardcoded 430x396 centred -- on a 390px phone that is WIDER than the
+    // screen, so this panel started at x = -56 and ran off the left edge.
+    const f = panelFrame(W, H, 430, 396);
+    const { pw, ph, px: cx, py: cy, sheet } = f;
 
     const c = this.add.container(0, 0).setScrollFactor(0).setDepth(UI_DEPTH);
+    if (sheet) {
+      this.lbBackdrop = addPanelBackdrop(
+        this, UI_DEPTH - 1, cx, cy, pw, ph, () => this.closeLeaderboard(),
+      );
+    }
+    this.lbFrame = { pw, ph, px: cx, py: cy, sheet };
     c.add(this.add.rectangle(cx + 4, cy + 5, pw, ph, 0x000000, 0.5).setOrigin(0));
     c.add(this.add.rectangle(cx, cy, pw, ph, 0x0b1710, 1).setOrigin(0)
       .setStrokeStyle(2, 0x3f8a52));
@@ -920,6 +960,9 @@ export class ForestScene extends Phaser.Scene {
     if (!this.lbPanel) return;
     this.lbPanel.destroy(true);
     this.lbPanel = null;
+    this.lbBackdrop?.destroy();
+    this.lbBackdrop = null;
+    this.lbFrame = null;
     this.leaderboardOpen = false;
   }
 
@@ -949,8 +992,9 @@ export class ForestScene extends Phaser.Scene {
     const W = this.scale.width, H = this.scale.height;
     // Taller than the old 300: the panel now carries a mode banner and a gem
     // shop. Sized to the content below rather than clipping the last row.
-    const pw = 340, ph = 396;
-    const px = W - pw - 16, py = 88;
+    // 340 was a desktop number. At 390px wide it covered 87% of the screen, so
+    // the frame is now computed from the viewport -- see panelFrame().
+    const { pw, ph, px, py, sheet } = panelFrame(W, H, 340, 396);
 
     // UI_DEPTH sits above EVERY world object. World sprites use their own y
     // as depth for y-sorting, so the range runs 0..WORLD_H*TILE (0..960).
@@ -960,6 +1004,17 @@ export class ForestScene extends Phaser.Scene {
 
     // Drop shadow, then a fully opaque body. At 0.95 the forest still showed
     // through the text and made the panel unreadable against bright foliage.
+    // Backdrop first so it renders behind the body AND sits behind it in the
+    // input order; the body below is made interactive to absorb panel taps.
+    if (sheet) {
+      this.beltBackdrop = addPanelBackdrop(
+        this, UI_DEPTH - 1, px, py, pw, ph, () => this.closeBelt(),
+      );
+    }
+    // Exposed so panel-check.mjs asserts the real geometry instead of guessing
+    // which of the panel's four rectangles is the body.
+    this.beltFrame = { pw, ph, px, py, sheet };
+
     c.add(this.add.rectangle(px + 4, py + 5, pw, ph, 0x000000, 0.45).setOrigin(0));
     c.add(this.add.rectangle(px, py, pw, ph, 0x0b1710, 1).setOrigin(0)
       .setStrokeStyle(2, 0x3f8a52));
@@ -1350,6 +1405,12 @@ export class ForestScene extends Phaser.Scene {
     this.releaseTouch();
     this.beltPanel.destroy(true);
     this.beltPanel = null;
+    // The backdrop is a scene child, NOT inside beltPanel, so destroy(true)
+    // does not reach it. Without this it would linger as an invisible
+    // full-screen input blocker over the whole game.
+    this.beltBackdrop?.destroy();
+    this.beltBackdrop = null;
+    this.beltFrame = null;
     this.beltRows = [];
     this.beltOpen = false;
   }
