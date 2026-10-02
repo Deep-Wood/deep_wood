@@ -327,6 +327,13 @@ export function makeTreeTexture(scene, variant = 0) {
   px(ctx, 5, baseY, PAL.trunkDark);  // roots flaring into the grass
   px(ctx, 10, baseY, PAL.trunkDark);
 
+  // Hoisted: the moon rim below needs the canopy centre, and it was declared
+  // inside the broadleaf branch where it was block-scoped and unreachable --
+  // which threw "cy is not defined" for variants 0 and 2 and took the whole
+  // scene down. 159 unit tests passed straight through it, because nothing in
+  // the suite bakes all four tree variants.
+  let canopyY = 7.5;
+
   if (v === 1) {
     /* ---------------- pine: stacked tiers ---------------- */
     for (let tier = 0; tier < 4; tier++) {
@@ -355,6 +362,7 @@ export function makeTreeTexture(scene, variant = 0) {
     const mid = v === 2 ? PAL.pine : PAL.leaf;
     const lit = v === 2 ? PAL.pineLit : PAL.leafLit;
     const cy = v === 2 ? 9.5 : 7.5;
+    canopyY = cy;
     const rx = v === 2 ? 4.6 : 5.2;
     const ry = v === 2 ? 3.2 : 3.8;
 
@@ -398,6 +406,7 @@ export function makeTreeTexture(scene, variant = 0) {
   } else if (v === 3) {
     rim(7, 3, 0.6); rim(6, 5, 0.45); rim(8, 2, 0.5);
   } else {
+    const cy = canopyY;
     rim(4, Math.round(cy), 0.5);
     rim(5, Math.round(cy) - 2, 0.55);
     rim(6, Math.round(cy) - 3, 0.6);
@@ -541,6 +550,33 @@ export function makeSparkTexture(scene) {
   ctx.fill();
   done();
   return key;
+}
+
+/**
+ * The hunter's lantern.
+ *
+ * With the palette moved to night, 87% of the frame now sits below luminance 40
+ * and the character has no guaranteed contrast against whatever he is standing
+ * on. Measured across his 48x48 band the range was 20..203, so he is findable --
+ * but "findable on a dark surface in daylight on a phone" is a weaker promise
+ * than it was when the ground was #35502f.
+ *
+ * So he carries his own light: a small additive halo that travels with him. It
+ * is also the emblem's own idea -- a bioluminescent source in a moonlit wood --
+ * and it gives the player a moving point of interest to steer by.
+ */
+export function makeLanternTexture(scene) {
+  if (scene.textures.exists('lantern')) return 'lantern';
+  const g = scene.make.graphics({ add: false });
+  for (let i = 6; i >= 1; i--) {
+    g.fillStyle(0x3ff0b0, 0.035 + (6 - i) * 0.012);
+    g.fillCircle(32, 32, i * 5);
+  }
+  g.fillStyle(0x7ef9d0, 0.5);
+  g.fillCircle(32, 32, 4);
+  g.generateTexture('lantern', 64, 64);
+  g.destroy();
+  return 'lantern';
 }
 
 /** Soft radial glow, drawn additively behind dig nodes. */
@@ -802,6 +838,7 @@ export function buildAllTextures(scene, worldW = 1280, worldH = 960) {
   makeCanopyTexture(scene);
   makeUndergrowthTextures(scene);
   makeVignetteTexture(scene);
+  makeLanternTexture(scene);
   makePollenTexture(scene);
   makeBirdTexture(scene);
   makeInsectTexture(scene);

@@ -140,6 +140,49 @@ p.on('pageerror', (e) => errs.push(String(e.message).slice(0, 140)));
 await p.goto(URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
 await p.waitForFunction('window.__scene && window.__scene.player', { timeout: 30000 });
 await new Promise((r) => setTimeout(r, 2500));
+
+// --- the tree bakes, checked in a real browser ------------------------------
+// The night pass added a moon rim that read a block-scoped `cy` and threw
+// "cy is not defined" for two of the four tree variants, which took the scene
+// down in local AND production. 159 unit tests passed straight through it,
+// because nothing in the suite ever baked a tree. This runs in the page, where
+// Phaser and a real canvas actually exist, and reads pixels rather than trusting
+// that the code ran.
+const bakes = await p.evaluate(async () => {
+  // READ the textures the scene already baked at startup -- do not call
+  // makeTreeTexture again. Re-baking replaces the live texture object and every
+  // sprite bound to it loses its GL handle, which fails the page with
+  // "Cannot read properties of null (reading 'glTexture')". That was this test
+  // breaking the thing it was testing. Reading the shipped texture also has the
+  // advantage of verifying what actually reached the player.
+  const out = [];
+  for (let v = 0; v < 4; v++) {
+    const key = `tree${v}`;
+    const tex = window.__scene.textures.get(key);
+    if (!tex) { out.push({ v, key, w: 0, inked: 0, moonPx: 0 }); continue; }
+    const src = tex.getSourceImage();
+    const c = document.createElement('canvas');
+    c.width = src.width; c.height = src.height;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(src, 0, 0);
+    const d = ctx.getImageData(0, 0, src.width, src.height).data;
+    let moonPx = 0, inked = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] === 0) continue;
+      inked++;
+      // PAL.moon is #9fd8e8 -- cool, high blue. Count pixels near it: the rim
+      // is drawn at partial alpha over the canopy, so it lands desaturated.
+      if (d[i] > 90 && d[i + 2] > 130 && d[i + 2] > d[i] + 25) moonPx++;
+    }
+    out.push({ v, key, w: src.width, inked, moonPx });
+  }
+  return out;
+});
+for (const b of bakes) {
+  check(b.w > 0 && b.inked > 50, `tree variant ${b.v} baked real pixels`, `${b.inked}px`);
+  check(b.moonPx > 0, `tree variant ${b.v} has a moon rim`, `${b.moonPx}px`);
+}
+
 await p.close();
 check(errs.length === 0, 'no page errors', errs.join(' | '));
 

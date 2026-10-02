@@ -262,6 +262,17 @@ export class ForestScene extends Phaser.Scene {
     // cannot step onto is a node you cannot hunt.
     this.physics.add.collider(this.player, this.trunks);
 
+    // The lantern rides with him, additively, one depth below. Sized to the
+    // character so it reads as carried light rather than a spotlight.
+    if (this.textures.exists('lantern')) {
+      this.lantern = this.add.image(0, 0, 'lantern')
+        .setDepth(-1)
+        .setBlendMode(Phaser.BlendModes.ADD)
+        .setScale(0.9)
+        .setAlpha(0.85);
+      this.lantern.setPosition(this.player.x, this.player.y);
+    }
+
     // footstep dust
     this.dust = this.add.particles(0, 0, 'spark', {
       speed: { min: 5, max: 20 }, scale: { start: 0.15, end: 0 },
@@ -1454,6 +1465,14 @@ export class ForestScene extends Phaser.Scene {
 
     // Pollen, birds, insects. One call, no allocation, dt clamped inside.
     this.ambience?.tick(delta / 1000);
+
+    // The lantern follows the hunter, with a slow breath so it reads as a
+    // flame rather than a decal. Two writes, no allocation.
+    if (this.lantern) {
+      const t = this.time.now / 1000;
+      this.lantern.setPosition(this.player.x, this.player.y);
+      this.lantern.setAlpha(0.78 + Math.sin(t * 1.7) * 0.07);
+    }
 
     const k = this.keys;
     const t = this.touchState || new TouchState();
