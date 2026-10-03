@@ -1977,16 +1977,24 @@ export class ForestScene extends Phaser.Scene {
     // missing the burst above still plays and the find still logs.
     const genGem = `gen-gem-${topRarity}`;
     if (this.has(genGem)) {
+      // Scale is 1.35, not the 0.42 that matched the drawn sheet's 16px. The
+      // drawn gem was 16 logical px and 0.42 kept the generated 84px gem at 35px
+      // -- correct sizing, wrong read: at 35px against 134-193px trees it read
+      // as a stray pixel, so what the player actually registered was the old
+      // 'spark' burst and the satchel note rather than the painted gem. The
+      // reveal is the payoff; it has to be the biggest thing on screen for its
+      // ~800ms.
       const gem = this.add.image(node.x, node.y, genGem)
         .setDepth(10)
-        // The generated gems are 84px; the drawn sheet was 16 logical px, so
-        // scale back to roughly the size the old sprite occupied.
-        .setScale(0.42);
+        .setScale(1.35);
+      // Timings were 420ms up, then 420ms fading out -- about 840ms total,
+      // most of it transparent. The player barely had time to resolve the shape
+      // before it was gone. Now it pops, holds legibly, then drifts away.
       this.tweens.add({
-        targets: gem, y: node.y - 34, duration: 420, ease: 'Back.out',
+        targets: gem, y: node.y - 44, scale: 1.55, duration: 340, ease: 'Back.out',
         onComplete: () => {
           this.tweens.add({
-            targets: gem, y: node.y - 60, alpha: 0, duration: 420,
+            targets: gem, y: node.y - 92, alpha: 0, scale: 0.9, duration: 620, ease: 'Sine.in',
             onComplete: () => gem.destroy(),
           });
         },
