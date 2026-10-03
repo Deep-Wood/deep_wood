@@ -105,6 +105,11 @@ const FADE_ALPHA = 0.45;
 // source height (232px -> ~79px), which keeps it clearly shorter than the
 // generated trees (~143px).
 const BEACON_SCALE = 0.22;
+// The revealed gem. Drawn gems live on a 64x64 canvas with the art inset
+// (see reveal()), so 1.0 lands around 64px -- bigger than the 42px hunter,
+// smaller than the smallest tree. This is the one moment in the game that is
+// allowed to be the subject of the frame.
+const GEM_SCALE = 1.0;
 // Retained only for spawn/legacy callers. There is no world extent any more --
 // see WORLD_FAR and the chunk streamer.
 const WORLD_W = 40, WORLD_H = 30;
@@ -212,14 +217,24 @@ export class ForestScene extends Phaser.Scene {
     load('gen-crystal', 'art/crystal.png');
     load('gen-hunter', 'art/hunter.png');
     load('gen-beacon', 'art/beacon.png');
-    // One generated sprite per rarity, so the reveal shows painted gems rather
-    // than pixel art. Squared to a common 84x84 at asset-prep time so all five
-    // read at the same visual weight.
-    load('gen-gem-0', 'art/gem-quartz.png');
-    load('gen-gem-1', 'art/gem-amber.png');
-    load('gen-gem-2', 'art/gem-sapphire.png');
-    load('gen-gem-3', 'art/gem-ruby.png');
-    load('gen-gem-4', 'art/gem-diamond.png');
+    // GEMS ARE DRAWN, NOT LOADED.
+    //
+    // This used to load five AI-generated PNGs ("one generated sprite per
+    // rarity, so the reveal shows painted gems rather than pixel art"). Those
+    // files are not gems: gem-quartz.png and friends are 84x84 AI PHOTOGRAPHS --
+    // thousands of unique colours, fully opaque to the corners, no silhouette.
+    // Scaled to 67px they read on screen as a flat rectangle of the gem's
+    // average colour, which is exactly what was reported: "instead of animating
+    // the full gem, it's showing a rectangle of the gem colour". Measured on
+    // the files: quartz has 2381 unique colours and an opaque border; a
+    // faceted pixel gem has ~4.
+    //
+    // `makeGems()` is baked in buildAllTextures(), so keys 'gem0'..'gem4'
+    // already exist as real cut gems with facets, a specular hit and spark
+    // pixels. The reveal now uses those. The AI PNGs stay on disk but unused.
+    //
+    // Keys stay 'gem0'..'gem4' (NOT 'gen-gem-N') so the reveal reads the baked
+    // art without a second lookup path.
   }
 
   /** True when the generated art for a role actually loaded. */
@@ -2155,25 +2170,34 @@ export class ForestScene extends Phaser.Scene {
     const baseX = node.x - ((FAN - 1) * 26) / 2;
 
     shown.slice(0, FAN).forEach((s, i) => {
-      const genGem = `gen-gem-${s.rarity}`;
-      if (!this.has(genGem)) return;
-      // 0.8 => 67px, above the 64x68 hunter and below the smallest tree (134px).
-      const gem = this.add.image(baseX + i * 26, node.y, genGem)
+      // The DRAWN cut gem, baked by makeGems() -> keys 'gem0'..'gem4'.
+      // This was `gen-gem-${s.rarity}`, pointing at the AI PNGs, which are
+      // photographs rather than gem sprites and rendered as a solid rectangle
+      // of the gem's average colour.
+      const gemKey = `gem${s.rarity}`;
+      if (!this.has(gemKey)) return;
+      // Drawn sprites are all a 64x64 canvas (16 logical px x SCALE 4) with the
+      // art inset inside it, so the gem's real pixels occupy only the middle
+      // ~40x44 of that. At the AI PNG's old scale of 0.8 a cut gem renders about
+      // 32px -- smaller than the 42px hunter, i.e. a treasure you have to hunt
+      // for on screen. GEM_SCALE gives ~64px: clearly the subject, still well
+      // under the smallest tree (134px) so the forest is not overwhelmed.
+      const gem = this.add.image(baseX + i * 26, node.y, gemKey)
         .setDepth(10)
         .setScale(0);
       // Pop in with a small stagger so a multi-gem haul unfurls rather than
       // appearing all at once.
       this.tweens.add({
-        targets: gem, scale: 0.8, duration: 260, delay: i * 110, ease: 'Back.out',
+        targets: gem, scale: GEM_SCALE, duration: 260, delay: i * 110, ease: 'Back.out',
         onComplete: () => {
           // Hold at full size, pulsing gently, THEN leave. The old code began
           // drifting the instant the pop finished, which is why the gem was
           // never actually seen.
           this.tweens.add({
-            targets: gem, scale: 0.92, duration: 220, yoyo: true, repeat: 1, ease: 'Sine.inOut',
+            targets: gem, scale: GEM_SCALE * 1.12, duration: 220, yoyo: true, repeat: 1, ease: 'Sine.inOut',
             onComplete: () => {
               this.tweens.add({
-                targets: gem, y: node.y - 58, alpha: 0, scale: 0.62,
+                targets: gem, y: node.y - 58, alpha: 0, scale: GEM_SCALE * 0.72,
                 duration: 520, ease: 'Sine.in',
                 onComplete: () => gem.destroy(),
               });

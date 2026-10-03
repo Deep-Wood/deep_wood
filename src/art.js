@@ -1170,6 +1170,10 @@ export function buildAllTextures(scene, worldW = 1280, worldH = 960) {
   makeNodeTexture(scene);
   makeSparkTexture(scene);
   makeGlowTexture(scene);
+  // Bake the five drawn gems. Without this call makeGems() was dead code and
+  // the reveal had nothing but the AI PNGs to draw -- which is how a "rectangle
+  // of gem colour" ended up on screen. Keys 'gem0'..'gem4'.
+  makeGems(scene);
   makeSirenTexture(scene);
   makeArrowTexture(scene);
   // Ambience sprites are built here too so there is exactly one place where
