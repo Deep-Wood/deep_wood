@@ -94,6 +94,49 @@ for (const vp of VIEWPORTS) {
   check(g.anyUndefined.length === 0, 'no row renders undefined/NaN', g.anyUndefined.join(' | '));
   check(g.econTier === 0, 'a new player holds no tool', `tier ${g.econTier}`);
 
+  // --- the card must not GROW between states.
+  // The card's height used to move with its contents: buying a tool added a
+  // row, breaking it added the repair button, and a long wallet error wrapped
+  // the footer to three lines. Each of those pushed the forest down and took
+  // the playfield with it. It is locked per viewport now, so this measures
+  // every state that used to move it and asserts they are all identical.
+  const heights = await page.evaluate(async () => {
+    const s = window.__scene;
+    const H = () => Math.round(document.getElementById('season').getBoundingClientRect().height);
+    const out = { empty: H() };
+    s.simBalance = 10n ** 20n;
+    s.refreshBelt();
+    document.getElementById('belt-buy').click();
+    await new Promise((r) => setTimeout(r, 120));
+    out.withTool = H();
+    s.econ.left = 0; s.refreshBelt();
+    await new Promise((r) => setTimeout(r, 120));
+    out.broken = H();
+    s.econ.gems = [200, 5, 1, 0, 1]; s.refreshBelt(); window.renderGems?.();
+    s.beltMsg('Connected, but could not switch to chain 46630 (chain switch rejected in the wallet). Switch it in your wallet, then press again.', 'bad');
+    await new Promise((r) => setTimeout(r, 120));
+    out.worstCase = H();
+    // and nothing is silently clipped away to achieve it
+    const card = document.getElementById('season');
+    out.clipped = [...card.querySelectorAll('*')]
+      .filter((e) => e.scrollHeight > e.clientHeight + 2 && getComputedStyle(e).overflow === 'hidden')
+      .map((e) => e.id || e.className);
+    return out;
+  });
+  // NOTE the argument order: check(ok, label, detail). These were first written
+  // as check(label, condition, detail), which passed the LABEL STRING as the
+  // condition -- a non-empty string is always truthy, so all four checks passed
+  // unconditionally, including with the height lock deleted. They printed
+  // "ok true" and were watching nothing.
+  check(heights.withTool === heights.empty,
+    'the card does not grow when a tool is bought', `${heights.empty} -> ${heights.withTool}`);
+  check(heights.broken === heights.empty,
+    '  nor when it breaks', `${heights.empty} -> ${heights.broken}`);
+  check(heights.worstCase === heights.empty,
+    '  nor with a full satchel and a long error', `${heights.empty} -> ${heights.worstCase}`);
+  check(heights.clipped.length === 0,
+    '  and nothing is clipped to achieve it', heights.clipped.join(', '));
+
   // Tapping the old button position must not create anything over the game.
   const created = await page.evaluate(() => {
     const s = window.__scene;

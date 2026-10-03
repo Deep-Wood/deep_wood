@@ -563,3 +563,77 @@ button.chip:disabled { opacity: .55; cursor: default; }
  * ------------------------------------------------------------------------ */
 #hint.retired { display: none !important; }
 
+/* --- the card no longer grows ------------------------------------------
+ * Measured across the states that used to change it (empty / a tool / a broken
+ * tool with the repair row / a long error message in the footer), at three
+ * viewports:
+ *
+ *   desktop 1280x800 : 137 / 153 / 178 / 178
+ *   iphone   390x844 : 179 / 195 / 220 / 231
+ *   small    360x640 : 179 / 195 / 220 / 231
+ *
+ * 232px is the worst observed case on a phone. The card is pinned to that, so
+ * acquiring a tool, breaking it, gaining a full satchel or hitting a long
+ * error message can no longer move the wall between the HUD and the forest.
+ *
+ * How the space is kept fixed:
+ *   - the satchel always renders all five rarities, so it is a constant 5 rows
+ *     tall regardless of what has been found;
+ *   - the belt's action row is always two buttons, plus the repair button only
+ *     when broken -- so THAT row is the one that varies, and it is capped below;
+ *   - the footer message is a single line that ellipsises rather than wrapping
+ *     to three lines and pushing the bar down.
+ *
+ * The repair row is allowed to appear and disappear because a broken tool must
+ * be repairable from the card; it is kept inside the cap so the total never
+ * moves. Everything else is fixed by construction.
+ *
+ * `overflow: hidden` is the backstop: if a future row wants to exceed the cap,
+ * the card clips rather than growing. A clipped control is a visible bug; a
+ * card that grows pushes the playfield down and the player loses sight of the
+ * forest, which is the thing this was asked to stop. */
+#season {
+  /* DESKTOP lock: 178px, the worst case measured at 1280x800 (empty 137, a
+   * tool 153, broken+repair+full satchel+long message 178). */
+  height: 178px;
+  overflow: hidden;
+}
+
+/* PHONE lock: 232px. The same states at 390x844 and 360x640 measure 179 /
+ * 195 / 220 / 231, because the two columns stack and the footer message takes
+ * its own line. 232 is that worst case.
+ *
+ * Two numbers rather than one because a single lock had to be the phone's
+ * worst case, which left 54px of dead space down the bottom of the desktop card
+ * -- sparse without looking broken, but the forest starts lower for nothing on
+ * the largest screens, which is exactly what this was meant to stop.
+ *
+ * The breakpoint is on WIDTH, not height: what drives the extra space is the
+ * column stack, and that is the width. 720px is below the two-column layout's
+ * comfortable minimum. */
+@media (max-width: 720px) {
+  #season { height: 232px; }
+}
+
+/* The one message line: ellipsis instead of wrapping. A wallet error is long
+ * ("Connected, but could not switch to chain 46630 (chain switch rejected in
+ * the wallet)...") and wrapped to three lines it was the single biggest cause
+ * of the card growing between states. Full text stays in the title. */
+#hint {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* The satchel is five fixed rows: all five rarities always render (a zero is
+ * information), so its height does not depend on what the player has found. */
+#gemlist .gem { min-height: 0; }
+
+/* The belt itself must not be the thing that grows. Its actions row is the
+ * only variable part (repair appears on a break), and this keeps the whole
+ * block within the space the grid already reserved. */
+#belt {
+  min-height: 0;
+  overflow: hidden;
+}

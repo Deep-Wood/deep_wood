@@ -412,11 +412,16 @@
 
     const btn = document.getElementById('connect');
     const foot = document.getElementById('hint');
+    // Render must not crash the connect handler if the footer was ever removed
+    // from the card. `foot.title` on null threw inside render(), which is
+    // called from onWallet() -- a provider event -- so a missing node broke
+    // every later state update as well as the click.
     // #walletfoot is shared with the chain module above. When the chain is
     // live its message is the more important one, so the wallet state goes to
     // the tooltip and a data attribute; when it is offline there is nothing to
     // protect and the wallet owns the line.
     const noteWallet = (msg) => {
+      if (!foot) return;
       foot.dataset.wallet = msg;
       if (!window.deepwoodChain?.ok) {
         foot.textContent = msg;
@@ -427,9 +432,23 @@
 
     const short = (a) => a ? a.slice(0, 6) + '…' + a.slice(-4) : '';
 
+    /**
+     * A message set by the last action, which render() must not clobber.
+     *
+     * noteWallet() was always followed by render(), and render() recomputes the
+     * line from scratch -- so every specific failure ("rejected in the wallet",
+     * "no wallet detected") was overwritten within the same tick by the generic
+     * state text. The player saw "Wrong network..." or the default hint instead
+     * of why their click did nothing. Kept as a one-shot: the next successful
+     * state clears it, so it cannot go stale.
+     */
+    let pendingMsg = null;
+    const setPending = (m) => { pendingMsg = m; };
+
     function render() {
       const s = getState();
       if (s.connected) {
+        pendingMsg = null; // connected: the state text is the true one
         btn.textContent = short(s.account);
         btn.style.borderColor = '#d9a441';
         btn.title = `${s.account}\nchain ${s.chainId} · writes go to the DeepWood contract`;
@@ -442,30 +461,54 @@
         btn.textContent = 'Switch to chain ' + GAME_CHAIN_ID;
         btn.style.borderColor = '#d9a441';
         btn.title = `Wallet ${short(s.account)} is on chain ${s.chainId}; the game is on ${GAME_CHAIN_ID}.`;
-        noteWallet(`Wrong network: wallet on chain ${s.chainId}, game on ${GAME_CHAIN_ID}.`);
+        // pendingMsg wins: it says WHY the switch did not happen ("rejected in
+        // the wallet"), which is more useful than restating the mismatch the
+        // player can already see in the button label.
+        noteWallet(pendingMsg || `Wrong network: wallet on chain ${s.chainId}, game on ${GAME_CHAIN_ID}.`);
         return;
       }
       btn.textContent = 'Connect wallet';
       btn.style.borderColor = '';
       btn.title = '';
-      noteWallet('Off-chain preview. Connect a wallet to buy gems and claim tools.');
+      noteWallet(pendingMsg || 'Off-chain preview. Connect a wallet to buy a tool and sell gems.');
     }
 
-    btn.addEventListener('click', async () => {
+    /**
+     * Connect, and switch network in the SAME click.
+     *
+     * This used to check for a wrong chain BEFORE connecting and only then
+     * switch, so the very first click on a wallet sitting on mainnet just
+     * discovered the mismatch, changed the button to "Switch to chain 46630",
+     * and did nothing else. The player had to click a second time to be
+     * anywhere -- and since the button had visibly changed and looked live,
+     * the first click read as "connect is broken" rather than "one step of a
+     * two-step flow".
+     *
+     * Now: connect, and if that lands on the wrong chain, switch immediately.
+     * One click, or one clear error.
+     */
+    async function doConnect() {
       btn.disabled = true;
       try {
-        const s = getState();
-        if (s.account && !s.rightChain) {
-          const r = await switchToGameChain();
-          if (!r.ok) noteWallet('Could not switch network: ' + r.reason);
+        const r = await connect();
+
+        if (!r.ok && r.code === 'wrong-chain') {
+          // The account is real and approved. Just on the wrong network --
+          // finish the job rather than bouncing the player back.
+          const sw = await switchToGameChain();
+          if (sw.ok) {
+            render();
+            return;
+          }
+          setPending('Connected, but could not switch to chain ' + GAME_CHAIN_ID
+            + ' (' + sw.reason + '). Switch it in your wallet, then press again.');
           render();
           return;
         }
-        const r = await connect();
-        if (!r.ok && r.code !== 'wrong-chain') {
-          // Rejections and missing-provider cases are worth saying out loud;
-          // a wrong chain has its own button state below.
-          noteWallet(r.code === 'rejected' ? 'Connection rejected in the wallet.'
+
+        if (!r.ok) {
+          // Rejections and missing-provider cases are worth saying out loud.
+          setPending(r.code === 'rejected' ? 'Connection rejected in the wallet.'
             : r.code === 'no-provider' ? 'No wallet detected. Install an EIP-1193 wallet to play onchain.'
             : 'Connect failed: ' + r.reason);
         }
@@ -473,7 +516,9 @@
       } finally {
         btn.disabled = false;
       }
-    });
+    }
+
+    btn.addEventListener('click', doConnect);
 
     // Provider events (accountsChanged / chainChanged / disconnect) keep the
     // button honest without a reload.
