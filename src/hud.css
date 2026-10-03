@@ -303,34 +303,82 @@ button.chip:disabled { opacity: .55; cursor: default; }
   #season { width: 100%; }
 }
 
-/* Narrow screens: drop the three-column strip back to a single stack.
+/* Narrow screens: fold the strip into two columns instead of one long stack.
  *
- * The horizontal layout needs ~640px before the columns start fighting, and
- * explicit `grid-column`/`grid-row` placement does NOT wrap on its own -- at
- * 390px it kept pinning #status to column 3 of a one-column grid, which pushed
- * the card to 432px tall and let the chain chip spill 164px past the card edge.
- * So the placement is undone explicitly here rather than left to auto-flow.
+ * The first attempt at this restored the OLD vertical layout below 700px,
+ * reasoning that the horizontal version needed room. That was wrong for the
+ * case that matters most: a phone. At 390px the card measured 243px -- 29% of
+ * an 844px screen and closer to half on a shorter one -- because the fallback
+ * was precisely the tall stack being fixed. Desktop got the strip, phones kept
+ * the problem.
  *
- * This restores the original vertical reading order: identity, stats, progress,
- * chain, then the toolbelt -- identical to the pre-grid card. */
+ * So narrow screens get their own arrangement rather than the old one:
+ * identity and stats share the top row, chain state and the toolbelt sit side
+ * by side underneath, and the vertical rules are kept because they are what
+ * hold the columns apart. */
 @media (max-width: 700px) {
   #season {
-    grid-template-columns: minmax(0, 1fr);
-    align-items: stretch;
+    grid-template-columns:
+      minmax(0, 1fr)        /* identity + stats share the top row */
+      minmax(0, auto);      /* chain + toolbelt, as narrow as it can be */
+    align-items: start;
+    column-gap: var(--s2);
+    row-gap: var(--s1);
   }
-  .season-head,
-  .season-grid,
-  #status,
-  #belt { grid-column: 1; grid-row: auto; }
+  /* Identity top-left, stats top-right, then chain and the whole toolbelt
+   * side by side underneath. Two columns rather than one long list. */
+  .season-head { grid-column: 1; grid-row: 1; margin-bottom: 0; }
+  .season-grid { grid-column: 2; grid-row: 1; }
+  #status      { grid-column: 1; grid-row: 2; }
+  #belt        { grid-column: 2; grid-row: 2; }
+  #season > .bar { grid-column: 1 / -1; grid-row: 3; margin-top: 0; }
+
+  /* Column divider only -- no horizontal rules. On a phone the vertical rules
+     are the whole point: they are what keeps the card two columns wide instead
+     of five stacked bands. */
   #status, #belt {
-    border-left: 0;
-    padding-left: 0;
-    /* Horizontal rules return, because we are a vertical stack again. */
-    margin-top: var(--s2);
-    padding-top: var(--s2);
+    margin-top: 0; padding-top: 0; border-top: 0;
+  }
+  #status, #belt {
+    border-left: 1px solid var(--edge-dim);
+    padding-left: var(--s2);
+  }
+  /* The stats no longer get a full row to themselves, so tighten them. */
+  .season-grid { gap: var(--s1) var(--s2); }
+  .stat .k { font-size: 8px; }
+  .stat .v { font-size: 11px; }
+}
+
+/* Very narrow (small phones, and the Telegram in-app browser): the two columns
+ * stop fitting, and at this size a five-band stack is what "half the screen"
+ * looks like. Drop the secondary rows rather than shrink everything to
+ * illegibility -- the season title, the countdown, the counts and the pick are
+ * what a player actually glances at mid-hunt. */
+@media (max-width: 430px) {
+  #season {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 0;
+  }
+  .season-head, .season-grid, #status, #belt { grid-column: 1; }
+  .season-head  { grid-row: 1; }
+  .season-grid  { grid-row: 1; justify-self: end; text-align: right; }
+  #status       { grid-row: 2; }
+  #belt         { grid-row: 3; }
+  #season > .bar { grid-row: 4; margin-top: var(--s1); }
+  #status, #belt {
+    border-left: 0; padding-left: 0;
+    margin-top: var(--s1); padding-top: var(--s1);
     border-top: 1px solid var(--edge-dim);
   }
-  #season > .bar { grid-column: 1; margin-top: var(--s2); }
+  /* Chain state and the toolbelt share one row: the wallet chip sits left, the
+   * counts and the pick sit right. This is the row that was costing 35px. */
+  #status { display: flex; gap: var(--s1); }
+  .chip { font-size: 9px; padding: 1px 6px; }
+  #belt .belt-row { gap: var(--s1); }
+  /* The mode line ("PREVIEW - simulation only") restates the chain chip two
+     lines above it. On a phone that is a whole line spent saying nothing. */
+  #belt-mode { display: none; }
+  .belt-msg:empty { display: none; }
 }
 
 /* The d-pad owns the bottom-left on touch devices. Lift the satchel clear of
