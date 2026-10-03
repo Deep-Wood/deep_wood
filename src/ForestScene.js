@@ -2182,26 +2182,35 @@ export class ForestScene extends Phaser.Scene {
       // credited a gem either, since the site was already flagged dug.
       const used = consumeUse(this.belt);
       this.updateHud();
-      if (used.broke) {
-        this.flash(`Tier ${roman(used.tool.tier)} broke! It keeps its tier.`);
-        this.openBelt();
-      }
+      // Repaint the DOM toolbelt row. `consumeUse` is the ONLY thing that
+      // decrements `left`, and the belt readout the player actually sees is a
+      // DOM row rendered by `syncBeltDom()` -- which is called from
+      // refreshBelt() and the chain-sync path, and from NEITHER after a dig.
+      // So the row kept whatever it was painted with at boot and sat at
+      // "TI 20/20 HELD" indefinitely, while the Phaser HUD bar behind it did
+      // fall correctly. Two renderers of one value, only one of them repainted.
+      // This is the missing call.
+      this.refreshBelt();
 
       this.reveal(m.node);
       // Rebuild the chunk AFTER the reveal has read everything it needs off the
       // node. With scarcity (isChunkSpent) this removes the spent site.
       this.completeNodeDig();
 
-      // Warn BEFORE the pick dies rather than after. Durability is charged on
-      // the final strike, so a pick with 1 use left breaks at the exact moment a
-      // dig completes -- and the player only discovers that by pressing HUNT
-      // afterwards and being told the tool is broken. A short warning at <=2
-      // uses makes the last dig a decision instead of a surprise.
+      // One message about the pick, not two. This block used to be reached twice
+      // on a breaking dig -- a `used.broke` flash here AND the low-durability
+      // flash below -- so the last dig of a pick printed two overlapping lines
+      // about the same event. The break is the more important message, so it
+      // wins; otherwise warn that the pick is nearly spent.
+      //
+      // Warning rather than surprise is the point: durability is charged on the
+      // final strike, so without this the player only learns the pick is dead
+      // by pressing HUNT afterwards and being refused.
       const left = activeTool(this.belt)?.left ?? 0;
-      if (left <= 2) {
-        this.flash(left === 0
-          ? 'Pick broke - claim or repair a tool to hunt again.'
-          : `Pick has ${left} use${left === 1 ? '' : 's'} left.`);
+      if (used.broke) {
+        this.flash(`Tier ${roman(used.tool.tier)} broke - claim or repair a tool to hunt again.`);
+      } else if (left <= 2) {
+        this.flash(`Pick has ${left} use${left === 1 ? '' : 's'} left.`);
       }
     }
 
