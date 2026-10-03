@@ -410,6 +410,14 @@ export class ForestScene extends Phaser.Scene {
     // The shop lives in the DOM top bar, so the rows are plain descriptors here
     // and syncBeltDom() renders them.
     this.shopRows = FOR_SALE.map((rarity) => ({ rarity, label: '', buyLabel: 'buy' }));
+    // Price the shop immediately.
+    //
+    // refreshShopPrices() used to be reachable only from openBelt(), which is
+    // correct for a panel you open on demand but wrong for the top bar: the belt
+    // is now ALWAYS visible, so nothing ever calls openBelt() and the two buy
+    // buttons rendered with an empty label -- two identical "buy" buttons with
+    // no rarity and no price, indistinguishable from each other.
+    this.refreshShopPrices();
     // The toolbelt rows are built inside setupHud now, so they must be filled
     // once at boot. They were previously filled as a side effect of opening a
     // panel, which left the card blank until something happened to happen.
@@ -1488,7 +1496,16 @@ export class ForestScene extends Phaser.Scene {
       label.textContent = row.label;
       const buy = document.createElement('button');
       buy.className = 'chip btn';
-      buy.textContent = 'buy';
+      // Use the row's own button label. This was hardcoded to 'buy', so the
+      // `buyLabel` computed in refreshShopPrices() -- 'buy' when the chain is
+      // live, 'connect' when it is not -- was computed and then thrown away. The
+      // player was told to "buy" with no wallet, and the one hint that the
+      // action needed a connection never appeared.
+      buy.textContent = row.buyLabel || 'buy';
+      // Disable it when there is no chain: the click would go straight to a
+      // wallet prompt with nothing to prompt with, and a dead-looking button
+      // that still says "buy" is worse than one that says why.
+      buy.disabled = row.buyLabel === 'connect';
       buy.onclick = () => this.buyGemsOnchain(row.rarity, 1);
       wrap.append(label, buy);
       shop.appendChild(wrap);
