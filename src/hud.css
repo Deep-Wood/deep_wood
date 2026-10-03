@@ -94,6 +94,66 @@ html, body {
  * glances at. Every measure here was pulled in; the card now costs ~180px. */
 #season { padding: var(--s2) var(--s3) var(--s2); min-width: 0; }
 
+/* The card is a wide, short strip rather than a tall stack.
+ *
+ * It was SIX full-width blocks stacked vertically -- head, stat grid, progress
+ * bar, chain chips, then three toolbelt rows -- which measured 191px tall on a
+ * 1256px-wide viewport. That is a column of status sitting on top of the game,
+ * and the width was going completely unused: at 1256px there was room for all
+ * of it side by side.
+ *
+ * So the card is now a grid: identity on the left, season stats in the middle,
+ * and chain + toolbelt on the right, with the progress bar as a hairline
+ * spanning the full width underneath. Same content, same order, same ids --
+ * only the arrangement changed. Nothing is removed and no panel is added.
+ *
+ * `auto-fit` + `minmax` means this degrades on its own: as the viewport narrows,
+ * columns wrap and stack exactly as before, so a narrow phone gets the old
+ * vertical layout without needing a separate mobile rule. */
+#season {
+  display: grid;
+  grid-template-columns:
+    minmax(150px, auto)      /* identity: avatar + title + countdown ring */
+    minmax(190px, auto)      /* season stats */
+    minmax(0, auto);         /* chain + toolbelt, only as wide as it needs */
+  justify-content: start;
+  align-items: center;
+  column-gap: var(--s3);
+  row-gap: var(--s2);
+}
+/* Everything from the progress bar down spans all three columns. */
+#season > .bar { grid-column: 1 / -1; margin-top: 0; }
+#status, #belt { margin-top: 0; padding-top: 0; border-top: 0; }
+
+/* Explicit placement. These five children are NOT auto-placed: with the bar
+ * pulled out of flow order, auto-placement would drop #belt into column 1 of a
+ * second row and leave a hole under the stats. The intended arrangement is
+ *
+ *   row 1:  [ identity ] [ stats ] [ chain chips ]
+ *   row 2:  [ - - - - - - - - - - - - - - - - - ]  [ toolbelt ]
+ *   row 3:  [ ============ progress bar ============ ]
+ *
+ * The toolbelt sits under the chain chips in the same column, so those two stack
+ * in the space the old card spent on them being separate full-width bands. */
+.season-head { grid-column: 1; grid-row: 1; margin-bottom: 0; }
+.season-grid { grid-column: 2; grid-row: 1; }
+#status      { grid-column: 3; grid-row: 1; }
+#belt        { grid-column: 3; grid-row: 2; }
+#season > .bar { grid-row: 3; }
+
+/* The belt is the tallest block, so the two rules that used to divide the
+ * vertical stack now divide the COLUMNS -- one between stats and chain state,
+ * one between chain state and the toolbelt. Horizontal rules are exactly what
+ * made the old card read as a tall list. */
+#status {
+  border-left: 1px solid var(--edge-dim);
+  padding-left: var(--s3);
+}
+#belt {
+  border-left: 1px solid var(--edge-dim);
+  padding-left: var(--s3);
+}
+
 /* Player portrait. 32px, circular, in the card head beside the season title.
    Deliberately NOT over the game: it is inside the one persistent card, so it
    costs no play area. */
@@ -241,6 +301,36 @@ button.chip:disabled { opacity: .55; cursor: default; }
   #hud { grid-template-columns: minmax(0, 1fr); }
   #status { flex-direction: row; align-items: center; flex-wrap: wrap; }
   #season { width: 100%; }
+}
+
+/* Narrow screens: drop the three-column strip back to a single stack.
+ *
+ * The horizontal layout needs ~640px before the columns start fighting, and
+ * explicit `grid-column`/`grid-row` placement does NOT wrap on its own -- at
+ * 390px it kept pinning #status to column 3 of a one-column grid, which pushed
+ * the card to 432px tall and let the chain chip spill 164px past the card edge.
+ * So the placement is undone explicitly here rather than left to auto-flow.
+ *
+ * This restores the original vertical reading order: identity, stats, progress,
+ * chain, then the toolbelt -- identical to the pre-grid card. */
+@media (max-width: 700px) {
+  #season {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+  .season-head,
+  .season-grid,
+  #status,
+  #belt { grid-column: 1; grid-row: auto; }
+  #status, #belt {
+    border-left: 0;
+    padding-left: 0;
+    /* Horizontal rules return, because we are a vertical stack again. */
+    margin-top: var(--s2);
+    padding-top: var(--s2);
+    border-top: 1px solid var(--edge-dim);
+  }
+  #season > .bar { grid-column: 1; margin-top: var(--s2); }
 }
 
 /* The d-pad owns the bottom-left on touch devices. Lift the satchel clear of
