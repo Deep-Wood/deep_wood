@@ -1497,15 +1497,16 @@ export class ForestScene extends Phaser.Scene {
       label.textContent = row.label;
       const buy = document.createElement('button');
       buy.className = 'chip btn';
-      // Use the row's own button label. This was hardcoded to 'buy', so the
-      // `buyLabel` computed in refreshShopPrices() -- 'buy' when the chain is
-      // live, 'connect' when it is not -- was computed and then thrown away. The
-      // player was told to "buy" with no wallet, and the one hint that the
-      // action needed a connection never appeared.
-      buy.textContent = row.buyLabel || 'buy';
-      // Disable it when there is no chain: the click would go straight to a
-      // wallet prompt with nothing to prompt with, and a dead-looking button
-      // that still says "buy" is worse than one that says why.
+      // The button always says "buy". It USED to read "connect" when no wallet
+      // was attached, which was meant to hint that a connection was needed --
+      // but it put the word "connect" on two more buttons, so the card showed
+      // three things labelled connect and two of them were dead. The card has
+      // exactly one Connect button, in the season header, and that is the only
+      // place that offers to connect.
+      //
+      // With no chain these are genuinely inert, so they are disabled and
+      // dimmed rather than dressed up as another way to connect.
+      buy.textContent = 'buy';
       buy.disabled = row.buyLabel === 'connect';
       buy.onclick = () => this.buyGemsOnchain(row.rarity, 1);
       wrap.append(label, buy);
@@ -1518,9 +1519,29 @@ export class ForestScene extends Phaser.Scene {
     const el = document.getElementById('belt-msg');
     if (!el) return;
     el.textContent = text;
-    el.className = 'belt-msg' + (kind ? ' ' + kind : '');
+    // `has-text` is what makes the row visible. The CSS hides an empty message
+    // outright (rather than letting it hold an empty grid row open in the
+    // toolbelt), so the class has to be present whenever there IS text and
+    // absent whenever there is not -- see beltMsgClear() below.
+    el.className = 'belt-msg has-text' + (kind ? ' ' + kind : '');
     // The player acted on the one-time note; it has said what it needed to say.
     if (text) retireWalletFoot();
+
+    // Clear it after a beat.
+    //
+    // The message used to stay until the next message replaced it, which meant
+    // the last thing you did -- often "Pick broken - claim or repair a tool" --
+    // sat in the card permanently, holding a row open that nothing else wanted.
+    // Four seconds is long enough to read a transaction hash prefix.
+    clearTimeout(this._beltMsgTimer);
+    if (text) {
+      this._beltMsgTimer = setTimeout(() => {
+        const live = document.getElementById('belt-msg');
+        if (!live) return;
+        live.textContent = '';
+        live.className = 'belt-msg';
+      }, 4000);
+    }
   }
 
   /**

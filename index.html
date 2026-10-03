@@ -158,18 +158,21 @@
            sheet, then a right-hand drawer) and the complaint was never the size.
            Nothing here covers the forest and there is nothing to dismiss. -->
       <div id="belt">
-        <div class="belt-row">
-          <span class="belt-counts" id="belt-counts">COMMON 0 &middot; BURNED 0 &middot; FEES 0</span>
-          <span class="spacer"></span>
-          <span class="belt-mode" id="belt-mode">PREVIEW - simulation only</span>
-        </div>
-        <div class="belt-row" id="belt-tools"></div>
-        <div class="belt-row">
-          <span id="belt-claim-slot"></span>
-          <span class="belt-msg" id="belt-msg"></span>
-          <span class="spacer"></span>
-          <span class="belt-shop" id="belt-shop"></span>
-        </div>
+        <!-- Flattened out of three wrapper rows into five direct children.
+             The claim card and the shop used to share a wrapper with a `spacer`
+             between them, which on a phone meant the wrapper was 38px tall: the
+             claim on one line and the shop forced onto the line below it, for no
+             reason other than the spacer taking the space that would have held
+             them side by side.
+
+             As a grid the toolbelt can place each piece on the row that actually
+             fits it. The ids are unchanged, so syncBeltDom() is unaffected. -->
+        <span class="belt-counts" id="belt-counts">COMMON 0 &middot; BURNED 0 &middot; FEES 0</span>
+        <span class="belt-mode" id="belt-mode">PREVIEW - simulation only</span>
+        <div id="belt-tools"></div>
+        <span id="belt-claim-slot"></span>
+        <span class="belt-msg" id="belt-msg"></span>
+        <span class="belt-shop" id="belt-shop"></span>
       </div>
 
             <!-- Satchel: the find tally by rarity.

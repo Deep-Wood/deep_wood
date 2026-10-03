@@ -59,7 +59,15 @@ html, body {
 
 #hud {
   position: absolute;
-  inset: var(--s3) var(--s3) auto var(--s3);
+  /* Flush to the top, left and right edges: inset 0 on those three sides.
+   *
+   * It used to be `var(--s3) var(--s3) auto var(--s3)` -- a 12px margin all round,
+   * which on a phone meant a 12px gutter down both sides and a visible strip of
+   * forest between the card and the screen edge. The card is the HUD; on a phone
+   * the forest that matters is the playfield BELOW it, not a border around the
+   * status box. Bottom stays `auto` because the card must not be pinned down
+   * over the controls. */
+  inset: 0 0 auto 0;
   display: grid;
   /* One column: the top of the screen is a single card now, not a card plus a
      column of chips beside it. */
@@ -92,7 +100,18 @@ html, body {
 /* Compact. With the chain chips and the toolbelt merged in, the card had grown
  * to 278px of an 844px phone -- a third of the screen for status the player
  * glances at. Every measure here was pulled in; the card now costs ~180px. */
-#season { padding: var(--s2) var(--s3) var(--s2); min-width: 0; }
+#season {
+  /* Padding trimmed from 8/12/8 to 6/10/5. The card now bleeds to the screen
+   * edges, so this padding is the only thing separating content from the bezel
+   * -- it has to stay, but it does not have to be generous. */
+  padding: 6px 10px 5px;
+  min-width: 0;
+  /* Square off the corners the card now touches the screen with, or it reads
+   * as a floating box with the bezel shaved off rather than as part of the HUD.
+   * The bottom corners stay rounded: that edge is not against the screen. */
+  border-radius: 0 0 var(--radius) var(--radius);
+  border-top: 0; border-left: 0; border-right: 0;
+}
 
 /* The card is a wide, short strip rather than a tall stack.
  *
@@ -275,6 +294,41 @@ button.chip:disabled { opacity: .55; cursor: default; }
 .dot.warn { background: var(--warn); }
 .dot.bad  { background: var(--bad); }
 
+/* --- toolbelt ---------------------------------------------------------
+ * The belt is a grid now rather than a stack of three flex rows. Each piece
+ * goes on the row that fits it:
+ *
+ *   row 1  counts            | mode
+ *   row 2  pick / durability  | claim
+ *   row 3  shop (full width)
+ *
+ * The claim card used to be pushed off the counts row by a `spacer`, so it and
+ * the shop each took a line of their own. Row 1 has 169px of counts in a 506px
+ * column; the claim is 96px and fits beside it with room to spare.
+ * ------------------------------------------------------------------------ */
+#belt {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--s2);
+  row-gap: 3px;
+}
+#belt-counts { grid-column: 1; grid-row: 1; }
+#belt-mode   { grid-column: 2; grid-row: 1; justify-self: end; }
+#belt-tools  { grid-column: 1; grid-row: 2; }
+#belt-claim-slot { grid-column: 2; grid-row: 2; justify-self: end; }
+/* The message is the belt's only feedback channel, so when it has text it gets
+ * a line of its own rather than squeezing the row it lands in. */
+.belt-msg:not(:empty) { grid-column: 1 / -1; grid-row: 3; }
+/* An empty message must not hold a row open. `display: none` rather than
+ * `:empty { display: none }` alone, because the span often holds whitespace
+ * left over from the last message it showed, and `:empty` does not match a
+ * whitespace-only element. Without this the belt reserved a full row plus its
+ * gap for nothing, on every dig and every boot. */
+.belt-msg:empty, .belt-msg { display: none; }
+.belt-msg.has-text { display: block; }
+.belt-shop  { grid-column: 1 / -1; grid-row: 4; }
+
 /* --- satchel ------------------------------------------------------------
  * Now a permanent block INSIDE the header card, in the toolbelt column.
  *
@@ -425,7 +479,6 @@ button.chip:disabled { opacity: .55; cursor: default; }
   }
   .season-head, .season-grid, #belt { grid-column: 1 / -1; }
   .season-head  { grid-row: 1; }
-  .season-grid  { grid-row: 1; justify-self: end; text-align: right; }
   #belt         { grid-row: 2; }
   /* Chain state and the satchel share one row.
    *
@@ -433,22 +486,31 @@ button.chip:disabled { opacity: .55; cursor: default; }
    * they were costing the phone 19px for a row that has room for both. They sit
    * side by side here with the vertical rule between them doing the separating,
    * which is the same trick the desktop grid uses. */
-  /* Stats and satchel take the left column here, because the 430px layout puts
-   * the header and the full-width belt on their own rows above. */
-  .season-grid  { grid-row: 3; grid-column: 1; justify-self: stretch; text-align: left; }
+  /* Stats get a full-width row of their own -- four columns of ~85px each is
+   * comfortable, whereas splitting them against the chain chip gave them 46px
+   * apiece and made the labels the tightest thing on the card.
+   *
+   * The satchel and the chain chip then share the row below. They were on rows
+   * of their own, which cost a full row (~21px) for a 30px satchel and a 14px
+   * chip that fit side by side without trouble. */
+  .season-grid  { grid-row: 3; grid-column: 1 / -1; justify-self: stretch; text-align: left; }
   #satchel      { grid-row: 4; grid-column: 1; }
-  #status       { grid-row: 3; grid-column: 2; }
+  #status       { grid-row: 4; grid-column: 2; align-self: center; }
   #season > .bar { grid-row: 5; margin-top: var(--s1); }
+  /* 3px, not var(--s1)+var(--s1). Each stacked block carried 4px of margin and
+   * 4px of padding above itself, and with four stacked blocks that was 32px of
+   * the phone card's 188px spent on air. A 1px rule already separates them. */
   #belt {
     border-left: 0; padding-left: 0;
-    margin-top: var(--s1); padding-top: var(--s1);
+    margin-top: 3px; padding-top: 3px;
     border-top: 1px solid var(--edge-dim);
   }
   #satchel {
-    margin-top: var(--s1); padding-top: var(--s1);
+    margin-top: 3px; padding-top: 3px;
     border-top: 1px solid var(--edge-dim);
     border-left: 1px solid var(--edge-dim); padding-left: var(--s2);
   }
+  #season > .bar { margin-top: 3px; }
   /* Chain state and the toolbelt share one row: the wallet chip sits left, the
    * counts and the pick sit right. This is the row that was costing 35px. */
   #status { display: flex; gap: var(--s1); }
@@ -461,12 +523,8 @@ button.chip:disabled { opacity: .55; cursor: default; }
    * `#belt-msg` and the mode line are already hidden or empty here, so a row
    * that only holds CLAIM and the shop has nothing in it but buttons and can
    * sit beside the counts rather than below them. */
-  #belt .belt-row + .belt-row { margin-top: 0; }
-  /* The spacer exists to push CLAIM and the shop apart on one line. On a phone
-   * there is no room for that: it was claiming 240px of a 340px row and
-   * forcing the shop onto its own line underneath. Removed here, so CLAIM and
-   * the shop share the line the way they do on desktop. */
-  #belt .spacer { display: none; }
+  /* The belt grid carries over unchanged: counts + mode, pick + claim, shop.
+   * These were once `.belt-row` rules for wrapper divs that no longer exist. */
   #belt-counts { font-size: 10px; }
   .chip.btn { font-size: 9px; padding: 1px 5px; }
   .belt-tool { font-size: 10px; }
