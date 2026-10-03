@@ -94,6 +94,23 @@ html, body {
  * glances at. Every measure here was pulled in; the card now costs ~180px. */
 #season { padding: var(--s2) var(--s3) var(--s2); min-width: 0; }
 
+/* Player portrait. 32px, circular, in the card head beside the season title.
+   Deliberately NOT over the game: it is inside the one persistent card, so it
+   costs no play area. */
+@media (max-height: 680px) {
+  .avatar { width: 26px; height: 26px; }
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: 0 0 auto;
+  border: 1px solid rgba(196, 154, 76, .55);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .5);
+}
+
 .season-head {
   display: flex; align-items: center; gap: var(--s2);
   margin-bottom: var(--s1);

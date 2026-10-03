@@ -1977,24 +1977,23 @@ export class ForestScene extends Phaser.Scene {
     // missing the burst above still plays and the find still logs.
     const genGem = `gen-gem-${topRarity}`;
     if (this.has(genGem)) {
-      // Scale is 1.35, not the 0.42 that matched the drawn sheet's 16px. The
-      // drawn gem was 16 logical px and 0.42 kept the generated 84px gem at 35px
-      // -- correct sizing, wrong read: at 35px against 134-193px trees it read
-      // as a stray pixel, so what the player actually registered was the old
-      // 'spark' burst and the satchel note rather than the painted gem. The
-      // reveal is the payoff; it has to be the biggest thing on screen for its
-      // ~800ms.
+      // Scale is 0.8 (67px). This has been wrong in both directions: 0.42 gave
+      // 35px, which vanished, and the fix to 1.35 overshot to 113px -- larger
+      // than any tree and bigger than the hunter, so a common quartz overshadowed
+      // the whole scene. 67px sits ABOVE the 64x68 hunter and below the smallest
+      // tree (134px), so the gem reads as the focus without becoming the
+      // subject: the player is still hunting, not staring at a trophy.
       const gem = this.add.image(node.x, node.y, genGem)
         .setDepth(10)
-        .setScale(1.35);
-      // Timings were 420ms up, then 420ms fading out -- about 840ms total,
-      // most of it transparent. The player barely had time to resolve the shape
-      // before it was gone. Now it pops, holds legibly, then drifts away.
+        .setScale(0.8);
+      // The 1.55 peak is gone -- that was the overshoot, taking the gem to 130px
+      // mid-pop. Now a modest 0.95 peak, then a shorter drift. The reveal still
+      // gets its beat (340ms pop, then away) without dominating the frame.
       this.tweens.add({
-        targets: gem, y: node.y - 44, scale: 1.55, duration: 340, ease: 'Back.out',
+        targets: gem, y: node.y - 30, scale: 0.95, duration: 300, ease: 'Back.out',
         onComplete: () => {
           this.tweens.add({
-            targets: gem, y: node.y - 92, alpha: 0, scale: 0.9, duration: 620, ease: 'Sine.in',
+            targets: gem, y: node.y - 66, alpha: 0, scale: 0.6, duration: 520, ease: 'Sine.in',
             onComplete: () => gem.destroy(),
           });
         },
