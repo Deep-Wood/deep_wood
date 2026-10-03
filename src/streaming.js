@@ -92,4 +92,44 @@ export function epochFor(depleted, cx, cy, idx) {
   return n;
 }
 
+/**
+ * True once a chunk's site has been dug OUT ENTIRELY.
+ *
+ * This is what makes beacons scarce. The epoch counter alone does the opposite
+ * of what a player wants: digging bumped the epoch, `completeNodeDig()` rebuilt
+ * the chunk, and `describeChunk(..., epoch+1)` produced a site at a NEW random
+ * position -- so claiming one made another appear right where you were standing.
+ * That reads as the forest spawning extra treasure rather than being consumed.
+ *
+ * So a dug site stays dug. The epoch still advances (the world keeps its
+ * bookkeeping) but it is capped: once `RESPAWN_AFTER_EPOCHS` digs have happened
+ * at this site, the site is retired for good and the chunk renders with NO beacon
+ * until the player walks far enough that a new chunk generates.
+ *
+ * The cap is what stops the world from becoming literally unplayable: the forest
+ * is effectively unbounded, so retiring a site costs the player one beacon in
+ * one chunk rather than ending the hunt. A long enough walk always finds new
+ * ground.
+ */
+export const RESPAWN_AFTER_EPOCHS = 1;
+
+/**
+ * Has this chunk's single site been dug past the respawn allowance?
+ *
+ * The epoch is the count of digs that site has taken: `markNodeDug` increments
+ * it BEFORE the chunk is rebuilt, so a chunk rebuilt after its first dig loads
+ * with epoch 1. "Dug once" therefore means epoch >= 1, and with
+ * RESPAWN_AFTER_EPOCHS = 1 the site is spent from then on.
+ *
+ * The key MUST come from `nodeKey()`, which formats `${cx}:${cy}:${idx}:${epoch}`
+ * with COLONS. An earlier version inlined `` `${cx},${cy},0,0` `` with COMMAS,
+ * which matched nothing -- every lookup missed, `isChunkSpent` was always
+ * false, and beacons respawned exactly as before while the code looked correct.
+ * Never hand-build this key.
+ */
+export function isChunkSpent(depleted, cx, cy) {
+  const digs = depleted[nodeKey(cx, cy, 0, 0)] | 0;
+  return digs >= RESPAWN_AFTER_EPOCHS;
+}
+
 export { CHUNK, chunkOf, describeChunk, nodeKey };

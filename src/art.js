@@ -991,6 +991,95 @@ export function makeGlowTexture(scene) {
 }
 
 /**
+ * A rotating beacon light: a radial core with two opposed CONES, like a
+ * lighthouse or a siren sweeping a beam.
+ *
+ * The plain `glow` texture is a symmetric blob. Symmetric light does not read
+ * as a beacon -- it reads as a smudge, which is exactly the complaint that the
+ * beacons "don't glow". A real rotating light is asymmetric: bright where the
+ * beam points, dark on the far side, and it visibly sweeps.
+ *
+ * So this bakes one frame of a rotating two-beam lamp. `ForestScene` rotates
+ * copies of it, which is both cheaper and smoother than redrawing cones per
+ * frame, and the core stays centred while the cones sweep.
+ */
+export function makeSirenTexture(scene) {
+  const key = 'siren';
+  if (scene.textures.exists(key)) return key;
+  const R = 128;                       // texture is 256x256
+  const C = R;
+  const t = scene.textures.createCanvas(key, R * 2, R * 2);
+  t.setFilter(Phaser.Textures.FilterMode.LINEAR);
+  const ctx = t.getContext();
+  ctx.clearRect(0, 0, R * 2, R * 2);
+
+  // Two opposed beams. CONE_SPREAD is how wide each wedge opens; WEDGE_START
+  // fades the beam in from the core so it does not look like a hard triangle.
+  const CONE_SPREAD = 0.62;            // radians of half-width
+  const WEDGE_START = 0.06;
+  for (const dir of [0, Math.PI]) {
+    const g = ctx.createRadialGradient(C, C, WEDGE_START * R, C, C, R);
+    g.addColorStop(0.00, 'rgba(210,255,248,0.00)');
+    g.addColorStop(0.10, 'rgba(190,255,244,0.42)');
+    g.addColorStop(0.42, 'rgba(140,235,220,0.17)');
+    g.addColorStop(1.00, 'rgba(110,215,200,0.00)');
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(C, C);
+    // Draw the wedge rotated into place, clipped to the radial falloff above.
+    ctx.arc(C, C, R, dir - CONE_SPREAD, dir + CONE_SPREAD);
+    ctx.closePath();
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // The hot core, on top and full-circle so the source reads as the origin.
+  const core = ctx.createRadialGradient(C, C, 0, C, C, R * 0.42);
+  core.addColorStop(0.00, 'rgba(255,255,255,0.92)');
+  core.addColorStop(0.22, 'rgba(214,255,248,0.60)');
+  core.addColorStop(0.55, 'rgba(150,240,225,0.20)');
+  core.addColorStop(1.00, 'rgba(120,225,205,0.00)');
+  ctx.fillStyle = core;
+  ctx.fillRect(0, 0, R * 2, R * 2);
+
+  t.refresh();
+  return key;
+}
+
+/**
+ * A chunky chevron for the off-screen beacon pointer.
+ *
+ * Drawn pointing RIGHT (0 rad) so the sprite can simply be rotated to the target
+ * bearing with `setRotation`. Origin (0.5, 0.5) keeps the rotation about the
+ * arrow's middle rather than a corner.
+ */
+export function makeArrowTexture(scene) {
+  const key = 'arrow';
+  if (scene.textures.exists(key)) return key;
+  const R = 40;                       // 80x80
+  const t = scene.textures.createCanvas(key, R * 2, R * 2);
+  t.setFilter(Phaser.Textures.FilterMode.LINEAR);
+  const ctx = t.getContext();
+  ctx.clearRect(0, 0, R * 2, R * 2);
+  const c = R;
+  // Solid body plus a soft halo, so the arrow reads over both the dark forest
+  // floor and a bright canopy edge.
+  for (const [spread, fill] of [[1.0, 'rgba(150,240,225,0.30)'], [0.72, 'rgba(216,255,248,0.95)']]) {
+    ctx.beginPath();
+    ctx.moveTo(c + 26 * spread, c);
+    ctx.lineTo(c - 12 * spread, c - 22 * spread);
+    ctx.lineTo(c - 4 * spread, c);
+    ctx.lineTo(c - 12 * spread, c + 22 * spread);
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+  }
+  t.refresh();
+  return key;
+}
+
+/**
  * The whole forest floor as ONE world-sized texture.
  *
  * Not a TileSprite: a runtime canvas texture cannot tile in this Phaser build
@@ -1081,6 +1170,8 @@ export function buildAllTextures(scene, worldW = 1280, worldH = 960) {
   makeNodeTexture(scene);
   makeSparkTexture(scene);
   makeGlowTexture(scene);
+  makeSirenTexture(scene);
+  makeArrowTexture(scene);
   // Ambience sprites are built here too so there is exactly one place where
   // textures come into existence, and a missing one fails loudly at boot rather
   // than silently rendering nothing 60 times a second.

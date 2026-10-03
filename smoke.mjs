@@ -327,8 +327,12 @@ const sorted = await page.evaluate(async () => {
   const s = window.__scene;
   // Find a tree, stand just below its base, and confirm the player sorts in
   // FRONT of it. Then stand above another and confirm they sort BEHIND.
-  const trees = s.sortables.filter((o) => o.texture && o.texture.key.startsWith('tree'));
-  if (trees.length < 2) return { ok: false, reason: 'not enough trees' };
+  // Both the generated trees ("gen-tree-a"/"gen-tree-b") and the drawn fallback
+  // ("tree0".."tree3") must match. Matching only "tree" found ZERO trees once
+  // the AI art landed, and the assertion reported "not enough trees" -- which
+  // looks like a y-sort failure but is really the filter being stale.
+  const trees = s.sortables.filter((o) => o.texture && /^(gen-)?tree/.test(o.texture.key));
+  if (trees.length < 2) return { ok: false, reason: `not enough trees (found ${trees.length})` };
 
   // 1) player below a tree's base -> player draws in front (depth greater)
   const t1 = trees[0];

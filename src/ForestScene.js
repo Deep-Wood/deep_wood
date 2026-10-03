@@ -35,7 +35,7 @@ import { rollHunt, RARITY_NAME } from './engine.js';
 import {
   CHUNK, chunkOf, describeChunk, nodeKey,
   residentChunks, staleChunks, LOAD_RADIUS,
-  depletionStore, saveDepletion, epochFor,
+  depletionStore, saveDepletion, epochFor, isChunkSpent,
 } from './streaming.js';
 import {
   newToolbelt, activeTool, consumeUse, claimTool, canClaim,
@@ -104,7 +104,7 @@ const FADE_ALPHA = 0.45;
 // The beacon is a marker on the forest floor, so it is drawn at ~0.34 of its
 // source height (232px -> ~79px), which keeps it clearly shorter than the
 // generated trees (~143px).
-const BEACON_SCALE = 0.34;
+const BEACON_SCALE = 0.22;
 // Retained only for spawn/legacy callers. There is no world extent any more --
 // see WORLD_FAR and the chunk streamer.
 const WORLD_W = 40, WORLD_H = 30;
@@ -674,39 +674,64 @@ export class ForestScene extends Phaser.Scene {
     }
 
     const nodes = [];
+    // SCARCITY: a chunk whose site has been fully dug renders with NO beacon.
+    // Previously the epoch bump alone respawned one at a fresh random spot the
+    // moment the chunk rebuilt, so claiming a gem put a new beacon under the
+    // player's feet -- the opposite of scarce. The chunk keeps its trees,
+    // props and ambience; only the treasure goes.
+    const chunkSpent = isChunkSpent(this.epochByKey, cx, cy);
     data.nodes.forEach((n) => {
+      if (chunkSpent) return;
       // A dug node reappears at a new spot: render at the epoch this chunk's
       // depletion record says it is currently on.
       const epoch = epochFor(this.epochByKey, cx, cy, n.idx);
       const spot = epoch === 0 ? n : describeChunk(this.seasonSeed, cx, cy, epoch).nodes.find((q) => q.idx === n.idx);
       if (!spot) return;
 
-      // The light sits at the beacon's CAP, not at its base. The old glow was
-      // pinned to `spot.y + 6` -- dirt level -- which was correct when the
-      // marker was a flat ground decal, and wrong for a tall stake: it lit the
-      // soil under the post and left the lantern itself dark. Origin is (0.5,
-      // 0.85), so the cap lands roughly 0.8 of the sprite's height above the
-      // anchor.
-      // The beacon was drawn at its full 232px, which made it TALLER than the
-      // trees it stands among (143px) -- a stake should read as undergrowth
-      // marking the floor, not as the largest thing in the scene. BEACON_SCALE
-      // puts it at roughly a third of tree height, so the light has to be what
-      // draws the eye rather than the silhouette.
+      // The beacon is a stake with a lamp on top, so the light lives at the CAP.
+      // BEACON_SCALE is 0.22 now: at 0.34 the AI beacon was ~79px, still taller
+      // than the hunter (68px) and half a tree, which kept reading as scenery
+      // rather than as a marker. At 0.22 it is ~51px -- shorter than the hunter,
+      // far below the smallest tree -- so the LIGHT draws the eye, not the
+      // silhouette. That is the intent: a stake should not compete with the
+      // trees, it should be findable.
       const genBeacon = this.has('gen-beacon');
       const beaconH = (genBeacon ? 232 : 64) * (genBeacon ? BEACON_SCALE : 1);
-      const capY = spot.y - beaconH * (genBeacon ? 0.78 : 0.25);
+      const capY = spot.y - beaconH * (genBeacon ? 0.72 : 0.25);
 
-      const glow = this.add.image(spot.x, capY, 'glow')
-        .setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.55).setScale(0.55);
-      glow.setDepth(spot.y - 1);
-      this.sortables.push(glow);
-      objs.push(glow);
+      // SIREN: a rotating two-beam lamp instead of a symmetric blob. The beam
+      // sweeps around the cap continuously, which is what makes it read as an
+      // active beacon rather than a smudge of glow. Two copies at right angles
+      // would strobe; one copy rotating at a per-beacon phase offset looks like
+      // a field of independent lamps.
+      const hasSiren = this.has('siren');
+      if (hasSiren) {
+        const beam = this.add.image(spot.x, capY, 'siren')
+          .setBlendMode(Phaser.BlendModes.ADD)
+          .setAlpha(0.42)
+          .setScale(0.62);
+        beam.setDepth(spot.y - 1);
+        beam.setData('baseAlpha', 0.42);
+        this.tweens.add({
+          targets: beam, angle: 360, duration: 2600 + n.idx * 211,
+          repeat: -1, ease: 'Linear',
+        });
+        // Breathing brightness on top of the rotation: a lamp that only spins
+        // can still look painted. This is the pulse that sells it as a light.
+        this.tweens.add({
+          targets: beam, alpha: 0.62, duration: 900 + n.idx * 71,
+          yoyo: true, repeat: -1, ease: 'Sine.inOut',
+        });
+        this.sortables.push(beam);
+        objs.push(beam);
+      }
 
-      // A second, tighter core so the cap reads as a genuine light source
-      // rather than a sprite with a haze behind it.
+      // A tight hot core at the cap, so the source itself is the brightest
+      // point even when the beam points away.
       const core = this.add.image(spot.x, capY, 'glow')
-        .setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.5).setScale(0.2);
+        .setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.62).setScale(0.17);
       core.setDepth(spot.y - 1);
+      core.setData('baseAlpha', 0.62);
       this.sortables.push(core);
       objs.push(core);
 
@@ -728,16 +753,15 @@ export class ForestScene extends Phaser.Scene {
       objs.push(marker);
       nodes.push(marker);
 
+      // The stake bobs. It no longer carries an alpha pulse of its own -- that
+      // duty belongs to the core and the beam now, and pulsing the whole sprite
+      // made the beacon read as blinking signage.
       this.tweens.add({
         targets: marker, y: spot.y - 3, duration: 900 + n.idx * 37,
         yoyo: true, repeat: -1, ease: 'Sine.inOut',
       });
       this.tweens.add({
-        targets: glow, alpha: 0.40, duration: 1100 + n.idx * 53,
-        yoyo: true, repeat: -1, ease: 'Sine.inOut',
-      });
-      this.tweens.add({
-        targets: core, alpha: 0.28, duration: 760 + n.idx * 41,
+        targets: core, alpha: 0.40, duration: 760 + n.idx * 41,
         yoyo: true, repeat: -1, ease: 'Sine.inOut',
       });
     });
@@ -1741,6 +1765,10 @@ export class ForestScene extends Phaser.Scene {
       this.lantern.setAlpha(0.78 + Math.sin(t * 1.7) * 0.07);
     }
 
+    // Off-screen beacon pointer. Cheap: one pass over `nodes` (25 resident) and
+    // early-outs on the common case where a beacon IS on screen.
+    this.updateBeaconArrow();
+
     const k = this.keys;
     const t = this.touchState || new TouchState();
 
@@ -1899,6 +1927,64 @@ export class ForestScene extends Phaser.Scene {
     return best;
   }
 
+  /**
+   * A screen-edge arrow pointing at the nearest beacon that is NOT visible.
+   *
+   * Only RESIDENT beacons are candidates (`this.nodes`, ~25 of them). That is a
+   * deliberate limit rather than a shortcut: the resident set is exactly the
+   * chunk the player can walk to next, so the arrow never points at something
+   * two minutes away. Pointing at a truly global nearest would require
+   * generating chunks ahead of the player, which is what the streaming radius
+   * deliberately avoids.
+   *
+   * Hidden when any beacon is on screen -- an arrow next to a beacon you can
+   * already see is noise. It also hides while a dig is running, so it does not
+   * swing around during the reveal.
+   */
+  updateBeaconArrow() {
+    if (!this.has('arrow')) return;
+    const cam = this.cameras.main;
+    const view = cam.worldView;
+    const w = view.width, h = view.height;
+
+    let best = null, bestD = Infinity;
+    for (const n of this.nodes) {
+      if (!n.active || n.getData('used')) continue;
+      const inside = n.x >= view.x && n.x <= view.x + w
+                  && n.y >= view.y && n.y <= view.y + h;
+      if (inside) { best = null; break; }   // one visible beacon is enough
+      const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, n.x, n.y);
+      if (d < bestD) { bestD = d; best = n; }
+    }
+
+    if (!best || this.busy) {
+      this.compassArrow?.setVisible(false);
+      return;
+    }
+
+    if (!this.compassArrow) {
+      this.compassArrow = this.add.image(0, 0, 'arrow')
+        .setScrollFactor(0)          // screen space, not world space
+        .setDepth(9000)              // above the world, below the DOM card
+        .setOrigin(0.5, 0.5);
+    }
+    const a = this.compassArrow;
+    a.setVisible(true);
+
+    // Clamp the target into the viewport with a margin, then aim at that. The
+    // arrow rides the edge rather than leaving the screen, which is the whole
+    // point of an off-screen indicator.
+    const M = 42;
+    const tx = Phaser.Math.Clamp(best.x, view.x + M, view.x + w - M);
+    const ty = Phaser.Math.Clamp(best.y, view.y + M, view.y + h - M);
+    a.setPosition(tx - cam.scrollX, ty - cam.scrollY);
+    a.setRotation(Phaser.Math.Angle.Between(a.x, a.y, best.x - cam.scrollX, best.y - cam.scrollY));
+
+    // Fade in rather than pop, and breathe so it reads as live guidance.
+    const t = this.time.now / 1000;
+    a.setAlpha(0.72 + Math.sin(t * 3.4) * 0.16);
+  }
+
   doHunt(node) {
     const tool = activeTool(this.belt);
     if (!tool) {
@@ -1916,17 +2002,7 @@ export class ForestScene extends Phaser.Scene {
     // tween below is still animating.
     this.markNodeDug(node);
 
-    // Brief dig: hold the current facing, pulse the node, then reveal.
-    this.player.anims.stop();
-    this.tweens.add({
-      targets: node, alpha: 0.2, scale: 0.45, duration: 220, yoyo: true,
-      onComplete: () => {
-        this.reveal(node);
-        // Rebuild the chunk AFTER the reveal has read everything it needs off
-        // the node, so the emptied spot respawns somewhere else in the chunk.
-        this.completeNodeDig();
-      },
-    });
+    this.startDig(node);
 
     const used = consumeUse(this.belt);
     this.updateHud();
@@ -1937,6 +2013,97 @@ export class ForestScene extends Phaser.Scene {
         this.openBelt();
       });
     }
+  }
+
+  /**
+   * The dig itself: the hunter actually works the ground before anything comes
+   * up. Previously this was a 220ms alpha pulse on the NODE with the player
+   * frozen -- the hunter held a pick and never used it, which read as the
+   * animation being missing rather than as a dig.
+   *
+   * Now: three pick strikes over DIG_MS, each landing on the node and kicking
+   * up dirt, then the reveal.
+   *
+   * Driven by a TWEEN CHAIN, not `time.delayedCall`. Measured: in the headless
+   * smoke environment a plain `this.time.delayedCall(300, ...)` never fires --
+   * the scene clock is not advancing there -- so a delayedCall-driven dig cannot
+   * be verified by the test suite at all, and `busy` would latch true forever.
+   * Tweens do advance (the walk cycle and every beacon animation depend on
+   * them), so the whole dig is sequenced off chained tweens. That also means the
+   * dig is driven by the same clock as the rest of the motion, which keeps it in
+   * step with frame-rate compensation.
+   */
+  startDig(node) {
+    this.player.anims.stop();
+    this.player.setTexture(this.has('gen-hunter') ? 'gen-hunter' : 'hunter');
+
+    const DIG_MS = 2100;
+    const STRIKES = 3;
+    const gap = Math.round(DIG_MS / STRIKES) - 120;
+    // Face the site before swinging. `angle` is set by movement, and a hunter
+    // facing away while the pick lands behind him looks broken.
+    this.player.setRotation(Math.atan2(node.y - this.player.y, node.x - this.player.x));
+
+    // `this.tweens.chain({ tweens: [...] })`, NOT tween.then() -- Phaser 3.90's
+    // Tween object has no `.chain()` or `.then()` method (verified against the
+    // live prototype: only `nextState`). The chain builder is on the MANAGER.
+    const tweens = [];
+    for (let i = 0; i < STRIKES; i++) {
+      const power = 0.5 + i * 0.25;          // later strikes hit harder
+      tweens.push({
+        targets: this.player, duration: 1,
+        onComplete: () => this.strike(node, power),
+      });
+      // Hold the beat between strikes rather than sleeping.
+      tweens.push({ targets: this.player, duration: gap });
+    }
+
+    this.tweens.chain({
+      targets: this.player,
+      tweens,
+      onComplete: () => {
+        this.player.setScale(1);
+        this.player.setRotation(0);
+        this.reveal(node);
+        // Rebuild the chunk AFTER the reveal has read everything it needs off
+        // the node. With scarcity (isChunkSpent) this removes the spent site.
+        this.completeNodeDig();
+      },
+    });
+  }
+
+  /** One pick impact: the hunter rocks, the site shakes, dirt flies. */
+  strike(node, power) {
+    if (!node.active) return;
+    const sx = this.player.scaleX, sy = this.player.scaleY;
+    this.tweens.add({
+      targets: this.player,
+      scaleX: sx * (1 + 0.16 * power), scaleY: sy * (1 - 0.13 * power),
+      duration: 110, yoyo: true, ease: 'Quad.out',
+    });
+    this.tweens.add({
+      targets: node,
+      x: node.x + (this._strikeFlip ? 3 : -3),
+      alpha: 1 - 0.18 * power,
+      duration: 90, yoyo: true, ease: 'Quad.out',
+    });
+    this._strikeFlip = !this._strikeFlip;
+
+    const dirt = this.add.particles(node.x, node.y - 6, 'spark', {
+      speed: { min: 20, max: 60 * power }, angle: { min: 200, max: 340 },
+      gravityY: 220, scale: { start: 0.22, end: 0 },
+      lifespan: 380, quantity: 1, emitting: false,
+    });
+    dirt.setDepth(node.depth - 1);
+    dirt.explode(3 + Math.round(power * 6));
+
+    // Sparks at the cap, so a beacon being struck is visible from a distance.
+    const cap = this.add.particles(node.x, node.y - 24, 'spark', {
+      speed: { min: 10, max: 45 * power },
+      scale: { start: 0.3, end: 0 }, lifespan: 300,
+      quantity: 1, emitting: false,
+    });
+    cap.explode(2);
   }
 
   reveal(node) {
@@ -1968,37 +2135,63 @@ export class ForestScene extends Phaser.Scene {
     });
     burst.explode(8);
 
-    // the gem pops up and floats
-    // The revealed gem is the GENERATED sprite for its rarity. The drawn
-    // pixel-art gem is retired and no longer even baked -- it used to be
-    // `gem${topRarity}` with the generated art as an optional override, which
-    // meant the old gem could reappear any time an asset failed to load. Now
-    // there is one gem per rarity and it is the painted one. If the asset is
-    // missing the burst above still plays and the find still logs.
-    const genGem = `gen-gem-${topRarity}`;
-    if (this.has(genGem)) {
-      // Scale is 0.8 (67px). This has been wrong in both directions: 0.42 gave
-      // 35px, which vanished, and the fix to 1.35 overshot to 113px -- larger
-      // than any tree and bigger than the hunter, so a common quartz overshadowed
-      // the whole scene. 67px sits ABOVE the 64x68 hunter and below the smallest
-      // tree (134px), so the gem reads as the focus without becoming the
-      // subject: the player is still hunting, not staring at a trophy.
-      const gem = this.add.image(node.x, node.y, genGem)
+    // The revealed gems are the GENERATED sprites for their rarities. The
+    // drawn pixel-art gem is retired and no longer even baked.
+    //
+    // Two real defects fixed here, both reported as "the gems are not what
+    // appears when the hunter gets one":
+    //
+    // 1. ONLY THE BEST GEM WAS DRAWN. A haul of 4 quartz + 1 ruby rendered a
+    //    single ruby sprite, so the quartz that made up most of the find never
+    //    appeared at all. Now every rarity with a non-zero count gets its own
+    //    sprite, fanned out so a mixed haul is legible.
+    // 2. IT WAS GONE IN ~300ms. The pop ran 300ms and the drift 520ms, so by
+    //    the time a player looked down at their catch it had already faded.
+    //    It now holds at full size long enough to be read, then leaves.
+    const shown = [];
+    result.counts.forEach((c, r) => { if (c > 0) shown.push({ rarity: r, count: c }); });
+    // Cap the fan-out: a pathological haul should not carpet the screen.
+    const FAN = Math.min(shown.length, 5);
+    const baseX = node.x - ((FAN - 1) * 26) / 2;
+
+    shown.slice(0, FAN).forEach((s, i) => {
+      const genGem = `gen-gem-${s.rarity}`;
+      if (!this.has(genGem)) return;
+      // 0.8 => 67px, above the 64x68 hunter and below the smallest tree (134px).
+      const gem = this.add.image(baseX + i * 26, node.y, genGem)
         .setDepth(10)
-        .setScale(0.8);
-      // The 1.55 peak is gone -- that was the overshoot, taking the gem to 130px
-      // mid-pop. Now a modest 0.95 peak, then a shorter drift. The reveal still
-      // gets its beat (340ms pop, then away) without dominating the frame.
+        .setScale(0);
+      // Pop in with a small stagger so a multi-gem haul unfurls rather than
+      // appearing all at once.
       this.tweens.add({
-        targets: gem, y: node.y - 30, scale: 0.95, duration: 300, ease: 'Back.out',
+        targets: gem, scale: 0.8, duration: 260, delay: i * 110, ease: 'Back.out',
         onComplete: () => {
+          // Hold at full size, pulsing gently, THEN leave. The old code began
+          // drifting the instant the pop finished, which is why the gem was
+          // never actually seen.
           this.tweens.add({
-            targets: gem, y: node.y - 66, alpha: 0, scale: 0.6, duration: 520, ease: 'Sine.in',
-            onComplete: () => gem.destroy(),
+            targets: gem, scale: 0.92, duration: 220, yoyo: true, repeat: 1, ease: 'Sine.inOut',
+            onComplete: () => {
+              this.tweens.add({
+                targets: gem, y: node.y - 58, alpha: 0, scale: 0.62,
+                duration: 520, ease: 'Sine.in',
+                onComplete: () => gem.destroy(),
+              });
+            },
           });
         },
       });
-    }
+      // A count badge when one rarity contributes several stones.
+      if (s.count > 1) {
+        const label = this.add.text(baseX + i * 26, node.y + 26, `x${s.count}`, {
+          fontFamily: 'ui-monospace, monospace', fontSize: '13px', color: '#e8f6ff',
+        }).setOrigin(0.5).setDepth(11).setAlpha(0.9);
+        this.tweens.add({
+          targets: label, y: node.y - 30, alpha: 0, duration: 900, delay: 200,
+          ease: 'Sine.in', onComplete: () => label.destroy(),
+        });
+      }
+    });
 
     // collapse the spent node
     this.tweens.add({

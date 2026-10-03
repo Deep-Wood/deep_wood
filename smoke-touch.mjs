@@ -63,9 +63,13 @@ const pad = await touchPage.evaluate(() => {
 });
 
 check('on-screen controls appear on a touch device', pad.padVisible, `${pad.buttons.length} buttons`);
-check('the pad has all four directions plus HUNT, BELT and BOARD',
-  ['up', 'left', 'right', 'down', 'hunt', 'belt', 'board'].every((b) => pad.buttons.includes(b)),
-  pad.buttons.join(','));
+// The BELT button was deliberately REMOVED: the toolbelt is now permanent rows
+  // inside the top card, so there is nothing left to open. Asserting 'belt'
+  // here meant this check had been failing since that refactor and nobody
+  // noticed, because the suite reports one FAIL line among dozens of passes.
+  check('the pad has all four directions plus HUNT and BOARD',
+    ['up', 'left', 'right', 'down', 'hunt', 'board'].every((b) => pad.buttons.includes(b)),
+    pad.buttons.join(','));
 check('the d-pad centre is a dead zone, not a fifth direction', !pad.hubIsInteractive);
 check('controls are inside the phone viewport',
   pad.viewport[0] === 390 && pad.viewport[1] === 844,
