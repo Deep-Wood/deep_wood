@@ -43,20 +43,22 @@ for (const vp of VIEWPORTS) {
       domBelt: !!document.getElementById('belt'),
       domCounts: (document.getElementById('belt-counts') || {}).textContent || '',
       domMode: (document.getElementById('belt-mode') || {}).textContent || '',
-      domTools: document.getElementById('belt-tools') ? document.getElementById('belt-tools').children.length : 0,
-      domToolBtns: document.querySelectorAll('#belt-tools button').length,
-      domClaim: (document.getElementById('belt-claim') || {}).textContent || '',
-      domClaimBtn: !!document.getElementById('belt-claim'),
-      domShop: document.getElementById('belt-shop') ? document.getElementById('belt-shop').children.length : 0,
-      domShopBtns: document.querySelectorAll('#belt-shop button').length,
+      // One tool, not a list (ECONOMY-SPEC.md section 1).
+      domTool: (document.getElementById('belt-tool') || {}).textContent || '',
+      domToolName: (document.querySelector('#belt-tool .tn') || {}).textContent || '',
+      domActions: document.querySelectorAll('#belt-actions button').length,
+      domBuy: (document.getElementById('belt-buy') || {}).textContent || '',
+      domBuyBtn: !!document.getElementById('belt-buy'),
+      domSellBtn: !!document.getElementById('belt-sell'),
+      domGems: [...document.querySelectorAll('#gemlist .gem')].length,
       // the belt must be inside the top-bar grid flow, not floating over the game
       beltRect: (() => { const b = document.getElementById('belt'); if (!b) return null;
         const r = b.getBoundingClientRect(); return { top: Math.round(r.top), h: Math.round(r.height), w: Math.round(r.width) }; })(),
       hasBeltButton: labels.includes('TOOLBELT'),
       boardButton: labels.includes('BOARD'),
       hudKids,
-      toolRows: s.beltRows ? s.beltRows.length : 0,
-      shopRows: s.shopRows ? s.shopRows.length : 0,
+      // The economy state is a single tool object, not rows.
+      econTier: s.econ ? s.econ.tier : null,
       // the card must stay inside the viewport
       cardBottom: 0,
       vh: s.scale.height,
@@ -76,19 +78,21 @@ for (const vp of VIEWPORTS) {
   check(g.beltInSeason, 'the toolbelt is inside the season card');
   check(g.statusInSeason, 'the chain/wallet chips are inside the season card');
   check(g.domBelt, 'the toolbelt is in the DOM top bar');
-  check(/COMMON/.test(g.domCounts), 'carries the gem counts', JSON.stringify(g.domCounts));
+  check(g.domCounts.length > 0, 'carries the gem counts', JSON.stringify(g.domCounts));
   check(g.domMode.length > 0, 'carries the on-chain / preview line', JSON.stringify(g.domMode.slice(0, 28)));
-  check(g.domTools >= 1, 'carries the tool row(s)', `${g.domTools}`);
-  check(g.domClaimBtn && g.domClaim.length > 1, 'claim button present', JSON.stringify(g.domClaim));
-  check(g.domShop === 2, 'carries both gem-shop rows', `${g.domShop}`);
-  check(g.domShopBtns === 2, 'both shop buy buttons are clickable', `${g.domShopBtns}`);
+  check(g.domTool.length > 0, 'carries the tool row', JSON.stringify(g.domTool.slice(0, 40)));
+  check(g.domBuyBtn && /^buy tool Wood/.test(g.domBuy.trim()),
+    'the buy button names the first tool and its price', JSON.stringify(g.domBuy.trim()));
+  check(g.domSellBtn, 'the sell-gems button is present');
+  check(g.domActions >= 2, 'carries both ETH actions', `${g.domActions}`);
+  check(g.domGems === 5, 'the satchel lists all five rarities', `${g.domGems}`);
   check(g.beltRect && g.beltRect.h > 20 && g.beltRect.w > 100, 'the belt row has real size',
     g.beltRect ? `${g.beltRect.w}x${g.beltRect.h} at y=${g.beltRect.top}` : 'missing');
   check(g.beltRect && g.beltRect.top + g.beltRect.h <= vp.h * 0.6,
     'the belt stays in the top bar, clear of the playfield',
     g.beltRect ? `bottom ${g.beltRect.top + g.beltRect.h} of ${vp.h}` : '');
   check(g.anyUndefined.length === 0, 'no row renders undefined/NaN', g.anyUndefined.join(' | '));
-  check(g.shopRows === 2, 'the scene still tracks both shop rows', `${g.shopRows}`);
+  check(g.econTier === 0, 'a new player holds no tool', `tier ${g.econTier}`);
 
   // Tapping the old button position must not create anything over the game.
   const created = await page.evaluate(() => {
@@ -117,7 +121,9 @@ for (const vp of VIEWPORTS) {
   // reachability.
   const clicks = await page.evaluate(async () => {
     const out = [];
-    for (const sel of ['#belt-claim', '#belt-shop button', '#belt-tools button']) {
+    // The new card's controls. Existence is not reachability -- these must
+    // actually be pressable without throwing.
+    for (const sel of ['#belt-buy', '#belt-sell']) {
       const el = document.querySelector(sel);
       if (!el) { out.push(`${sel}:absent`); continue; }
       try { el.click(); out.push(`${sel}:clicked`); }

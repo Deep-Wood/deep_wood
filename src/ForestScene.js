@@ -38,14 +38,32 @@ import {
   depletionStore, saveDepletion, epochFor, isChunkSpent,
 } from './streaming.js';
 import {
-  newToolbelt, activeTool, consumeUse, claimTool, canClaim,
-  repairTool, canRepair, equip, toolCost, repairCost, durabilityOf,
-  huntCostWei, expectedHuntWei, roman, fmt, eth, MAX_TIER,
-} from './tools.js';
+  newPlayer, heldTool, toolName, nextTier, buyOrUpgradeLabel,
+  canBuyTool, buyTool, canRepair, repairTool, repairNeeds,
+  canRedeem, redeemGems, redeemValueWei, creditGems, consumeUse, fmtGem,
+} from './player.js';
+// `fmtEth` below is the ECONOMY formatter (wei -> trimmed ETH), and it is what
+// the new belt prices use. The season/ROI strings still use season.js's own
+// `eth`, aliased to `seasonEth`, because those pad to fixed widths for
+// right-aligned leaderboard columns and this one trims trailing zeros.
+// `fmtEth` is the ECONOMY formatter (wei -> trimmed ETH), used by the new belt
+// prices. The season/ROI strings keep season.js's own `eth`, aliased
+// `seasonEth`, because those pad to fixed widths for right-aligned leaderboard
+// columns while this one trims trailing zeros.
+// RARITY_NAME is NOT re-imported here: engine.js already exports it and the
+// game rolls hunts with it, so there is exactly one definition of the gem
+// names. A second import of the same binding is a redeclaration error, and it
+// would have been two sources of truth for the same string anyway.
+import {
+  RARITY_SHORT, TIER_NAME, FACE_VALUE,
+  toolPrice, durabilityOf, repairCost, fmtRepair, fmtEth,
+  huntValueWei, netHuntWei, paybackHunts, cyclesToPayback, dropTable,
+  REDEEM_FLOOR,
+} from './economy.js';
 import { DROP_TABLE, PRICE } from './engine.js';
 import {
   newSeasonRecord, recordHunt, rank as rankSeason, topN, standing,
-  seasonClock, roiPct, eth as fmtEth, onRoiBoard, shortOfFloor,
+  seasonClock, roiPct, eth as seasonEth, fmt, onRoiBoard, shortOfFloor, recordToolSpend,
   TOP_N,
 } from './season.js';
 import {
@@ -179,10 +197,18 @@ export class ForestScene extends Phaser.Scene {
     this.seed = '0x5eed';
     this.busy = false;
     this.finds = [];
-    // Tool progression lives in a belt, not on the scene, so the same rules
-    // the contract enforces (sequential, one per tier, one active) apply
-    // here. See src/tools.js.
-    this.belt = newToolbelt();
+    // One tool, no rotation -- ECONOMY-SPEC.md section 1. Player starts with
+    // NOTHING: no free Tier I any more. Buying Wood with ETH is the first
+    // action in the game, which is the entire spine of the new economy.
+    // The economy state. Deliberately NOT `this.player`: that name is already
+    // the hunter SPRITE further down this constructor, and reusing it silently
+    // overwrote one with the other. The symptom was `p.gems is undefined`,
+    // because `player` had become a texture rather than a player.
+    this.econ = newPlayer();
+    // Simulated wallet. Preview mode has no chain and no wallet, so buy/upgrade
+    // and sell need a balance to check against. This becomes a real
+    // eth_getBalance when the redeployed contract is wired in.
+    this.simBalance = 0n;
     // Season board. Off-chain: hunts are recorded here as they happen, and
     // the same totals would come off the chain once hunts settle.
     this.board = newSeasonRecord(1, Math.floor(Date.now() / 1000));
@@ -407,17 +433,9 @@ export class ForestScene extends Phaser.Scene {
     // are. As shipped, 3 was a duplicate of 1 and could not answer that.
     this.ambience = SAFE === 1 || SAFE === 2 ? null : createAmbience(this);
     this.setupHud();
-    // The shop lives in the DOM top bar, so the rows are plain descriptors here
-    // and syncBeltDom() renders them.
-    this.shopRows = FOR_SALE.map((rarity) => ({ rarity, label: '', buyLabel: 'buy' }));
-    // Price the shop immediately.
-    //
-    // refreshShopPrices() used to be reachable only from openBelt(), which is
-    // correct for a panel you open on demand but wrong for the top bar: the belt
-    // is now ALWAYS visible, so nothing ever calls openBelt() and the two buy
-    // buttons rendered with an empty label -- two identical "buy" buttons with
-    // no rarity and no price, indistinguishable from each other.
-    this.refreshShopPrices();
+    // The gem shop is gone. Gems are now earned by hunting, spent on repairs,
+    // or sold for ETH -- they are never bought, so there is no shop to price
+    // (ECONOMY-SPEC.md section 1).
     // The toolbelt rows are built inside setupHud now, so they must be filled
     // once at boot. They were previously filled as a side effect of opening a
     // panel, which left the card blank until something happened to happen.
@@ -515,6 +533,12 @@ export class ForestScene extends Phaser.Scene {
         }
         recordHunt(this.board, n, counts, tier, now - 1000);
       }
+      // Commitment is a TOOL purchase now, not a per-hunt fee, so hunt count no
+      // longer buys board eligibility. Without this every rival sits at
+      // ethSpent 0, fails the 0.005 ETH splay floor, and the demo board is
+      // empty except the player. Scaled with hunt count so ROI still ranks the
+      // dedicated players above the casual ones.
+      recordToolSpend(this.board, n, BigInt(hunts) * 100_000_000_000_000n);
     });
   }
 
@@ -1155,12 +1179,12 @@ export class ForestScene extends Phaser.Scene {
 
   updateHud() {
     this.paintSeasonStats();
-    const tool = activeTool(this.belt);
+    const tool = heldTool(this.econ);
     const pct = tool ? tool.left / tool.max : 0;
     this.durBar.width = 200 * pct;
     this.durBar.fillColor = pct > 0.4 ? 0x3f8a52 : pct > 0.15 ? 0xd9a441 : 0xd83a5a;
 
-    const tierName = tool ? `Tool ${roman(tool.tier)}` : 'TOOL BROKEN';
+    const tierName = tool ? tool.name : (this.econ.tier ? 'BROKEN' : 'NO TOOL');
     const uses = tool ? `${tool.left}/${tool.max}` : '--';
 
     // Name the controls the player actually has. Telling a phone player to
@@ -1171,7 +1195,7 @@ export class ForestScene extends Phaser.Scene {
       : 'WASD move  -  SPACE hunt  -  L board';
 
     this.tierText.setText(
-      `${tierName}  ${uses} uses   ${fmt(this.belt.common)} Common   ${hint}`
+      `${tierName}  ${uses} uses   ${hint}`
     );
     this.tierText.setColor(tool ? '#9fbc9f' : '#d83a5a');
 
@@ -1272,7 +1296,7 @@ export class ForestScene extends Phaser.Scene {
       const isMe = r.address === String(me).toLowerCase();
       c.add(this.add.text(cx + 14, y,
         `${String(r.rank).padEnd(4)}${(isMe ? 'YOU' : r.address.slice(0, 10)).padEnd(12)}` +
-        `${roiPct(r).padStart(11)}${fmtEth(r.bestWei).padStart(12)}`, {
+        `${roiPct(r).padStart(11)}${seasonEth(r.bestWei).padStart(12)}`, {
         fontFamily: 'monospace', fontSize: '12px',
         color: isMe ? '#fff8d0' : r.rank <= 3 ? '#3f8a52' : '#cfe0cf',
       }));
@@ -1300,7 +1324,7 @@ export class ForestScene extends Phaser.Scene {
           fontFamily: 'monospace', fontSize: '12px', color: '#d9a441',
         }));
         c.add(this.add.text(cx + 14, cy + 14 + ph - 74 + 14,
-          `${fmtEth(mine.ethSpent)} spent, need ${fmtEth(short)} more`, {
+          `${seasonEth(mine.ethSpent)} spent, need ${fmtEth(short)} more`, {
           fontFamily: 'monospace', fontSize: '11px', color: '#7a8a7a',
         }));
       }
@@ -1379,139 +1403,217 @@ export class ForestScene extends Phaser.Scene {
    * TOOLBELT button is gone entirely.
    */
   syncBeltDom() {
-    const el = document.getElementById('belt');
-    if (!el) return;
-    const belt = this.belt;
-
     const q = (id) => document.getElementById(id);
-    q('belt-counts').textContent =
-      `COMMON ${fmt(belt.common)} · BURNED ${fmt(belt.burned)} · FEES ${fmt(belt.feesPaid)}`;
+    if (!q('belt')) return;
+    const p = this.econ;
+
+    // --- counts: the satchel balance is the only gem number on the card.
+    // The old line read "COMMON n . BURNED n . FEES n" while the satchel beside
+    // it showed the same gem as "Qtz n". One gem, two counters, and they
+    // diverged on the first spend because only one of them was decremented.
+    // Now: total held and total found, summed across every rarity.
+    const held = p.gems.reduce((a, b) => a + b, 0);
+    const found = p.found.reduce((a, b) => a + b, 0);
+    q('belt-counts').textContent = held > 0
+      ? `${fmtGem(held)} gems \u00b7 ${fmtGem(found)} found`
+      : 'no gems yet';
 
     const m = chainMode();
     const mode = q('belt-mode');
     mode.textContent = m === 'onchain'
-      ? 'ON-CHAIN — writes go to the DeepWood contract'
+      ? 'ON-CHAIN \u2014 writes go to the DeepWood contract'
       : m === 'offline'
-        ? 'OFFLINE — no contract configured'
-        : 'PREVIEW — simulation only, nothing is on-chain';
+        ? 'OFFLINE \u2014 no contract configured'
+        : 'PREVIEW \u2014 simulation only';
     mode.style.color = m === 'onchain' ? 'var(--ok)' : 'var(--warn)';
 
-    // --- tool rows, each with its repair / equip action
-    // Interacting with the card keeps it awake.
-    for (const id of ['belt-claim-slot', 'belt-shop']) {
-      // The idle-fade version of this handler called the keep-awake helper.
-      // When the one-shot note replaced the fade that helper was deleted, and
-      // this call was left behind -- so every click on CLAIM or a shop buy
-      // button threw a ReferenceError on the one path a player cannot work
-      // around. Caught by Sentry in production, not by the checks: the harness
-      // asserted these buttons existed and never pressed one. The call text is
-      // deliberately not quoted here so a grep for it stays meaningful.
-      q(id)?.addEventListener('click', () => retireWalletFoot(), true);
+    this.syncToolDom();
+    this.syncActionDom();
+  }
+
+  /** The held tool: name, durability, and the repair affordance.
+   *
+   * Durability is drawn as a pip row rather than "18/35" because the number
+   * alone does not answer the question the player is actually asking at a
+   * break, which is "how much of this have I got left".
+   */
+  syncToolDom() {
+    const el = document.getElementById('belt-tool');
+    if (!el) return;
+    const p = this.econ;
+    el.textContent = '';
+
+    if (p.tier === 0) {
+      el.className = 'belt-tool empty';
+      el.textContent = 'no tool \u2014 buy Wood to start hunting';
+      return;
     }
 
-    const tools = q('belt-tools');
-    tools.textContent = '';
-    // The claim button lives in the same row as the tools, so the belt is three
-    // rows tall instead of five.
-    const claimSlot = q('belt-claim-slot');
-    belt.tools.forEach((t, index) => {
-      const net = expectedHuntWei(DROP_TABLE[t.tier], PRICE) - huntCostWei(t.tier);
-      const row = document.createElement('div');
-      row.className = 'belt-tool'
-        + (t.left === 0 ? ' broke' : (t.active ? ' held' : ''));
-      row.textContent = `T${roman(t.tier)} ${t.left}/${t.max} `
-        + (t.left === 0 ? 'BROKEN' : t.active ? 'HELD' : 'stowed')
-        + ` · net ${eth(net)}`;
+    const name = toolName(p.tier);
+    const broke = p.left === 0;
+    el.className = 'belt-tool' + (broke ? ' broke' : '');
 
-      let label = null;
-      if (t.left === 0) {
-        const cost = repairCost(t.tier);
-        const r = canRepair(belt, index);
-        label = document.createElement('button');
-        label.className = 'chip btn';
-        label.textContent = `FIX ${fmt(cost)}`;
-        label.disabled = !r.ok;
-        if (r.ok) label.onclick = () => {
-          const res = repairTool(belt, index);
-          this.beltMsg(`Repaired T${roman(t.tier)} — ${res.fee} to treasury.`, 'ok');
-          // Gems are spent: the satchel has nothing left to say.
-          window.retireSatchel?.();
-          this.refreshBelt();
-          this.updateHud();
-        };
-      } else if (!t.active) {
-        label = document.createElement('button');
-        label.className = 'chip btn';
-        label.textContent = 'EQUIP';
-        label.onclick = () => {
-          const res = equip(belt, index);
-          if (!res.ok) { this.beltMsg(res.reason, 'bad'); return; }
-          this.beltMsg(`Equipped T${roman(t.tier)}.`, 'ok');
-          this.refreshBelt();
-          this.updateHud();
-        };
-      }
-      if (label) row.appendChild(label);
-      tools.appendChild(row);
-    });
+    const label = document.createElement('span');
+    label.className = 'tn';
+    label.textContent = name;
 
-    // --- claim the next tier
-    // Clear the slot first. `shop` does `textContent = ''` before rebuilding and
-    // the tool rows are emptied the same way, but the claim slot was only ever
-    // appended to -- so every syncBeltDom() stacked ANOTHER live button on top
-    // of the old one. Duplicate ids and all.
-    //
-    // The visible symptom was that the card stopped responding: the stale copies
-    // kept the label and disabled state they were built with, so a CLAIM the
-    // player could now afford still sat greyed out at the top of the stack
-    // (document.getElementById returns the FIRST match, which is always the
-    // oldest). Meanwhile clicks landed on the invisible newest copy, and the
-    // duplicates stacked every refresh -- 17 of them on the card in the
-    // screenshot. Belt refreshes run on every dig, every chain sync and every
-    // repair, so this compounded fast.
-    claimSlot.textContent = '';
-    const claim = document.createElement('button');
-    claim.className = 'chip btn';
-    claim.id = 'belt-claim';
-    claimSlot.appendChild(claim);
-    const next = belt.tools.reduce((a, t) => Math.max(a, t.tier), 0) + 1;
-    if (next > MAX_TIER) {
-      claim.textContent = 'ALL OWNED';
-      claim.disabled = true;
+    // Pips: one per use. At 40 max (Gold) they are still under 3px each at
+    // belt width, which is why durability rises only 5 per tier.
+    const pips = document.createElement('span');
+    pips.className = 'pips';
+    for (let i = 0; i < p.max; i++) {
+      const pip = document.createElement('i');
+      if (i >= p.left) pip.className = 'spent';
+      pips.appendChild(pip);
+    }
+    const cnt = document.createElement('span');
+    cnt.className = 'cnt';
+    cnt.textContent = `${p.left}/${p.max}`;
+
+    el.append(label, pips, cnt);
+
+    if (broke) {
+      const tag = document.createElement('span');
+      tag.className = 'tag bad';
+      tag.textContent = 'BROKEN';
+      el.appendChild(tag);
+    }
+  }
+
+  /** The two ETH actions: buy/upgrade the tool, and sell gems.
+   *
+   * Both are here rather than one combined button because they spend the same
+   * currency for unrelated reasons, and a player mid-decision (upgrade now or
+   * sell these gems and repair?) needs to see both prices at once.
+   */
+  syncActionDom() {
+    const el = document.getElementById('belt-actions');
+    if (!el) return;
+    el.textContent = '';
+    const p = this.econ;
+    const balance = this.walletBalanceWei();
+
+    // --- buy tool / upgrade tool
+    const nt = nextTier(p);
+    const buy = document.createElement('button');
+    buy.className = 'chip btn act';
+    buy.id = 'belt-buy';
+    if (nt > 5) {
+      buy.textContent = 'MAX TIER';
+      buy.disabled = true;
     } else {
-      const cost = toolCost(next);
-      const c = canClaim(belt, next);
-      claim.textContent = `CLAIM ${roman(next)} — ${fmt(cost)}`;
-      claim.disabled = !c.ok;
-      claim.onclick = () => this.doClaim(next);
+      const cost = toolPrice(nt);
+      const chk = canBuyTool(p, nt, balance);
+      buy.textContent = `${buyOrUpgradeLabel(p)} ${toolName(nt)} ${fmtEth(cost)}`;
+      buy.disabled = !chk.ok;
+      // The disabled button explains nothing on its own -- canBuyTool already
+      // computed why -- so the reason is surfaced here as a title. The old
+      // CLAIM button was disabled with no reason at all, which was the one
+      // control in the card that could fail silently.
+      if (!chk.ok) buy.title = chk.reason;
+      buy.onclick = () => this.doBuyTool(nt);
     }
+    el.appendChild(buy);
 
-    // --- gem shop. Common and Uncommon only: Rare and above are hunt-only and
-    // the contract reverts RarityNotForSale, so offering them would be a lie.
-    const shop = q('belt-shop');
-    shop.textContent = '';
-    for (const row of this.shopRows || []) {
-      const wrap = document.createElement('div');
-      wrap.className = 'row';
-      const label = document.createElement('span');
-      label.textContent = row.label;
-      const buy = document.createElement('button');
-      buy.className = 'chip btn';
-      // The button always says "buy". It USED to read "connect" when no wallet
-      // was attached, which was meant to hint that a connection was needed --
-      // but it put the word "connect" on two more buttons, so the card showed
-      // three things labelled connect and two of them were dead. The card has
-      // exactly one Connect button, in the season header, and that is the only
-      // place that offers to connect.
-      //
-      // With no chain these are genuinely inert, so they are disabled and
-      // dimmed rather than dressed up as another way to connect.
-      buy.textContent = 'buy';
-      buy.disabled = row.buyLabel === 'connect';
-      buy.onclick = () => this.buyGemsOnchain(row.rarity, 1);
-      wrap.append(label, buy);
-      shop.appendChild(wrap);
+    // --- sell gems
+    const sell = document.createElement('button');
+    sell.className = 'chip btn act';
+    sell.id = 'belt-sell';
+    const held = p.gems.reduce((a, b) => a + b, 0);
+    const val = redeemValueWei(p);
+    sell.textContent = held > 0 ? `sell gems ${fmtEth(val)}` : 'sell gems';
+    const rchk = canRedeem(p);
+    sell.disabled = !rchk.ok;
+    if (!rchk.ok) sell.title = rchk.reason;
+    sell.onclick = () => this.doSellGems();
+    el.appendChild(sell);
+
+    // --- repair, shown only when broken and affordable. It is a gem action
+    // dressed like the ETH ones, so it sits on its own row under them.
+    if (p.tier > 0 && p.left === 0) {
+      const r = document.createElement('button');
+      r.className = 'chip btn act repair';
+      r.id = 'belt-repair';
+      const need = repairNeeds(p);
+      const chk = canRepair(p);
+      r.textContent = `repair ${fmtRepair(p.tier)}`;
+      r.disabled = !chk.ok;
+      if (!chk.ok) r.title = chk.reason;
+      r.onclick = () => this.doRepair();
+      el.appendChild(r);
     }
+  }
+
+  /**
+   * ETH the player can spend, in wei.
+   *
+   * Preview mode has no wallet and no chain, so this is a simulated balance.
+   * When the redeployed contract is wired in, this becomes a real
+   * `eth_getBalance` on connect and nothing else changes -- every caller
+   * already routes through here rather than reading a balance itself.
+   */
+  walletBalanceWei() {
+    return this.simBalance ?? 0n;
+  }
+
+  /**
+   * Buy the first tool, or upgrade to the next one.
+   *
+   * Upgrading REPLACES the held tool. There is no stow and no way back: the
+   * durability you had on Bronze is gone, which is the whole tension in
+   * "repair with gems, or pay ETH and start fresh".
+   */
+  doBuyTool(tier) {
+    const p = this.econ;
+    const res = buyTool(p, tier, this.simBalance);
+    if (!res.ok) { this.beltMsg(res.reason, 'bad'); return; }
+
+    this.simBalance -= (res.cost ?? toolPrice(tier));
+    // Tool spend is the ROI denominator now that hunts are free (spec s12 item
+    // 8). Without this the player buys Wood and the board still reads 0 spent,
+    // so ROI divides by zero and Rank shows nothing.
+    recordToolSpend(this.board, this.wallet ?? '0xplayer', res.cost ?? toolPrice(tier));
+
+    const verb = res.replaced ? 'Upgraded to' : 'Bought';
+    const extra = res.replaced ? ` (replaced ${res.replaced})` : '';
+    this.beltMsg(
+      `${verb} ${toolName(tier)}${extra} \u2014 ${res.left}/${res.max} uses`,
+      'ok',
+    );
+    this.refreshBelt();
+    window.renderGems?.();
+    this.updateHud();
+  }
+
+  /** Repair with gems. Burns them outright; no treasury claim (spec s10). */
+  doRepair() {
+    const res = repairTool(this.econ);
+    if (!res.ok) { this.beltMsg(res.reason, 'bad'); return; }
+    const p = this.econ;
+    this.beltMsg(
+      `Repaired ${toolName(p.tier)} \u2014 ${p.left}/${p.max} uses`,
+      'ok',
+    );
+    this.refreshBelt();
+    window.renderGems?.();
+    this.updateHud();
+  }
+
+  /** Sell every gem for ETH at 90% of face value, above the 0.005 floor. */
+  doSellGems() {
+    const p = this.econ;
+    const check = canRedeem(p);
+    if (!check.ok) { this.beltMsg(check.reason, 'bad'); return; }
+    const held = p.gems.reduce((a, b) => a + b, 0);
+    const res = redeemGems(p);
+    if (!res.ok) { this.beltMsg(res.reason, 'bad'); return; }
+
+    this.simBalance += res.value;
+    this.beltMsg(`Sold ${fmtGem(held)} gems for ${fmtEth(res.value)}.`, 'ok');
+    this.refreshBelt();
+    // The sale zeroes the whole balance, so every satchel tile drops to zero.
+    window.renderGems?.();
+    this.updateHud();
   }
 
   /** A one-line status under the claim button. */
@@ -1551,27 +1653,16 @@ export class ForestScene extends Phaser.Scene {
    * granting a tool locally after an on-chain attempt is what this branch
    * exists to prevent.
    */
-  doClaim(next) {
-    const belt = this.belt;
-    if (next > MAX_TIER) {
-      this.beltMsg('Every tier owned.', 'ok');
-      return;
-    }
-    const check = canClaim(belt, next);
-    if (!check.ok) { this.beltMsg(check.reason, 'bad'); return; }
-    if (onchainActive()) { this.claimToolOnchain(next); return; }
-    const res = claimTool(belt, next);
-    this.beltMsg(`Claimed T${roman(next)} — ${res.fee} to treasury.`, 'ok');
-    // Gems are spent: the satchel has nothing left to say.
-    window.retireSatchel?.();
-    this.flash(`Tier ${roman(next)} tool claimed`);
-    this.refreshBelt();
-    this.updateHud();
-  }
 
+
+  /**
+   * There is no belt panel to open -- it is a permanent card. Kept as a repaint
+   * because three call sites (TAB key, the broken-pick path, touch controls)
+   * still invoke it, and all of them want exactly this: re-read the chain and
+   * repaint the rows.
+   */
   openBelt() {
     this.refreshBelt();
-    this.refreshShopPrices();
   }
 
   closeBelt() { /* nothing to close: the toolbelt is a row in the top bar */ }
@@ -1581,71 +1672,10 @@ export class ForestScene extends Phaser.Scene {
    * a hardcoded number, and the credit is confirmed by re-reading
    * gemsOf(account, rarity) before the local balance moves.
    */
-  async buyGemsOnchain(rarity, count) {
-    if (this.busy) return;
-    if (!onchainActive()) {
-      this.beltMsg('Connect a wallet to buy gems on chain.', 'bad');
-      return;
-    }
-    this.busy = true;
-    this.beltMsg('Buying on chain...');
 
-    const price = await priceFor(rarity);
-    if (price === null) {
-      this.busy = false;
-      this.beltMsg('Could not read the price from the contract.', 'bad');
-      return;
-    }
-
-    const r = await buyGemsOnchain(rarity, count, price);
-    this.busy = false;
-
-    if (!r.ok) {
-      this.beltMsg(r.code === 'reverted'
-          ? 'Purchase reverted on chain - nothing credited.'
-          : `Purchase failed: ${r.reason || r.code}`, 'bad');
-      this.refreshBelt();
-      this.updateHud();
-      return;
-    }
-
-    // Confirmed: the contract's gem balance actually rose. Mirror it.
-    this.belt.common += count;
-    this.beltMsg(`Bought ${count} ${RARITY_NAME_ONSALE[rarity]} for ${eth(r.spentWei)} (tx ${String(r.hash).slice(0, 10)}...).`, 'ok');
-    this.refreshBelt();
-    this.updateHud();
-  }
 
   /** Paint the shop rows with live prices read from the contract. */
-  async refreshShopPrices() {
-    if (!this.shopRows || !this.shopRows.length) return;
-    for (const row of this.shopRows) {
-      const p = await priceFor(row.rarity);
-      // The label is a plain string now: the shop lives in the DOM top bar, so
-      // there is no Phaser Text to write into and nothing to destroy across the
-      // await. syncBeltDom() renders whatever string is here.
-      row.label = p === null
-        ? `${RARITY_NAME_ONSALE[row.rarity]} — price unavailable`
-        : `${RARITY_NAME_ONSALE[row.rarity]} ${eth(p)}`;
-      if (row.buyLabel) row.buyLabel = onchainActive() ? 'buy' : 'connect';
 
-      // The await above yields, and anything can happen before it resumes: the
-      // panel can be closed, rebuilt, or the scene torn down. A destroyed Phaser
-      // Text has its canvas nulled, so setText() on it throws from inside the
-      // renderer -- `updateUVs -> setCutPosition -> setSize -> updateText ->
-      // setText -> drawImage` on null. That was reported as an uncaught
-      // pageerror reading "Cannot read properties of null (reading
-      // 'drawImage')", which looks exactly like the game crashing.
-      //
-      // It is reachable on a real phone by opening and closing the toolbelt in
-      // quick succession, so it is fixed here rather than filtered out of the
-      // harness. The liveness check handles the ordinary case; the guard is
-      // there because Phaser's internals decide what a destroyed Text still
-      // exposes, and an async write to a destroyed object must not be able to
-      // take down the frame regardless.
-    }
-    this.syncBeltDom();
-  }
 
   /**
    * Claim a tier on chain.
@@ -1654,36 +1684,7 @@ export class ForestScene extends Phaser.Scene {
    * reply to a duplicate claim is a receipt that says "success" while the
    * count never moves, so a successful send is not treated as a grant.
    */
-  async claimToolOnchain(tier) {
-    if (this.busy) return;
-    this.busy = true;
-    this.claimBtn.setText('claiming on chain...');
-    this.beltMsg(`Sending claim for Tier ${roman(tier)}...`);
 
-    const r = await claimToolOnchain(tier);
-
-    this.busy = false;
-    this.claimBtn.setText('');
-
-    if (!r.ok) {
-      // Explicitly say nothing was granted. A failed on-chain claim must not
-      // leave the player believing they have a tool.
-      this.beltMsg(r.code === 'reverted'
-          ? 'Claim reverted on chain - nothing granted.'
-          : `Claim failed: ${r.reason || r.code}`, 'bad');
-      this.refreshBelt();
-      this.updateHud();
-      return;
-    }
-
-    // The contract now reports the tool. Mirror it into the local belt by
-    // reading it back, rather than assuming what the grant produced.
-    await this.syncBeltFromChain();
-    this.beltMsg(`Tier ${roman(tier)} claimed on chain (tx ${String(r.hash).slice(0, 10)}...).`, 'ok');
-    this.flash(`Tier ${roman(tier)} tool claimed on chain`);
-    this.refreshBelt();
-    this.updateHud();
-  }
 
   /**
    * Pull the player's tools from the contract into the local belt.
@@ -1692,29 +1693,7 @@ export class ForestScene extends Phaser.Scene {
    * rebuilt from what the contract actually holds rather than from what the
    * client hoped happened.
    */
-  async syncBeltFromChain() {
-    if (!onchainActive()) return;
-    const { getAccount } = await import('./wallet.js');
-    const { connect } = await import('./chain.js');
-    const { config } = await import('./config.js');
-    const account = getAccount();
-    if (!account || !config.gameAddress) return;
-    let chain_ = this._chainReader;
-    if (!chain_) {
-      chain_ = await connect({ rpcUrl: config.rpcUrl, address: config.gameAddress });
-      this._chainReader = chain_;
-    }
-    const count = await chain_.toolCount(account);
-    const tools = [];
-    for (let i = 0; i < count; i++) {
-      // toolAt takes an INDEX, not a tier - it reverts at index >= count.
-      const [tier, durability, active] = await chain_.toolAt(account, i);
-      const max = durabilityOf(tier);
-      tools.push({ tier, left: durability, max, active });
-    }
-    if (!tools.length) return; // never empty a belt we failed to read
-    this.belt.tools = tools;
-  }
+
 
   /**
    * Rank / ROI / Finds, read off the live season board.
@@ -1764,99 +1743,6 @@ export class ForestScene extends Phaser.Scene {
     this.syncBeltDom();
   }
 
-  /** Legacy belt summary, kept for the shop-price refresh. */
-  refreshBeltLegacy() {
-    const belt = this.belt;
-
-    // Mode must be visible in the panel itself, not just the topbar. A player
-    // who is in simulation should never read a "claimed" line and assume it
-    // went to the contract.
-    if (this.beltMode) {
-      const m = chainMode();
-      this.beltMode.setText(
-        m === 'onchain'
-          ? 'ON-CHAIN - writes go to the DeepWood contract'
-          : m === 'offline'
-            ? 'OFFLINE - no contract configured'
-            : 'PREVIEW - simulation only, nothing is on-chain'
-      );
-      this.beltMode.setColor(m === 'onchain' ? '#3f8a52' : '#d9a441');
-    }
-
-    // One compact counts line. beltBurned / beltFees were rows created by the
-    // deleted drawer, so referencing them here threw at boot and took the whole
-    // scene down with it.
-    this.beltCommon.setText(
-      `COMMON ${fmt(belt.common)}  BURNED ${fmt(belt.burned)}  FEES ${fmt(belt.feesPaid)}`,
-    );
-
-    for (const { row, btn, index } of this.beltRows) {
-      const t = belt.tools[index];
-      const net = expectedHuntWei(DROP_TABLE[t.tier], PRICE) - huntCostWei(t.tier);
-      const state = t.left === 0 ? 'BROKEN' : t.active ? 'in hand' : 'stowed';
-      row.setText(
-        `T${roman(t.tier)} ${t.left}/${t.max} ${state === 'in hand' ? 'HELD' : state === 'stowed' ? 'OFF' : 'BROKE'}\n` +
-        `net ${eth(net)}`
-      );
-      row.setColor(t.left === 0 ? '#d83a5a' : t.active ? '#fff8d0' : '#9fbc9f');
-
-      if (t.left === 0) {
-        const cost = repairCost(t.tier);
-        const r = canRepair(belt, index);
-        btn.setText(`FIX ${fmt(cost)}`);
-        btn.setColor(r.ok ? '#fff8d0' : '#7a8a7a');
-        btn.setBackgroundColor(r.ok ? '#2a4d38' : '#1a2a1a');
-        btn.removeAllListeners('pointerdown');
-        if (r.ok) {
-          btn.on('pointerdown', () => {
-            const res = repairTool(belt, index);
-            this.beltMsg(`Repaired Tier ${roman(t.tier)} - burned ${fmt(cost)} Common, ${res.fee} to treasury.`, 'ok');
-            this.refreshBelt();
-            this.updateHud();
-          });
-        }
-      } else if (t.active) {
-        btn.setText('IN HAND');
-        btn.setColor('#9fbc9f');
-        btn.setBackgroundColor('#1a2a1a');
-        btn.removeAllListeners('pointerdown');
-      } else {
-        btn.setText('EQUIP');
-        btn.setColor('#fff8d0');
-        btn.setBackgroundColor('#2a4d38');
-        btn.removeAllListeners('pointerdown');
-        btn.on('pointerdown', () => {
-          const res = equip(belt, index);
-          if (!res.ok) {
-            this.beltMsg(res.reason, 'bad');
-            return;
-          }
-          this.beltMsg(`Equipped Tier ${roman(t.tier)}.`, 'ok');
-          this.refreshBelt();
-          this.updateHud();
-        });
-      }
-    }
-
-    // claim button
-    const next = belt.tools.reduce((m, t) => Math.max(m, t.tier), 0) + 1;
-    if (next > MAX_TIER) {
-      this.claimBtn.setText('ALL OWNED');
-      this.claimBtn.setColor('#7a8a7a');
-      this.claimBtn.setBackgroundColor('#1a2a1a');
-      this.claimBtn.removeAllListeners('pointerdown');
-    } else {
-      const cost = toolCost(next);
-      const c = canClaim(belt, next);
-      this.claimBtn.setText(`CLAIM ${roman(next)} - ${fmt(cost)}`);
-      this.claimBtn.setColor(c.ok ? '#fff8d0' : '#7a8a7a');
-      this.claimBtn.setBackgroundColor(c.ok ? '#2a4d38' : '#1a2a1a');
-      this.claimBtn.removeAllListeners('pointerdown');
-      if (!c.ok) {
-        this.beltMsg(c.reason);
-      }
-    }
-  }
 
   /** Kept for the TAB key: refreshes the top card's toolbelt rows. */
   toggleBelt() {
@@ -1992,7 +1878,7 @@ export class ForestScene extends Phaser.Scene {
     } else if (near) {
       this.prompt.setVisible(true);
       this.prompt.setText(
-        !activeTool(this.belt) ? (this.hasTouchPad ? 'TOOL BROKEN - open TOOLBELT' : 'TOOL BROKEN - TAB to repair')
+        !this._canHuntNow() ? (this.hasTouchPad ? 'tool broken - repair below' : 'tool broken - repair below')
           : this.busy ? 'hunting...'
             : (this.hasTouchPad ? 'tap HUNT' : 'SPACE  hunt')
       );
@@ -2137,11 +2023,25 @@ export class ForestScene extends Phaser.Scene {
     a.setAlpha(0.72 + Math.sin(t * 3.4) * 0.16);
   }
 
+  /**
+   * Can this player start a dig right now? Three distinct reasons no:
+   * no tool at all, a broken tool, or a dig already running. The prompt has to
+   * say which, because "tool broken - repair below" is wrong advice for a
+   * player who has not bought anything yet.
+   */
+  _canHuntNow() {
+    if (this.econ.tier === 0) return false;
+    if (this.econ.left === 0) return false;
+    return true;
+  }
+
   doHunt(node) {
-    const tool = activeTool(this.belt);
+    const tool = heldTool(this.econ);
     if (!tool) {
-      // Every tool is broken. Send them to the belt panel rather than
-      // silently ignoring SPACE.
+      // No working tool. Either they have not bought one yet, or the one they
+      // hold is broken. These need DIFFERENT advice, so the message branches --
+      // telling a brand-new player their pick is broken when they have never
+      // held one reads as the game being broken.
       //
       // Throttled. This used to flash on EVERY press, so a player who kept
       // striking a broken pick got the identical line reprinted several times a
@@ -2152,7 +2052,9 @@ export class ForestScene extends Phaser.Scene {
       if (now - (this._brokenAt ?? -1e9) > 2000) {
         this._brokenAt = now;
         this.openBelt();
-        this.flash('Pick broken - claim or repair a tool to keep hunting.');
+        this.flash(this.econ.tier === 0
+          ? 'No tool yet \u2014 buy Wood below to start hunting.'
+          : 'Pick broken \u2014 repair with gems or upgrade to keep hunting.');
       }
       return;
     }
@@ -2206,7 +2108,7 @@ export class ForestScene extends Phaser.Scene {
         node,
         done: 0,
         // Harder picks crack the rock faster: fewer frames between swings.
-        cooldown: Math.max(140, 320 - (this.belt?.tool?.tier ?? 1) * 40),
+        cooldown: Math.max(140, 320 - (this.player.tier || 1) * 40),
         // Guards against a double-tap landing two strikes on one frame.
         lastAt: 0,
       };
@@ -2276,7 +2178,7 @@ export class ForestScene extends Phaser.Scene {
       // now three separate player inputs, so a player who abandons one halfway
       // must not be charged for a swing they never completed -- and must not be
       // credited a gem either, since the site was already flagged dug.
-      const used = consumeUse(this.belt);
+      const used = consumeUse(this.econ);
       this.updateHud();
       // Repaint the DOM toolbelt row. `consumeUse` is the ONLY thing that
       // decrements `left`, and the belt readout the player actually sees is a
@@ -2302,9 +2204,9 @@ export class ForestScene extends Phaser.Scene {
       // Warning rather than surprise is the point: durability is charged on the
       // final strike, so without this the player only learns the pick is dead
       // by pressing HUNT afterwards and being refused.
-      const left = activeTool(this.belt)?.left ?? 0;
+      const left = this.player.left;
       if (used.broke) {
-        this.flash(`Tier ${roman(used.tool.tier)} broke - claim or repair a tool to hunt again.`);
+        this.flash(`${toolName(this.player.tier)} broke \u2014 repair with gems or upgrade to keep hunting.`);
       } else if (left <= 2) {
         this.flash(`Pick has ${left} use${left === 1 ? '' : 's'} left.`);
       }
@@ -2347,13 +2249,16 @@ export class ForestScene extends Phaser.Scene {
   reveal(node) {
     // Snapshot the tier BEFORE the reveal, so a tool that breaks on this
     // hunt still rolls against the tier that swung the pick.
-    const tier = activeTool(this.belt)?.tier ?? 1;
+    const tier = this.player.tier || 1;
     const result = rollHunt(this.seed, this.wallet ?? '0xplayer', this.huntIndex, tier);
     this.huntIndex += 1;
 
-    // Quartz is Common, and Common is what tool costs are paid in. Track the
-    // full haul too, so the satchel can show the rarer stones.
-    this.belt.common += result.counts[0];
+    // Credit the FULL haul, per rarity. The old line only did counts[0]
+    // into `belt.common` and let the satchel derive its own totals separately,
+    // which is how the card ended up showing two different numbers for the
+    // same gem that drifted apart on the first spend.
+    creditGems(this.econ, result.counts);
+    window.renderGems?.();
 
     // Season board. Recorded with the tier that swung the pick, since that
     // is the tier whose cost belongs in this player's ROI denominator.
@@ -2387,7 +2292,7 @@ export class ForestScene extends Phaser.Scene {
     // So: one sprite, for the highest rarity in the haul (`topRarity`, computed
     // above). That is the stone the player was hunting for, and it is the one
     // worth drawing. The full haul is not lost -- it is already credited to
-    // this.belt and recorded on the season board, and the satchel panel lists
+    // the player's balance and recorded on the season board, and the satchel lists
     // every rarity with its count. If the haul is pure quartz, topRarity is 0
     // and a quartz sprite shows, which is correct.
     const shown = [{ rarity: topRarity, count: result.counts[topRarity] }];

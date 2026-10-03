@@ -19,7 +19,7 @@ import { readFileSync, existsSync } from 'fs';
 import { createRequire } from 'module';
 import { connect, diffEconomy, auditEconomy } from './chain.js';
 import { ERROR_NAMES } from './abi.js';
-import * as tools from './tools.js';
+import * as econ from './economy.js';
 import * as season from './season.js';
 import { SIGS } from './chain.js';
 
@@ -145,21 +145,35 @@ group('errors the client decodes exist in the artifact');
 group('client mirror is internally consistent');
 {
   // These need no node: they catch the client disagreeing with ITSELF.
-  eq('burn fee is 5%', tools.BURN_FEE_BPS / tools.BPS_DENOMINATOR, 0.05);
-  for (const t of [1, 2, 3, 4]) {
-    check(`huntCostWei(${t}) is non-zero`, tools.huntCostWei(t) > 0n, String(tools.huntCostWei(t)));
+  //
+  // NOTE these assert the NEW economy (ECONOMY-SPEC.md), not the deployed
+  // contract. The contract is being redeployed to match, so the parity check
+  // against out/DeepWood.sol is EXPECTED to report drift until that lands --
+  // and that is the signal that tells us whether the redeploy picked up the
+  // agreed numbers. The old assertions here pinned huntCostWei(1) to
+  // 0.0001 ETH and a free tier 1, both of which this design deletes.
+  eq('burn fee is 5%', econ.TREASURY_BPS / 10_000, 0.05);
+  // Yield per hunt, which rises with tier. NOT a cost -- the fee is asserted
+  // separately above, because an earlier version of this line read
+  // huntValueWei and printed it under a "huntCostWei is zero" label, which is
+  // exactly the kind of mislabelling that makes a drift guard untrustworthy.
+  for (const t of [1, 2, 3, 4, 5]) {
+    check(`tier ${t} yields something`, econ.huntValueWei(t) > 0n, String(econ.huntValueWei(t)));
   }
-  // Tier 1 must be exactly 0.0001 ETH = 1e14 wei. This is the constant that
-  // was 10x wrong for a while, so it is asserted explicitly rather than
-  // inferred from a ladder.
-  check('huntCostWei(1) is 0.0001 ETH', tools.huntCostWei(1), 100_000_000_000_000n);
-  check('  which is 1e14, not 1e13', String(tools.huntCostWei(1)).length, 15);
-  check('tier 1 tool is free', tools.toolCost(1) === 0, `got ${tools.toolCost(1)}`);
-  check('tier 4 tool costs 60000 gems', tools.toolCost(4) === 60_000, `got ${tools.toolCost(4)}`);
-  check('durability rises with tier', tools.durabilityOf(4) > tools.durabilityOf(1), '80 > 20');
+  check('no per-hunt fee: hunt cost is 0 at every tier',
+    [1, 2, 3, 4, 5].every((t) => season.HUNT_COST[t - 1] === 0n), 'all HUNT_COST are 0n');
+  check('tier 1 tool COSTS 0.005 ETH now', econ.toolPrice(1) === 5_000_000_000_000_000n,
+    `got ${econ.toolPrice(1)}`);
+  check('tier 5 tool costs 2.3 ETH', econ.toolPrice(5) === 2_300_000_000_000_000_000n,
+    `got ${econ.toolPrice(5)}`);
+  check('there are five tiers', econ.MAX_TIER, 5);
+  check('durability is 20/25/30/35/40',
+    [1, 2, 3, 4, 5].map(econ.durabilityOf).join(','), '20,25,30,35,40');
   check('rarity weights ascend', Number(season.RARITY_WEIGHT[4]) > Number(season.RARITY_WEIGHT[0]), '4096 > 1');
   check('gem prices ascend', season.GEM_PRICE[4] > season.GEM_PRICE[0], 'rarer is worth more');
   check('splay floor is 0.005 ETH', season.SPLAY_FLOOR_WEI, 5_000_000_000_000_000n);
+  check('redemption floor matches the splay floor',
+    econ.REDEEM_FLOOR === season.SPLAY_FLOOR_WEI, 'both 0.005 ETH');
 }
 
 // ---------------------------------------------------------------------------
@@ -181,16 +195,17 @@ if (!RPC || !CONTRACT) {
   } else {
     const econ = await chain.readEconomy();
     const bad = auditEconomy(econ, {
-      BURN_FEE_BPS: tools.BURN_FEE_BPS,
-      BPS_DENOMINATOR: tools.BPS_DENOMINATOR,
-      MAX_TIER: tools.MAX_TIER,
+      BURN_FEE_BPS: econ.TREASURY_BPS,
+      BPS_DENOMINATOR: 10_000n,
+      MAX_TIER: econ.MAX_TIER,
       SEASON_LENGTH: season.SEASON_LENGTH_SEC,
       SPLAY_FLOOR_WEI: season.SPLAY_FLOOR_WEI,
-      HUNT_COOLDOWN: tools.HUNT_COOLDOWN,
-      toolCost: tools.toolCost,
-      durabilityOf: tools.durabilityOf,
-      repairCost: tools.repairCost,
-      huntCostWei: tools.huntCostWei,
+      HUNT_COOLDOWN: season.HUNT_COOLDOWN,
+      toolCost: econ.toolPrice,
+      durabilityOf: econ.durabilityOf,
+      repairCost: (tier) => econ.repairCost(tier).reduce(
+        (sum, n, r) => sum + BigInt(n) * econ.FACE_VALUE[r], 0n),
+      huntCostWei: () => 0n,
       GEM_PRICE: season.GEM_PRICE,
       RARITY_WEIGHT: season.RARITY_WEIGHT,
     });

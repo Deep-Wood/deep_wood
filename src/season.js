@@ -35,14 +35,34 @@ export const GEM_PRICE = [
 /** Rarity weight of a single gem -- the ROI numerator. Mirrors rarityWeight(). */
 export const RARITY_WEIGHT = [1n, 8n, 64n, 512n, 4_096n];
 
-/** Per-hunt cost in wei, by tool tier. Mirrors huntCostWei(). */
-// 0.0001 ether = 1e14 wei. These were 1e13 -- 10x too cheap. See the note in
-// tools.js huntCostWei(); the same mistake appeared in both files.
+/**
+ * Per-hunt cost in wei, by tool tier: ALL ZERO.
+ *
+ * This used to be 0.0001 / 0.0002 / 0.0004 / 0.0008 ETH. That is lethal under
+ * the new economy: Wood yields 0.00005 ETH per hunt, so a 0.0001 hunt fee
+ * makes Wood net-NEGATIVE by 50% and the entry tier unplayable. ECONOMY-SPEC.md
+ * section 12 item 8 requires huntCostWei() to be 0 on the redeployed contract
+ * for exactly this reason, and this mirror has to agree.
+ *
+ * The old values were never a real charge anyway -- the contract added them to
+ * ethBacking without transferring ETH, which is why ethBacking overstated
+ * solvency. Zeroing them removes a fiction rather than adding a cost.
+ *
+ * Kept as an array so recordHunt() and the ROI denominator keep their shape;
+ * every entry is 0n, so `e.ethSpent += 0n` leaves the arithmetic intact.
+ */
+/**
+ * Seconds between hunts. Read live from getConfig() -- the owner can change it,
+ * so this is the value to fall back to, not a fact about the game.
+ */
+export const HUNT_COOLDOWN = 3;
+
 export const HUNT_COST = [
-  100_000_000_000_000n, // tier 1  0.0001
-  200_000_000_000_000n, // tier 2  0.0002
-  400_000_000_000_000n, // tier 3  0.0004
-  800_000_000_000_000n, // tier 4  0.0008
+  0n, // Wood
+  0n, // Bronze
+  0n, // Iron
+  0n, // Steel
+  0n, // Gold
 ];
 
 export const SEASON_LENGTH_SEC = 14 * 24 * 60 * 60;
@@ -105,6 +125,25 @@ function entryFor(board, address) {
  * @param toolTier 1..4, which sets the per-hunt ETH cost
  * @param nowSec   current time, to reject late hunts
  */
+/**
+ * Record ETH the player spent on a TOOL.
+ *
+ * This replaces the per-hunt fee as the ROI denominator. Under the old economy
+ * a hunt cost 0.0001 ETH and `recordHunt` incremented `ethSpent` by it, so ROI
+ * had something to divide by. HUNT_COST is now 0 at every tier (spec s12 item 8)
+ * -- a 0.0001 fee against Wood's 0.00005 yield would make the entry tier
+ * net-negative -- so tool purchases are the only real spend, and therefore the
+ * only honest denominator.
+ *
+ * Without this, ethSpent stayed 0 forever and every ROI computation divided by
+ * zero.
+ */
+export function recordToolSpend(board, addr, wei) {
+  const e = entryFor(board, addr);
+  e.ethSpent += BigInt(wei);
+  return e.ethSpent;
+}
+
 export function recordHunt(board, address, counts, toolTier, nowSec) {
   // A hunt that lands after the season closed does not count. Without this a
   // player could bank a lucky roll at the buzzer.
@@ -124,7 +163,10 @@ export function recordHunt(board, address, counts, toolTier, nowSec) {
   }
 
   e.leq += leqGain;
-  e.ethSpent += HUNT_COST[toolTier - 1];
+  // NOT a spend. HUNT_COST is 0 at every tier now (see HUNT_COST), and the ROI
+  // denominator is tool purchases -- see recordToolSpend(). Adding a hunt fee
+  // here kept `ethSpent` pinned to zero for players who had bought a tool but
+  // not recorded it on the board, which divided every ROI to Infinity or NaN.
   e.hunts += 1;
   if (valueWei > e.bestWei) e.bestWei = valueWei;
 
@@ -204,7 +246,19 @@ export function roiDenom(entry) {
  * is exact.
  */
 export function roiOf(entry) {
-  return (entry.leq * WEI_PER_ETH) / roiDenom(entry);
+  const d = roiDenom(entry);
+  // Zero here is NORMAL, not an error: hunts are free, so a player who has
+  // recorded finds but has not bought a tool yet has spent nothing. It used to
+  // be unreachable because every hunt cost 0.0001 ETH and recordHunt added it.
+  // With HUNT_COST at 0 the denominator is zero until the first tool purchase,
+  // and `(bigint / 0n)` throws a RangeError -- which took down the whole
+  // leaderboard read on the season board, not just one row.
+  //
+  // 0 is the honest answer: no ETH committed, no ratio. The floor already
+  // excludes such a player from ranking (onRoiBoard is false), so this only
+  // affects the displayed number.
+  if (d === 0n) return 0n;
+  return (entry.leq * WEI_PER_ETH) / d;
 }
 
 /**

@@ -65,3 +65,55 @@
 .belt-claim, .belt-tools, .belt-shop { margin: 0; }
 .belt-tools { display: contents; }
 .belt-shop { gap: var(--s2); }
+
+/* --- new economy belt (ECONOMY-SPEC.md section 1) ---------------------
+ * One tool, bought and upgraded with ETH. Replaces the four-tool belt with
+ * a claim card, an EQUIP column and a two-row gem shop.
+ *
+ * The row layout is a single line on desktop and two on a phone:
+ *   row 1  counts | mode
+ *   row 2  the tool: name, durability pips, n/m, [BROKEN]
+ *   row 3  actions: buy/upgrade . sell gems [. repair]
+ * -------------------------------------------------------------------- */
+#belt { row-gap: 4px; }
+
+.belt-tool {
+  display: flex; align-items: center; gap: var(--s2);
+  min-width: 0; color: var(--text);
+}
+.belt-tool.empty { color: var(--warn); }
+.belt-tool.broke  { color: var(--bad); }
+
+/* The tool NAME is the thing that changed: "Wood 18/20" instead of "TI 20/20
+ * HELD". Roman numerals gave the player no way to build a mental model of the
+ * ladder they were climbing. */
+.belt-tool .tn {
+  font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--accent); flex: none;
+}
+.belt-tool.broke .tn { color: var(--bad); }
+.belt-tool .cnt { flex: none; font-variant-numeric: tabular-nums; }
+
+/* Durability as pips rather than a number. "18/35" answers how many; the pips
+ * answer how much of the thing you can see. At Gold that is 40 pips across the
+ * belt, which is why durability only rises 5 per tier. */
+.belt-tool .pips { display: flex; gap: 1px; flex: 1 1 auto; min-width: 0; overflow: hidden; }
+.belt-tool .pips i {
+  flex: 1 1 0; min-width: 1px; height: 6px;
+  background: var(--ok); border-radius: 1px;
+}
+.belt-tool .pips i.spent { background: var(--edge-dim); }
+.belt-tool.broke .pips i { background: var(--bad); }
+
+.belt-tool .tag { flex: none; font-weight: 700; font-size: 9px; letter-spacing: .08em; }
+.belt-tool .tag.bad { color: var(--bad); }
+
+/* Actions. `act` is the ETH pair; `repair` is the gem action and is a gem
+ * cost, so it sits below them and is styled differently rather than looking
+ * like a third ETH button. */
+.belt-actions { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.belt-actions .act { flex: 1 1 auto; min-width: 0; }
+.belt-actions .act.repair {
+  flex-basis: 100%;
+  color: var(--gold); border-color: var(--gold);
+}

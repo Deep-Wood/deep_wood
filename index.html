@@ -158,21 +158,20 @@
            sheet, then a right-hand drawer) and the complaint was never the size.
            Nothing here covers the forest and there is nothing to dismiss. -->
       <div id="belt">
-        <!-- Flattened out of three wrapper rows into five direct children.
-             The claim card and the shop used to share a wrapper with a `spacer`
-             between them, which on a phone meant the wrapper was 38px tall: the
-             claim on one line and the shop forced onto the line below it, for no
-             reason other than the spacer taking the space that would have held
-             them side by side.
+        <!-- Rebuilt for the redeploy economy (ECONOMY-SPEC.md section 1):
+             ONE tool, bought and upgraded with ETH. Gems only repair and sell.
+             No tool array, no stow, no EQUIP -- upgrading replaces the tool.
 
-             As a grid the toolbelt can place each piece on the row that actually
-             fits it. The ids are unchanged, so syncBeltDom() is unaffected. -->
-        <span class="belt-counts" id="belt-counts">COMMON 0 &middot; BURNED 0 &middot; FEES 0</span>
+             Four slots, in the order a player needs them:
+               counts   lifetime finds + balance
+               tool     the held tool, durability, repair
+               actions  buy/upgrade (ETH) and sell gems (ETH)
+               msg      transient feedback, auto-clears -->
+        <span class="belt-counts" id="belt-counts">no tool yet</span>
         <span class="belt-mode" id="belt-mode">PREVIEW - simulation only</span>
-        <div id="belt-tools"></div>
-        <span id="belt-claim-slot"></span>
+        <div class="belt-tool" id="belt-tool">no tool - buy Wood to start hunting</div>
+        <div class="belt-actions" id="belt-actions"></div>
         <span class="belt-msg" id="belt-msg"></span>
-        <span class="belt-shop" id="belt-shop"></span>
       </div>
 
             <!-- Satchel: the find tally by rarity.
@@ -319,7 +318,22 @@
     const gemColors = ['#cfd6dd', '#d9a441', '#3a6fd8', '#d83a5a', '#8a3ad8'];
     const gemlist = document.getElementById('gemlist');
     const satchel = document.getElementById('satchel');
+
+    // The satchel reads the player's gem balance DIRECTLY now.
+    //
+    // It used to keep its own private `totals[]`, incremented from the hunt
+    // result alongside a second counter in ForestScene.js. Two counters for one
+    // quantity: the header said COMMON 11 while the satchel said Qtz 11, and
+    // the moment you spent any Common only ONE of them was decremented, so the
+    // card answered "how many do I have" two different ways at once.
+    //
+    // `playerBalance()` is defined below and reads the single balance the
+    // economy owns. The satchel can no longer disagree with it.
     const totals = [0, 0, 0, 0, 0];
+    function playerBalance() {
+      const p = window.__scene?.econ;
+      return p && Array.isArray(p.gems) ? p.gems : totals;
+    }
 
     function renderGems() {
       // All five rarities, ALWAYS, including the ones still at zero.
@@ -330,8 +344,9 @@
       // as a rendering fault rather than as "not found one yet" -- the player
       // cannot tell the difference between "you have found no ruby" and "this
       // box is broken". A zero is information: it names the rarity as a target.
+      const bal = playerBalance();
       const rows = gemNames.map((n, i) => {
-        const c = totals[i];
+        const c = bal[i];
         return `<div class="gem${c ? '' : ' none'}" title="${n}: ${c}">`
           + `<span class="n" style="color:${gemColors[i]}">${gemShort[i]}</span>`
           + `<span class="c">${c}</span></div>`;
@@ -339,6 +354,10 @@
 
       gemlist.innerHTML = rows;
     }
+    // Exposed so the belt's buy/repair/sell handlers can repaint the satchel
+    // after they change the balance. Without this the satchel only refreshed on
+    // a hunt, so selling gems left the tiles showing the pre-sale count.
+    window.renderGems = renderGems;
 
     // Kept as a no-op because two call sites in ForestScene.js still invoke it
     // when gems are spent, and they are load-bearing for the spend path.
@@ -377,6 +396,7 @@
     window.addEventListener('deepwood:find', (e) => {
       const r = e.detail;
       r.counts.forEach((c, i) => { totals[i] += c; });
+      renderGems();
       renderGems();
     });
 

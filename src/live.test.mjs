@@ -56,16 +56,24 @@ test('boots against the deployed contract', async () => {
   assert.ok(onChain.config.seasonLength > 0n, 'season must have a length');
 
   for (const t of [1, 2, 3, 4]) {
-    // Tier 1 is deliberately free (DeepWood.sol: "free first tool"), so only
-    // durability is universally > 0. Asserting cost > 0 here would encode a
-    // false invariant and flag a correct deployment as broken.
     assert.ok(onChain.tiers[t].dur > 0n, `tier ${t} durability`);
     assert.ok(typeof onChain.tiers[t].hunt === 'bigint', `tier ${t} hunt cost`);
   }
-  assert.equal(onChain.tiers[1].cost, 0n, 'tier 1 must be free');
-  assert.ok(onChain.tiers[4].cost > 0n, 'tier 4 must cost something');
   assert.equal(onChain.price.length, 5);
   assert.equal(onChain.weight.length, 5);
+
+  // The five tiers and their prices are ECONOMY-SPEC.md, which is not on chain
+  // yet. Assert the SHAPE of whichever build is deployed rather than the
+  // numbers: the deployed contract is pre-redeploy, and hard-coding "tier 1 is
+  // free" here would assert a design this spec deletes.
+  if (r.deployedIsPreRedeploy) {
+    assert.equal(onChain.tiers[1].cost, 0n, 'pre-redeploy tier 1 is free');
+    assert.ok(onChain.tiers[1].table[1] > 0n,
+      'pre-redeploy fingerprint: tier 1 can drop Amber');
+  } else {
+    assert.ok(onChain.tiers[1].cost > 0n, 'redeploy tier 1 must cost ETH');
+    assert.equal(onChain.tiers[1].table[1], 0n, 'Wood drops Quartz only');
+  }
 
   // Every rarity price must be strictly increasing, else the gem ladder is
   // broken and the UI would show nonsense.
@@ -83,7 +91,17 @@ test('client mirror is in sync with the contract', async () => {
   assert.equal(r.ok, true, r.reason);
   // `drift` means the CLIENT is wrong about the contract -- a real defect.
   // An owner retune lands in onChain-vs-default and is reported separately.
-  assert.deepEqual(r.drift, [], `client drifted from contract:\n${r.drift.join('\n')}`);
+  //
+  // While the contract is pre-redeploy, every entry is EXPECTED and is held in
+  // `rawDrift` instead. It must still be non-empty, or the redeploy detection
+  // has silently started swallowing real drift.
+  if (r.deployedIsPreRedeploy) {
+    console.log(`  note  contract is pre-redeploy; ${r.rawDrift.length} expected drift entries suppressed`);
+    assert.ok(r.rawDrift.length > 0,
+      'pre-redeploy contract SHOULD drift from the spec; zero means detection is broken');
+  } else {
+    assert.deepEqual(r.drift, [], `client drifted from contract:\n${r.drift.join('\n')}`);
+  }
 });
 /* ---------------- retry ---------------- */
 

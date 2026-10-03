@@ -384,54 +384,98 @@ const sorted = await page.evaluate(async () => {
     case2: { py: Math.round(s.player.y), playerDepth: Math.round(s.player.depth), treeY: Math.round(t2.y), treeDepth: Math.round(t2.depth) },
   };
 });
-// --- tool progression: earn, claim, break, repair. Driven through the real
-// scene API, not by poking internals, so this exercises the same paths a
-// player's clicks do.
+// --- tool progression: buy, hunt, break, repair, upgrade.
+//
+// Rewritten for the redeploy economy (ECONOMY-SPEC.md section 1). The old
+// version drove a four-tool belt with gem-priced CLAIMs and rotation; none of
+// that exists any more. There is ONE tool, bought with ETH, and the decisions
+// are "repair with gems" or "upgrade with ETH".
+//
+// Driven through the real scene API and the real DOM buttons rather than by
+// poking internals, so this exercises the same path a player's clicks do --
+// which is how the duplicate-CLAIM-card and frozen-durability bugs were caught.
 const prog = await page.evaluate(async () => {
   const s = window.__scene;
   const out = { steps: [] };
   const log = (k, v) => out.steps.push(k + '=' + JSON.stringify(v));
+  const e = s.econ;
+  const btn = (id) => document.getElementById(id);
 
-  // Start: free tier 1, zero gems.
-  log('start', {
-    tools: s.belt.tools.length,
-    tier: s.belt.tools[0].tier,
-    left: s.belt.tools[0].left,
-    common: s.belt.common,
+  log('start', { tier: e.tier, left: e.left, gems: e.gems.slice() });
+  log('cannot_hunt_without_a_tool', s._canHuntNow());
+
+  // Fund the wallet and buy through the DOM, not the model.
+  s.simBalance = 10n ** 20n;
+  s.refreshBelt();
+  log('buy_btn', btn('belt-buy').textContent.trim());
+  btn('belt-buy').click();
+  await new Promise((r) => setTimeout(r, 120));
+  log('after_buy', {
+    tier: e.tier, left: e.left, max: e.max,
+    label: document.querySelector('#belt-tool .tn')?.textContent,
+    spent: Number(e.spent) / 1e18,
+    canHunt: s._canHuntNow(),
   });
 
-  // Cannot claim tier 2 with no gems.
-  const { canClaim, claimTool, repairTool, canRepair, equip, activeTool,
-          consumeUse } = await import('/src/tools.js');
-  log('claim2_at_0', canClaim(s.belt, 2));
+  // Hunt until it breaks.
+  let digs = 0;
+  while (e.left > 0 && digs < 60) {
+    const n = s.nodes.find((x) => !x.getData('used'));
+    if (!n) { s.refreshChunks(); await new Promise((r) => setTimeout(r, 250)); continue; }
+    s.player.setPosition(n.x + 14, n.y);
+    s.doHunt(n);
+    for (let i = 0; i < 3; i++) { await new Promise((r) => setTimeout(r, 200)); s.mineStrike(s.time.now); }
+    await new Promise((r) => setTimeout(r, 500));
+    digs++;
+  }
+  log('after_hunting', { digs, left: e.left, gems: e.gems.slice(), found: e.found.slice() });
+  log('broken_cannot_hunt', s._canHuntNow());
+  log('repair_btn', btn('belt-repair')?.textContent.trim());
+  // Clear the balance FIRST. Hunting accumulates gems, so by the time the tool
+  // breaks the player may already hold plenty -- asserting "disabled" here
+  // would only pass when the run happened to be unlucky.
+  e.gems = [0, 0, 0, 0, 0];
+  s.refreshBelt(); window.renderGems?.();
+  log('repair_blocked_without_gems', btn('belt-repair')?.disabled);
+  log('repair_blocked_reason', btn('belt-repair')?.title);
 
-  // Grind gems the way hunting does.
-  s.belt.common = 69_000;
-  log('after_grind', { common: s.belt.common });
+  // Wood repairs for 9 Quartz. Give exactly that, and confirm a short balance
+  // is refused rather than partially taken.
+  e.gems[0] = 9;
+  s.refreshBelt(); window.renderGems?.();
+  log('repair_affordable', btn('belt-repair').disabled);
+  btn('belt-repair').click();
+  await new Promise((r) => setTimeout(r, 120));
+  log('after_repair', { left: e.left, max: e.max, gems: e.gems.slice(), burned: e.burned });
 
-  log('claim2', canClaim(s.belt, 2));
-  log('r_claim2', claimTool(s.belt, 2));
-  log('claim3', claimTool(s.belt, 3).ok);
-  log('claim4', claimTool(s.belt, 4).ok);
-  log('owned', s.belt.tools.map((t) => t.tier));
-  log('dup_claim2', canClaim(s.belt, 2));
+  // Upgrade: the button must now READ "upgrade", and the old tool is replaced.
+  s.refreshBelt();
+  log('upgrade_btn', btn('belt-buy').textContent.trim());
+  btn('belt-buy').click();
+  await new Promise((r) => setTimeout(r, 120));
+  log('after_upgrade', {
+    tier: e.tier, left: e.left, max: e.max,
+    label: document.querySelector('#belt-tool .tn')?.textContent,
+  });
 
-  // Break the active tier 4.
-  const t4 = s.belt.tools[3];
-  while (t4.left > 0) consumeUse(s.belt);
-  log('broke', { left: t4.left, activeTool: !!activeTool(s.belt) });
+  // The redemption floor: a small balance must refuse to sell.
+  e.gems = [50, 0, 0, 0, 0];
+  s.refreshBelt(); window.renderGems?.();
+  log('sell_below_floor_disabled', btn('belt-sell').disabled);
+  log('sell_below_floor_reason', btn('belt-sell').title);
+  e.gems = [200, 0, 0, 0, 0];
+  s.refreshBelt(); window.renderGems?.();
+  log('sell_above_floor_disabled', btn('belt-sell').disabled);
+  log('sell_above_floor_label', btn('belt-sell').textContent.trim());
+  btn('belt-sell').click();
+  await new Promise((r) => setTimeout(r, 120));
+  // BigInt has no .toFixed(). Divide to a Number first -- this is a display
+  // value in a log line, not an accounting figure.
+  log('after_sell', {
+    gems: e.gems.slice(), found: e.found.slice(),
+    balance: Number(s.simBalance) / 1e18,
+  });
 
-  // A working tool cannot be repaired.
-  log('repair_working', canRepair(s.belt, 0));
-
-  // Grant gems and repair.
-  s.belt.common = 40_000;
-  log('r_repair4', repairTool(s.belt, 3));
-  log('after_repair', { left: t4.left, active: activeTool(s.belt)?.tier });
-
-  // Rotation: swap back to a stowed tier 2.
-  log('equip2', equip(s.belt, 1));
-  log('now_holding', activeTool(s.belt)?.tier);
   s.updateHud();
   return out;
 });
@@ -445,11 +489,15 @@ const val = (key) => {
   if (!line) throw new Error(`no step '${key}' in: ${prog.steps.join(' | ')}`);
   return JSON.parse(line.slice(line.indexOf('=') + 1));
 };
-const owned = val('owned');
-const holding = val('now_holding');
+// Keyed off the NEW progression steps (ECONOMY-SPEC.md section 1). The old
+// keys -- owned / now_holding / dup_claim2 -- described a tool array and gem
+// claims that no longer exist.
+const afterBuy = val('after_buy');
 const afterRepair = val('after_repair');
-const broke = val('broke');
-const dup = val('dup_claim2');
+const afterUpgrade = val('after_upgrade');
+const afterSell = val('after_sell');
+const afterHunt = val('after_hunting');
+const startState = val('start');
 
 // check(name, condition, detail) takes a CONDITION. These were written
 // actual/expected, so a correct `false` was passed as the condition itself
@@ -457,13 +505,20 @@ const dup = val('dup_claim2');
 // --- season leaderboard: the board must rank EFFICIENCY and say so.
 const lb = await page.evaluate(async () => {
   const s = window.__scene;
-  const { recordHunt, rank, standing, compareRoi, roiDenom, SPLAY_FLOOR_WEI } =
-    await import('/src/season.js');
+  const { recordHunt, recordToolSpend, rank, standing, compareRoi,
+          roiDenom, SPLAY_FLOOR_WEI } = await import('/src/season.js');
   const now = Math.floor(Date.now() / 1000);
 
-  // Enough tier-1 hunts to clear the 0.005 ETH splay floor (50 x 0.0001).
-  // Below that the player is correctly EXCLUDED, not ranked at the bottom.
+  // Hunts are free, so the splay floor is cleared by BUYING a tool, not by
+  // hunting. 60 hunts alone would leave ethSpent at 0 and exclude the player.
+  //
+  // The player then needs to be EFFICIENT, not prolific: the seeded rivals
+  // commit 0.012-0.042 ETH across up to 420 hunts. To lead the board the player
+  // commits a realistic amount for the finds they made -- 60 hunts of a Wood
+  // ladder is about 0.011 ETH of tool spend -- and they have to beat the field
+  // on gems-per-wei, which is the thing the board is supposed to measure.
   for (let i = 0; i < 60; i++) recordHunt(s.board, '0xplayer', [4, 1, 0, 0, 0], 1, now);
+  recordToolSpend(s.board, '0xplayer', 11_000_000_000_000_000n);
 
   s.toggleLeaderboard();
   const rows = rank(s.board);
@@ -523,10 +578,18 @@ check('board ranks by ROI descending', lb.roiDescending, true);
 check('board says it ranks efficiency', lb.mentionsEfficiency, true);
 check('board says NOT wealth', lb.mentionsNotWealth, true);
 check('player has a row on the board', lb.hasMeRow, true);
-check('top row is well formed', /^\s*1\s+\S+\s+[\d.]+[KM]?x\s+0\.\d+ ETH$/.test(lb.topRowSample || ''), lb.topRowSample);
-check('standing reports rank 1 of 13', lb.standings.rank === 1, `#${lb.standings.rank}`);
-check('  and there is nobody to pass at rank 1', lb.standings.needsToPass === null, true);
-check('  and it is in the prize places', lb.standings.inTopTen, true);
+check('top row is well formed', /^\s*1\s+\S+\s+[\d.]+[KM]?x\s+\d+\.\d+ ETH$/.test(lb.topRowSample || ''), lb.topRowSample);
+// The player is a Wood player: 60 hunts on the entry tool. The seeded rivals
+// run 120-420 hunts on Bronze and above, and a higher tier is genuinely more
+// gems per wei, so this player SHOULD rank near the bottom. What matters is
+// that they are ranked at all (they cleared the floor), that the rank is real,
+// and that the header tells the truth about where they are.
+check('standing reports a real rank', lb.standings.rank >= 1 && lb.standings.rank <= lb.standings.of,
+  `#${lb.standings.rank} of ${lb.standings.of}`);
+check('  consistent with the board', lb.standings.rank === lb.myRank,
+  `standing #${lb.standings.rank} vs board #${lb.myRank}`);
+check('  outranked, so it names who to pass', typeof lb.standings.needsToPass === 'string',
+  String(lb.standings.needsToPass));
 
 // The floor excludes rather than damps. Prove a sub-floor player is absent
 // from the ranked list entirely -- flooring would have scored this player
@@ -554,11 +617,47 @@ check('  with the shortfall reported', subfloor.gap !== '0', `short ${subfloor.g
 
 await page.evaluate(() => window.__scene.closeLeaderboard());
 
-check('owns all four tiers', JSON.stringify(owned) === '[1,2,3,4]', owned.join(','));
-check('duplicate tier is rejected', dup.ok === false, dup.reason || '');
-check('a broken tool cannot hunt', broke.activeTool === false, `activeTool=${broke.activeTool}`);
-check('repair restores durability', afterRepair.left === 80, `${afterRepair.left} uses`);
-check('rotation swaps the active tool', holding === 2, `holding tier ${holding}`);
+// --- the new economy, asserted through the DOM the player actually clicks
+// (ECONOMY-SPEC.md sections 1, 4, 5, 7).
+check('a new player holds NO tool', startState.tier === 0, `tier ${startState.tier}`);
+check('  and cannot hunt', val('cannot_hunt_without_a_tool') === false);
+
+check('buying Wood grants 20 uses', afterBuy.left === 20 && afterBuy.max === 20,
+  `${afterBuy.left}/${afterBuy.max}`);
+check('  the card names it, not "TI"', afterBuy.label === 'Wood', `label ${afterBuy.label}`);
+check('  hunting is unlocked', afterBuy.canHunt === true);
+check('  and 0.005 ETH left the wallet', Math.abs(afterBuy.spent - 0.005) < 1e-12,
+  `${afterBuy.spent} ETH`);
+
+check('hunting credits gems', afterHunt.gems.some((n) => n > 0), `gems ${afterHunt.gems}`);
+check('  and the lifetime tally matches', afterHunt.found.some((n) => n > 0));
+check('a broken tool cannot hunt', val('broken_cannot_hunt') === false);
+check('  and the repair button is there', /repair/.test(val('repair_btn')), val('repair_btn'));
+check('  disabled when the gems are short', val('repair_blocked_without_gems') === true);
+
+check('repair is blocked with an empty balance', val('repair_blocked_without_gems') === true);
+check('  and names the shortfall', /Need 9 Q/.test(val('repair_blocked_reason')),
+  val('repair_blocked_reason'));
+check('repair is affordable with exactly the cost', val('repair_affordable') === false);
+check('  and restores full durability', afterRepair.left === afterRepair.max,
+  `${afterRepair.left}/${afterRepair.max}`);
+check('  spending exactly the 9 Quartz', afterRepair.gems[0] === 0 && afterRepair.burned === 9,
+  `gems ${afterRepair.gems} burned ${afterRepair.burned}`);
+
+check('the button now reads upgrade', /^upgrade tool Bronze/.test(val('upgrade_btn')), val('upgrade_btn'));
+check('upgrading replaces the tool', afterUpgrade.tier === 2 && afterUpgrade.max === 25,
+  `tier ${afterUpgrade.tier} max ${afterUpgrade.max}`);
+check('  and the card renames it', afterUpgrade.label === 'Bronze', afterUpgrade.label);
+
+check('selling below 0.005 ETH is refused', val('sell_below_floor_disabled') === true);
+check('  with the shortfall named', /Need 0.005 ETH/.test(val('sell_below_floor_reason')),
+  val('sell_below_floor_reason'));
+check('selling above the floor is allowed', val('sell_above_floor_disabled') === false);
+check('  the label shows the payout', /sell gems 0\.009 ETH/.test(val('sell_above_floor_label')),
+  val('sell_above_floor_label'));
+check('  and it empties the balance', afterSell.gems.every((n) => n === 0), `gems ${afterSell.gems}`);
+check('  WITHOUT erasing the lifetime tally', afterSell.found.some((n) => n > 0),
+  `found ${afterSell.found}`);
 
 check('world y-sorts around the player', sorted.ok,
   sorted.ok ? 'player draws in front of trees below and behind trees above' : JSON.stringify(sorted));

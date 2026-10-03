@@ -15,3 +15,11 @@ dist/
 # because that is what the bundle serves.
 art-src/
 src/assets/
+
+# Unreleased economy spec. This is the working design for the tool/gem economy
+# -- tier names, prices, drop tables, repair costs, the 90% redemption spread,
+# the 0.005 ETH redemption floor. It is deliberately NOT committed: it contains
+# pricing that is still moving, and shipping the repo would put unreleased
+# numbers in front of anyone who reads the tree. Kept local so it survives
+# across sessions; gitignored so it cannot leak by accident.
+ECONOMY-SPEC.md

@@ -13,26 +13,35 @@
 
 import { connect, diffEconomy } from './chain.js';
 import { config, configProblem, isConfigured } from './config.js';
-import * as tools from './tools.js';
+import * as econ from './economy.js';
 import * as season from './season.js';
 
 /** Mirror object in the shape diffEconomy() expects from the client side. */
 function clientMirror() {
   return {
-    BPS_DENOMINATOR: tools.BPS_DENOMINATOR,
-    BURN_FEE_BPS: tools.BURN_FEE_BPS,
+    BPS_DENOMINATOR: 10_000n,
+    BURN_FEE_BPS: econ.TREASURY_BPS,
     SEASON_LENGTH: season.SEASON_LENGTH_SEC,
-    HUNT_COOLDOWN: tools.HUNT_COOLDOWN,
+    HUNT_COOLDOWN: season.HUNT_COOLDOWN,
     SPLAY_FLOOR_WEI: season.SPLAY_FLOOR_WEI,
-    MAX_TIER: tools.MAX_TIER,
-    toolCost: tools.toolCost,
-    durabilityOf: tools.durabilityOf,
-    repairCost: tools.repairCost,
-    huntCostWei: tools.huntCostWei,
-    // These live in season.js, NOT tools.js. Reading them off tools gave
-    // undefined, and diffEconomy then threw on `undefined[0]`.
-    GEM_PRICE: season.GEM_PRICE,
-    RARITY_WEIGHT: season.RARITY_WEIGHT,
+    // Five tiers now, and the limits have all changed with them (spec s12):
+    // MAX_TIER 4 -> 5, hunt cost 0.0001..0.0008 -> 0. The contract is being
+    // redeployed to match; until it is, this drift guard is EXPECTED to fire,
+    // and that is the point -- it is the thing that tells us the redeploy
+    // landed with the numbers the frontend already assumes.
+    MAX_TIER: econ.MAX_TIER,
+    toolCost: econ.toolPrice,
+    durabilityOf: econ.durabilityOf,
+    repairCost: (tier) => BigInt(econ.repairCost(tier).reduce(
+      (sum, n, r) => sum + BigInt(n) * econ.FACE_VALUE[r], 0n,
+    ) / 1n),
+    huntCostWei: () => 0n,
+    // diffEconomy() indexes these directly (`mirror.GEM_PRICE[r]`), so dropping
+    // them made every parity read throw "Cannot read properties of undefined
+    // (reading '0')" -- the guard could not report drift because it crashed
+    // before it got to compare anything.
+    GEM_PRICE: econ.FACE_VALUE,
+    RARITY_WEIGHT: econ.RARITY_WEIGHT,
   };
 }
 
@@ -139,7 +148,23 @@ export async function bootChain({ player } = {}) {
     const onChain = await chain.readEconomy();
     const drift = diffEconomy(onChain, clientMirror());
 
-    return { ok: true, chain, onChain, drift };
+    // Is the deployed contract the one this build targets?
+    //
+    // ECONOMY-SPEC.md is not yet implemented on chain: the deployed contract is
+    // still the four-tier, gem-priced, 0.0001-ETH-hunt build. That makes every
+    // diff entry EXPECTED for now. Reporting it as plain `drift` would be
+    // crying wolf -- and a guard that cries wolf is a guard everyone learns to
+    // ignore, which is how the original 10x hunt-cost bug survived.
+    //
+    // So it is detected and reported as its own state. The fingerprint is
+    // dropTable(1): the old build gives a tier-1 tool 10% Amber, the new one
+    // gives it Quartz only. That single value cannot be ambiguous between the
+    // two designs.
+    const deployedIsPreRedeploy =
+      onChain.tiers?.[1]?.table?.[1] > 0n;
+    const driftMeaningful = deployedIsPreRedeploy ? [] : drift;
+
+    return { ok: true, chain, onChain, drift: driftMeaningful, rawDrift: drift, deployedIsPreRedeploy };
   } catch (e) {
     return { ok: false, reason: `RPC error: ${e.message}` };
   }
@@ -150,6 +175,7 @@ export function describe(result) {
   if (!result.ok) return result.reason;
   const { onChain } = result;
   const bits = [`chain ${config.chainId}`, 'contract live'];
+  if (result.deployedIsPreRedeploy) bits.push('pre-redeploy (spec not yet on chain)');
   if (onChain?.current) bits.push(`season ${onChain.current.id ?? '?'}`);
   if (config.tokenAddress) bits.push(`token ${config.tokenAddress.slice(0, 6)}…${config.tokenAddress.slice(-4)}`);
   if (result.drift?.length) bits.push(`${result.drift.length} drift`);

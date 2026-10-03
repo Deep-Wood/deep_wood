@@ -54,7 +54,8 @@ const pad = await touchPage.evaluate(() => {
   const zone = (b) => (s.touchZones || []).find((z) => z.btn === b)?.zone;
   return {
     padVisible: s.hasTouchPad,
-    buttons: ['up', 'left', 'right', 'down', 'hunt', 'belt', 'board'].filter(vis),
+    // No 'belt': the toolbelt is a permanent part of the card, not a panel.
+    buttons: ['up', 'left', 'right', 'down', 'hunt', 'board'].filter(vis),
     rightCentre: zone('right') ? [zone('right').x, zone('right').y] : null,
     huntCentre: zone('hunt') ? [zone('hunt').x, zone('hunt').y] : null,
     hubIsInteractive: !!(s.touchZones || []).find((z) => z.btn === 'hub'),
@@ -105,6 +106,16 @@ if (pad.huntCentre) {
   // one fixed in smoke.mjs.
   const findsBefore = await touchPage.evaluate(async () => {
     const s = window.__scene;
+    // Buy a tool first. Hunting is REFUSED without one now
+    // (ECONOMY-SPEC.md section 1), so a phone player has to be able to reach a
+    // working pick through the UI before this means anything. Without it the
+    // button press is correctly rejected and the find count never moves.
+    if (!s.econ.tier) {
+      s.simBalance = 10n ** 20n;
+      s.refreshBelt();
+      document.getElementById('belt-buy').click();
+      await new Promise((r) => setTimeout(r, 150));
+    }
     // Stand the hunter on a node.
     const node = s.nodes.find((n) => !n.getData('used'));
     s.player.setPosition(node.x, node.y);
@@ -112,6 +123,16 @@ if (pad.huntCentre) {
     s.touchZones.find((t) => t.btn === 'hunt').zone.emit('pointerdown', { pointerId: 77 });
     return s.finds.length;
   });
+  // One press STARTS the dig. The site only gives way after MINER_STRIKES
+  // further presses, so keep striking -- same thing the desktop smoke does.
+  for (let k = 0; k < 4; k++) {
+    await new Promise((r) => setTimeout(r, 400));
+    await touchPage.evaluate(() => {
+      const z = window.__scene.touchZones.find((t) => t.btn === 'hunt')?.zone;
+      z?.emit('pointerdown', { pointerId: 77 });
+      z?.emit('pointerup', { pointerId: 77 });
+    });
+  }
   let findsAfter = findsBefore;
   for (let w = 0; w < 30; w++) {
     await new Promise((r) => setTimeout(r, 200));
@@ -139,11 +160,15 @@ check('the find log is not hidden under the d-pad', logClear.clear,
 const panels = await touchPage.evaluate(async () => {
   const s = window.__scene;
   const out = {};
-  s.touchZones.find((t) => t.btn === 'belt').zone.emit('pointerdown', { pointerId: 81 });
-  await new Promise((r) => setTimeout(r, 200));
-  out.beltOpened = !!s.beltPanel;
-  s.touchZones.find((t) => t.btn === 'belt').zone.emit('pointerup', { pointerId: 81 });
-  s.closeBelt();
+  // There is no BELT button any more: the toolbelt is a permanent card in the
+  // header, so "can a phone player reach a tool" is answered by the buy button
+  // being present and hit-testable in the card, not by a panel opening.
+  const buy = document.getElementById('belt-buy');
+  const r0 = buy?.getBoundingClientRect();
+  out.beltOpened = !!buy && !!r0 && r0.width > 0;
+  out.buyReachable = out.beltOpened
+    && (() => { const el = document.elementFromPoint(r0.left + r0.width / 2, r0.top + r0.height / 2);
+                return el === buy || buy.contains(el); })();
   s.touchZones.find((t) => t.btn === 'board').zone.emit('pointerdown', { pointerId: 82 });
   await new Promise((r) => setTimeout(r, 200));
   out.boardOpened = !!s.leaderboardOpen;
