@@ -186,12 +186,40 @@ if (walked) {
       await page.keyboard.down('Space');
       await new Promise((r) => setTimeout(r, 120));
       await page.keyboard.up('Space');
+
+      // Mining is PLAYER-DRIVEN: one press starts the dig, and each further
+      // SPACE is a pick strike. The site only breaks once MINER_STRIKES of them
+      // have landed, so a single press no longer produces a find -- pressing
+      // once and waiting is exactly the interaction that was deliberately
+      // removed. Swing until the site gives way.
+      //
+      // `mineStrike` ignores input within 160ms of the last swing, so the gaps
+      // here are comfortably wider than that and the loop cannot double-count.
+      let settled = false;
+      for (let strike = 0; strike < 8 && !settled; strike++) {
+        await new Promise((r) => setTimeout(r, 260));
+        const mid = await page.evaluate(() => ({
+          mining: !!window.__scene.mining,
+          finds: window.__scene.finds.length,
+        }));
+        if (mid.finds > before.finds) { settled = true; break; }
+        if (!mid.mining) {
+          // No dig running and still nothing found: the first SPACE never
+          // reached a site. Try once more from scratch before giving up.
+          await page.keyboard.down('Space');
+          await new Promise((r) => setTimeout(r, 120));
+          await page.keyboard.up('Space');
+          continue;
+        }
+        await page.keyboard.down('Space');
+        await new Promise((r) => setTimeout(r, 120));
+        await page.keyboard.up('Space');
+      }
       // POLL for the find instead of sleeping a fixed 1600ms. The dig is
       // frame-driven, so on a slow or loaded frame it completes later in wall
       // time -- a fixed wait made this the suite's flaky check, failing with
       // "reached a node and pressed SPACE, satchel still empty after 6s".
-      let settled = false;
-      for (let w = 0; w < 30; w++) {
+      for (let w = 0; w < 30 && !settled; w++) {
         await new Promise((r) => setTimeout(r, 200));
         const n = await page.evaluate(() => window.__scene.finds.length);
         if (n > before.finds) { settled = true; break; }

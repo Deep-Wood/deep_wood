@@ -106,11 +106,16 @@ const FADE_ALPHA = 0.45;
 // generated trees (~143px).
 const BEACON_SCALE = 0.22;
 // The revealed gem. Source art (art/gem-*.png) has its longest edge at 192px,
-// so 0.34 lands a gem at roughly 64px on screen -- larger than the 42px
-// hunter, well under the smallest tree (134px). This is the one moment in the
-// game allowed to be the subject of the frame.
-// The fan spacing below derives from this so the gaps scale with the sprites.
-const GEM_SCALE = 0.34;
+// so 0.2 lands a gem at roughly 38px on screen: a touch smaller than the 42px
+// hunter. The gem is the PAYOUT, not the subject -- it sits on the ground at the
+// player's feet for a couple of seconds, and at 0.34 it read as larger than the
+// character who found it. The satchel panel is where the find is actually read.
+const GEM_SCALE = 0.2;
+// Fan spacing follows the sprite so a multi-rarity catch never overlaps.
+const GEM_STEP = 192 * GEM_SCALE * 1.05;
+// Pick swings required to break a site. Player-driven, so this is the real
+// interaction cost of a dig. Every strike must be a deliberate input.
+const MINER_STRIKES = 3;
 // Retained only for spawn/legacy callers. There is no world extent any more --
 // see WORLD_FAR and the chunk streamer.
 const WORLD_W = 40, WORLD_H = 30;
@@ -765,6 +770,22 @@ export class ForestScene extends Phaser.Scene {
       this.nodes.push(marker);
       objs.push(marker);
       nodes.push(marker);
+
+      // Clicking the site is a first-class way to mine it, not just SPACE or the
+      // HUNT button. A mouse player should never be told "SPACE  hunt" and then
+      // left with nothing to click. Two handlers:
+      //   - no dig running  -> start one (this is the HUNT action, pointed at)
+      //   - dig running     -> land a strike (this is the pick)
+      // One handler with a branch, because registering two on the same sprite
+      // means a single click during a dig fires both and swings twice.
+      marker.setInteractive({ useHandCursor: true });
+      marker.on('pointerdown', () => {
+        if (this.mining) {
+          if (this.mining.node === marker) this.mineStrike(this.time.now);
+        } else if (!this.busy) {
+          this.doHunt(marker);
+        }
+      });
 
       // The stake bobs. It no longer carries an alpha pulse of its own -- that
       // duty belongs to the core and the beam now, and pulsing the whole sprite
@@ -1862,21 +1883,43 @@ export class ForestScene extends Phaser.Scene {
 
     // context prompt
     const near = this.nearestNode();
-    if (near) {
+    if (this.mining) {
+      // Mid-dig: tell the player exactly what to do. Without this the site is
+      // flagged used, `near` is null, and the old prompt went away entirely --
+      // so a player who had started a dig was told nothing and left waiting for
+      // a gem that their own clicks were supposed to produce.
+      this.prompt.setVisible(true);
+      const left = MINER_STRIKES - this.mining.done;
+      this.prompt.setText(
+        this.hasTouchPad ? `TAP ${left} MORE` : `SPACE ${left} MORE`
+      );
+    } else if (near) {
       this.prompt.setVisible(true);
       this.prompt.setText(
         !activeTool(this.belt) ? (this.hasTouchPad ? 'TOOL BROKEN - open TOOLBELT' : 'TOOL BROKEN - TAB to repair')
           : this.busy ? 'hunting...'
             : (this.hasTouchPad ? 'tap HUNT' : 'SPACE  hunt')
       );
-      this.prompt.setPosition(this.cameras.main.scrollX + this.scale.width / 2,
-        this.cameras.main.scrollY + this.scale.height - 70);
     } else {
       this.prompt.setVisible(false);
     }
+    // Anchor the prompt to the bottom of the view for every state. This used to
+    // sit inside the `near` branch only, so pinning it up here means the
+    // mid-dig "TAP n MORE" state cannot leave it stranded wherever it last was.
+    this.prompt.setPosition(this.cameras.main.scrollX + this.scale.width / 2,
+      this.cameras.main.scrollY + this.scale.height - 70);
 
-    if (intent.hunt && near && !this.busy) {
-      this.doHunt(near);
+    if (intent.hunt) {
+      // While a dig is in progress the same input (SPACE / the HUNT button) is
+      // the PICK, not a new hunt. `near` is null here because the site is
+      // already flagged used, and `busy` is true by design for the duration of
+      // the dig -- so this branch must be checked BEFORE the `!this.busy` gate
+      // below, or the player can never swing.
+      if (this.mining) {
+        this.mineStrike(this.time.now);
+      } else if (near && !this.busy) {
+        this.doHunt(near);
+      }
     }
 
     if (intent.belt) {
@@ -2016,16 +2059,6 @@ export class ForestScene extends Phaser.Scene {
     this.markNodeDug(node);
 
     this.startDig(node);
-
-    const used = consumeUse(this.belt);
-    this.updateHud();
-
-    if (used.broke) {
-      this.time.delayedCall(500, () => {
-        this.flash(`Tier ${roman(used.tool.tier)} broke! It keeps its tier.`);
-        this.openBelt();
-      });
-    }
   }
 
   /**
@@ -2047,43 +2080,108 @@ export class ForestScene extends Phaser.Scene {
    * step with frame-rate compensation.
    */
   startDig(node) {
-    this.player.anims.stop();
-    this.player.setTexture(this.has('gen-hunter') ? 'gen-hunter' : 'hunter');
+      this.player.anims.stop();
+      this.player.setTexture(this.has('gen-hunter') ? 'gen-hunter' : 'hunter');
 
-    const DIG_MS = 2100;
-    const STRIKES = 3;
-    const gap = Math.round(DIG_MS / STRIKES) - 120;
-    // Face the site before swinging. `angle` is set by movement, and a hunter
-    // facing away while the pick lands behind him looks broken.
-    this.player.setRotation(Math.atan2(node.y - this.player.y, node.x - this.player.x));
+      // Mining is PLAYER-DRIVEN: the pick only falls when the player asks for it.
+      //
+      // This was a 2100ms tween chain that auto-fired three strikes, so one press
+      // of HUNT did the whole dig for you. The ask was "an actual mining where you
+      // have to click multiple times before the gem is mined" -- so the number of
+      // strikes is now a real input, and the gem appears only once they are all
+      // spent. Three is deliberate: enough to feel like work, few enough that a
+      // phone player does not have to mash.
+      //
+      // Tier sets the pace, not the count. A better pick hits harder and faster
+      // but still takes the same number of swings -- so upgrading is felt in the
+      // quality of each strike rather than in the dig getting shorter, which would
+      // make a tier-3 pick a strict shortcut through the interaction.
+      this.mining = {
+        node,
+        done: 0,
+        // Harder picks crack the rock faster: fewer frames between swings.
+        cooldown: Math.max(140, 320 - (this.belt?.tool?.tier ?? 1) * 40),
+        // Guards against a double-tap landing two strikes on one frame.
+        lastAt: 0,
+      };
 
-    // `this.tweens.chain({ tweens: [...] })`, NOT tween.then() -- Phaser 3.90's
-    // Tween object has no `.chain()` or `.then()` method (verified against the
-    // live prototype: only `nextState`). The chain builder is on the MANAGER.
-    const tweens = [];
-    for (let i = 0; i < STRIKES; i++) {
-      const power = 0.5 + i * 0.25;          // later strikes hit harder
-      tweens.push({
-        targets: this.player, duration: 1,
-        onComplete: () => this.strike(node, power),
-      });
-      // Hold the beat between strikes rather than sleeping.
-      tweens.push({ targets: this.player, duration: gap });
+      this.miningLabel = this.add.text(node.x, node.y + 34, 'STRIKE 1/3', {
+        fontFamily: 'ui-monospace, monospace', fontSize: '13px',
+        color: '#e8f6ff', stroke: '#0b1512', strokeThickness: 4,
+      }).setOrigin(0.5).setDepth(node.depth + 2);
+
+      // Face the site immediately, or the first swing lands behind him.
+      this.player.setRotation(Math.atan2(node.y - this.player.y, node.x - this.player.x));
+      this.updateMiningLabel();
     }
 
-    this.tweens.chain({
-      targets: this.player,
-      tweens,
-      onComplete: () => {
-        this.player.setScale(1);
-        this.player.setRotation(0);
-        this.reveal(node);
-        // Rebuild the chunk AFTER the reveal has read everything it needs off
-        // the node. With scarcity (isChunkSpent) this removes the spent site.
-        this.completeNodeDig();
-      },
-    });
-  }
+    /**
+     * One pick swing, from a player click/tap/SPACE.
+     *
+     * Returns without effect if the swing is on cooldown or the dig is already
+     * finished. Ignores extra input for ~160ms after the last strike so a fast
+     * double-tap cannot spend two strikes in one frame -- the player would then
+     * see "STRIKE 3/3" appear and vanish without a swing between them.
+     */
+    mineStrike(now) {
+      const m = this.mining;
+      if (!m || !m.node?.active) return;
+      if (now - m.lastAt < 160) return;
+      m.lastAt = now;
+
+      m.done += 1;
+      // Later strikes hit harder, so the last one is visibly the decisive blow.
+      const power = 0.55 + (m.done / MINER_STRIKES) * 0.6;
+      this.strike(m.node, power);
+      this.updateMiningLabel();
+
+      if (m.done >= MINER_STRIKES) this.finishDig();
+    }
+
+    /** Progress readout above the site: which swing is next, and how many are left. */
+    updateMiningLabel() {
+      const m = this.mining;
+      if (!m || !this.miningLabel) return;
+      if (m.done >= MINER_STRIKES) {
+        this.miningLabel.setText('BROKEN');
+        return;
+      }
+      this.miningLabel.setText(`STRIKE ${m.done + 1}/${MINER_STRIKES}`);
+      this.miningLabel.setPosition(m.node.x, m.node.y + 34);
+    }
+
+    /** The dig is complete: hand over the find and retire the site. */
+    finishDig() {
+      const m = this.mining;
+      if (!m) return;
+      this.mining = null;
+      this.miningLabel?.destroy();
+      this.miningLabel = null;
+      // Clear the "1 MORE" prompt immediately. update() only rewrites the prompt
+      // text inside its `if (this.mining)` branch, so once mining ends the last
+      // swing count stays frozen on screen until the player walks near another
+      // site -- reading as "keep mining" on a dig that is already finished.
+      this.prompt.setVisible(false);
+      this.player.setScale(1);
+      this.player.setRotation(0);
+      this.busy = false;
+
+      // The pick's durability is spent HERE, not when the dig started. A dig is
+      // now three separate player inputs, so a player who abandons one halfway
+      // must not be charged for a swing they never completed -- and must not be
+      // credited a gem either, since the site was already flagged dug.
+      const used = consumeUse(this.belt);
+      this.updateHud();
+      if (used.broke) {
+        this.flash(`Tier ${roman(used.tool.tier)} broke! It keeps its tier.`);
+        this.openBelt();
+      }
+
+      this.reveal(m.node);
+      // Rebuild the chunk AFTER the reveal has read everything it needs off the
+      // node. With scarcity (isChunkSpent) this removes the spent site.
+      this.completeNodeDig();
+    }
 
   /** One pick impact: the hunter rocks, the site shakes, dirt flies. */
   strike(node, power) {
@@ -2148,29 +2246,26 @@ export class ForestScene extends Phaser.Scene {
     });
     burst.explode(8);
 
-    // The revealed gems are the GENERATED sprites for their rarities. The
-    // drawn pixel-art gem is retired and no longer even baked.
+    // The reveal shows THE gem that was mined, not every rarity in the haul.
     //
-    // Two real defects fixed here, both reported as "the gems are not what
-    // appears when the hunter gets one":
+    // The fan-out this replaces was my own mistake, reported back as "when it
+    // claims a gem that is not quartz, it shows both the gem and the quartz
+    // gem". The cause is in engine.js: a hunt rolls 3-5 gems INDEPENDENTLY from
+    // the drop table, and quartz is the common tier, so counts[0] is non-zero in
+    // almost every single haul. Fanning out all non-zero rarities therefore put
+    // a quartz sprite on screen next to the ruby that actually mattered, every
+    // time. Quartz was not a bug in the roll; it was the roll working correctly
+    // and the presentation failing to prioritise it.
     //
-    // 1. ONLY THE BEST GEM WAS DRAWN. A haul of 4 quartz + 1 ruby rendered a
-    //    single ruby sprite, so the quartz that made up most of the find never
-    //    appeared at all. Now every rarity with a non-zero count gets its own
-    //    sprite, fanned out so a mixed haul is legible.
-    // 2. IT WAS GONE IN ~300ms. The pop ran 300ms and the drift 520ms, so by
-    //    the time a player looked down at their catch it had already faded.
-    //    It now holds at full size long enough to be read, then leaves.
-    const shown = [];
-    result.counts.forEach((c, r) => { if (c > 0) shown.push({ rarity: r, count: c }); });
-    // Cap the fan-out: a pathological haul should not carpet the screen.
-    const FAN = Math.min(shown.length, 5);
-    // Spacing derives from the on-screen gem size so the fan never overlaps as
-    // the scale changes. A gem is ~64px wide at GEM_SCALE, so 58px of step
-    // leaves them just touching -- a tight cluster that reads as one catch
-    // rather than five separate items scattered apart.
-    const GEM_STEP = 192 * GEM_SCALE * 0.9;
-    const baseX = node.x - ((FAN - 1) * GEM_STEP) / 2;
+    // So: one sprite, for the highest rarity in the haul (`topRarity`, computed
+    // above). That is the stone the player was hunting for, and it is the one
+    // worth drawing. The full haul is not lost -- it is already credited to
+    // this.belt and recorded on the season board, and the satchel panel lists
+    // every rarity with its count. If the haul is pure quartz, topRarity is 0
+    // and a quartz sprite shows, which is correct.
+    const shown = [{ rarity: topRarity, count: result.counts[topRarity] }];
+    const FAN = 1;
+    const baseX = node.x;
 
     shown.slice(0, FAN).forEach((s, i) => {
       // The GENERATED cut gem, loaded from art/gem-*.png as 'gen-gem-N'.
