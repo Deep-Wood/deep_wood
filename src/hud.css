@@ -139,7 +139,7 @@ html, body {
 .season-grid { grid-column: 2; grid-row: 1; }
 #status      { grid-column: 3; grid-row: 1; }
 #belt        { grid-column: 3; grid-row: 2; }
-#season > .bar { grid-row: 3; }
+#season > .bar { grid-row: 4; }
 
 /* The belt is the tallest block, so the two rules that used to divide the
  * vertical stack now divide the COLUMNS -- one between stats and chain state,
@@ -177,13 +177,9 @@ html, body {
 }
 .season-head .card-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Countdown ring. The season is the one thing on screen with a deadline, so
- * it gets the only circular element in the HUD -- it reads as a clock rather
- * than as another bar competing with the progress track below it. */
-.ring { width: 20px; height: 20px; flex: none; transform: rotate(-90deg); }
-.ring .track { stroke: rgba(63,138,82,.22); }
-.ring .fill  { stroke: var(--edge); transition: stroke-dashoffset .5s linear; }
-.ring.warn .fill { stroke: var(--warn); }
+/* The countdown ring's rules lived here. The ring element is deleted from
+ * index.html, so these are dead selectors -- removed with it rather than left
+ * to rot. ENDS and the season bar carry the countdown now. */
 
 .season-grid {
   display: grid;
@@ -237,42 +233,52 @@ button.chip:disabled { opacity: .55; cursor: default; }
 .dot.bad  { background: var(--bad); }
 
 /* --- satchel ------------------------------------------------------------
- * Hidden until it holds something.
+ * Now a permanent block INSIDE the header card, in the toolbelt column.
  *
- * The old card was always on screen and wrote the literal word "empty", which
- * both occupied 380x85px of a 390px phone and sat on top of the d-pad's lower
- * left corner, swallowing LEFT taps. Hiding it until the first gem is found
- * removes the collision entirely -- the thing that was covering the d-pad is
- * the thing that should not have existed yet.
+ * It was a second floating card pinned bottom-right, hidden until the first
+ * find and auto-retiring after 5s. On a screen that had just been cut down to
+ * ONE box, a second box that flickered in and out on a timer was the wrong
+ * shape for the one readout that answers "what have I found this season".
  *
- * Anchored bottom-right and ABOVE the d-pad row, so even when populated it
- * cannot overlap the controls.
+ * It is no longer positioned and no longer hides: those two behaviours are what
+ * this rule used to do, and both are gone with the markup change.
  * ------------------------------------------------------------------------ */
 
 #satchel {
-  position: absolute;
-  right: var(--s3);
-  bottom: calc(var(--s3) + 0px);
-  width: 200px;
-  padding: var(--s2) var(--s3) var(--s3);
-  z-index: 8;
-  /* hidden by default; .on is set by renderGems() the moment there is a gem */
-  opacity: 0; transform: translateY(6px); pointer-events: none;
-  transition: opacity .25s ease, transform .25s ease;
+  grid-column: 3; grid-row: 3;
+  padding-top: var(--s1);
+  border-top: 1px solid var(--edge-dim);
 }
-#satchel.on { opacity: 1; transform: none; pointer-events: auto; }
-#satchel .card-title { margin-bottom: var(--s2); }
+#satchel .card-title { display: block; margin-bottom: 1px; font-size: 9px; }
 
-#gemlist { display: grid; gap: 3px; }
-.gem { display: flex; justify-content: space-between; gap: var(--s3); font-size: 11px; }
-.gem .n { color: var(--dim); }
-.gem .c { color: var(--ink); font-variant-numeric: tabular-nums; }
-
-#satchelfoot { margin-top: var(--s2); padding-top: var(--s2); border-top: 1px solid var(--edge-dim);
-  font-size: 9px; color: var(--faint); line-height: 1.45; }
+#gemlist {
+  display: grid;
+  /* Five rarities across the column rather than five stacked lines. This is a
+     tally, not a list to read -- one glance should show the whole shape of the
+     season's finds. */
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0 var(--s1);
+}
+.gem {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 0; min-width: 0; line-height: 1.15;
+}
+/* The rarity name is abbreviated so five fit the column without truncating to
+   nothing. The full name is in the title attribute. */
+.gem .n {
+  font-size: 7px; letter-spacing: .04em; text-transform: uppercase;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.gem .c {
+  font-size: 11px; color: var(--ink); font-variant-numeric: tabular-nums;
+}
+/* A zero is dimmed so the counts you have actually earned read first. The name
+   stays at full strength: the point of showing it is to name what to go find. */
+.gem.none .c { color: var(--faint); }
+.gem.none .n { opacity: .75; }
 
 /* The persistent note. Lives at the top-right of the status column rather than
- * inside the satchel, so hiding the satchel cannot hide it. */
+ * inside the satchel, so it cannot inherit the satchel's visibility. */
 #hint {
   position: absolute;
   top: calc(var(--s3) + 76px);
@@ -331,7 +337,10 @@ button.chip:disabled { opacity: .55; cursor: default; }
   .season-grid { grid-column: 2; grid-row: 1; }
   #status      { grid-column: 1; grid-row: 2; }
   #belt        { grid-column: 2; grid-row: 2; }
-  #season > .bar { grid-column: 1 / -1; grid-row: 3; margin-top: 0; }
+  /* Satchel spans both columns here: five rarity tiles need the full width to
+     stay legible, and this row is otherwise empty on the left. */
+  #satchel     { grid-column: 1 / -1; grid-row: 3; border-left: 0; padding-left: 0; }
+  #season > .bar { grid-column: 1 / -1; grid-row: 4; margin-top: 0; }
 
   /* Column divider only -- no horizontal rules. On a phone the vertical rules
      are the whole point: they are what keeps the card two columns wide instead
@@ -364,7 +373,8 @@ button.chip:disabled { opacity: .55; cursor: default; }
   .season-grid  { grid-row: 1; justify-self: end; text-align: right; }
   #status       { grid-row: 2; }
   #belt         { grid-row: 3; }
-  #season > .bar { grid-row: 4; margin-top: var(--s1); }
+  #satchel      { grid-row: 4; }
+  #season > .bar { grid-row: 5; margin-top: var(--s1); }
   #status, #belt {
     border-left: 0; padding-left: 0;
     margin-top: var(--s1); padding-top: var(--s1);
@@ -381,14 +391,9 @@ button.chip:disabled { opacity: .55; cursor: default; }
   .belt-msg:empty { display: none; }
 }
 
-/* The d-pad owns the bottom-left on touch devices. Lift the satchel clear of
- * it rather than hoping they do not overlap. */
-@media (pointer: coarse) {
-  #satchel { bottom: auto; top: calc(var(--s3) + 190px); }
-}
-@media (pointer: coarse) and (max-height: 620px) {
-  #satchel { top: auto; bottom: calc(var(--s3) + 210px); }
-}
+/* The satchel used to be lifted clear of the d-pad here with a hardcoded 190px
+ * offset from when the header card was that tall. It is inside the card now and
+ * absolutely positioned nowhere, so those overrides are gone. */
 /* --- retired note -------------------------------------------------------- *
  * Only the bottom wallet note is transient, and only once. The top card is the
  * game's HUD and stays put.

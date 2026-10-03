@@ -129,27 +129,6 @@
         <img class="avatar" src="/art/viber.png" width="32" height="32"
              alt="Player portrait" aria-hidden="true">
         <span class="card-title">Season I &middot; Verdant Hollow</span>
-        <!-- The emblem's hub: a compass rose inside concentric carved rings.
-             The arc is still the countdown -- ticks and hub only make it read as
-             the medallion's centre rather than as another progress bar. -->
-        <svg class="ring" viewBox="0 0 36 36" aria-hidden="true">
-          <g class="ticks">
-            <line class="tick" x1="18" y1="1.5"  x2="18" y2="4.5"></line>
-            <line class="tick" x1="18" y1="31.5" x2="18" y2="34.5"></line>
-            <line class="tick" x1="1.5"  y1="18" x2="4.5"  y2="18"></line>
-            <line class="tick" x1="31.5" y1="18" x2="34.5" y2="18"></line>
-            <line class="tick" x1="6"   y1="6"   x2="8"   y2="8"></line>
-            <line class="tick" x1="28"  y1="28"  x2="30"  y2="30"></line>
-            <line class="tick" x1="30"  y1="6"   x2="28"  y2="8"></line>
-            <line class="tick" x1="8"   y1="28"  x2="6"   y2="30"></line>
-          </g>
-          <circle class="track" cx="18" cy="18" r="15.5" fill="none" stroke-width="2.2"></circle>
-          <circle class="fill" cx="18" cy="18" r="15.5" fill="none" stroke-width="2.2"
-                  stroke-linecap="round" stroke-dasharray="97.4" stroke-dashoffset="0"></circle>
-          <circle class="track" cx="18" cy="18" r="9" fill="none" stroke-width=".8"></circle>
-          <!-- the crystal, at the hub -->
-          <circle class="hub" cx="18" cy="18" r="2.4"></circle>
-        </svg>
       </div>
       <div class="season-grid">
         <div class="stat"><span class="k">Rank</span><span class="v hi" id="rank">&mdash;</span></div>
@@ -184,18 +163,27 @@
           <span class="belt-shop" id="belt-shop"></span>
         </div>
       </div>
-    </section>
-  </div>
 
-  <!-- Satchel. Starts hidden and is revealed by renderGems() on the first find.
-       #hint is the persistent wallet/chain note, which previously lived inside
-       # the satchel and was therefore hidden along with it. -->
-  <section id="satchel" class="card">
-    <span class="card-title">Satchel</span>
-    <div id="gemlist"></div>
-  </section>
+            <!-- Satchel: the find tally by rarity.
+                 It used to be a SEPARATE floating card below the header, hidden until
+                 the first gem, auto-retiring after 5s. That was a receipt, not an
+                 inventory -- and a second box on a screen that had just been reduced
+                 to one box.
 
-  <div id="hint" class="chip"></div>
+                 It now lives INSIDE the header card, in the toolbelt column beside
+                 the pick, and is permanently visible with all five rarities listed at
+                 zero. Two reasons it can no longer be hidden: the player needs to see
+                 what they have not found yet as much as what they have, and a readout
+                 that appears and vanishes on a timer cannot be the one place the
+                 season's finds are recorded. -->
+            <div id="satchel">
+              <span class="card-title">Satchel</span>
+              <div id="gemlist"></div>
+            </div>
+          </section>
+        </div>
+
+        <div id="hint" class="chip"></div>
 
   <!-- Error reporting installed FIRST, before any other module runs, so it
        captures throws from the game boot as well as from the HUD below.
@@ -318,54 +306,52 @@
     const totals = [0, 0, 0, 0, 0];
 
     function renderGems() {
-      const rows = gemNames.map((n, i) =>
-        totals[i] ? `<div class="gem"><span class="n" style="color:${gemColors[i]}">${n}</span><span class="c">${totals[i]}</span></div>` : ''
-      ).join('');
+      // All five rarities, ALWAYS, including the ones still at zero.
+      //
+      // This used to emit a row only for rarities with a non-zero count and
+      // hide the panel entirely when the list came back empty. Now that the
+      // satchel is a permanent part of the header card, an absent row would read
+      // as a rendering fault rather than as "not found one yet" -- the player
+      // cannot tell the difference between "you have found no ruby" and "this
+      // box is broken". A zero is information: it names the rarity as a target.
+      const rows = gemNames.map((n, i) => {
+        const c = totals[i];
+        return `<div class="gem${c ? '' : ' none'}">`
+          + `<span class="n" style="color:${gemColors[i]}">${n}</span>`
+          + `<span class="c">${c}</span></div>`;
+      }).join('');
 
-      // There is no "empty" state any more. The card is simply absent until
-      // there is something in it -- the old version wrote the literal word
-      // "empty" on a fresh load, which read as a failure to fill a box the
-      // player had not yet been asked to fill, and held 380x85px of a 390px
-      // screen over the d-pad.
-      satchel.classList.toggle('on', rows.length > 0);
       gemlist.innerHTML = rows;
-
-      // Auto-retire after a beat. The satchel is a receipt, not an inventory
-      // panel: it appeared and stayed forever, holding space over the playfield
-      // for gems the player had already dealt with. It now shows itself when a
-      // find lands, then gets out of the way.
-      clearTimeout(retireTimer);
-      retireTimer = setTimeout(() => { satchel.classList.remove('on'); }, 5000);
     }
-    let retireTimer = null;
 
-    // Exposed so the game can retire it the moment gems are actually spent.
-    window.retireSatchel = () => {
-      clearTimeout(retireTimer);
-      satchel.classList.remove('on');
-    };
+    // Kept as a no-op because two call sites in ForestScene.js still invoke it
+    // when gems are spent, and they are load-bearing for the spend path.
+    //
+    // It used to hide the panel. It cannot any more: the satchel now lives in
+    // the permanent header card and carries the season's find tally, so hiding
+    // it on a purchase would blank the player's whole record of the season.
+    // Spending gems does not un-find them.
+    window.retireSatchel = () => { /* the satchel is permanent now */ };
     renderGems();
 
-    // Countdown ring. The season is the only deadline on screen, so it gets the
-    // HUD's one circular element rather than a third horizontal bar.
+    // Countdown. Drives the ENDS text and the season progress bar.
+    //
+    // This used to also drive a circular ring in the card head. The ring was
+    // deleted because it duplicated what ENDS and the bar already said, in a
+    // third visual language, for 26px of a card that had been cut for height.
+    // The countdown logic is unchanged -- only the ring element was removed, and
+    // the `fill` branch is now simply absent.
     (function countdown() {
       const ends = document.getElementById('ends');
-      const ring = document.querySelector('.ring');
-      const fill = ring && ring.querySelector('.fill');
       const bar = document.getElementById('seasonbar');
       // Season I ends 13d 04h after the epoch the page ships with. Read from
       // the DOM if present so this is not a second source of truth.
       const TOTAL = 13 * 86400 + 4 * 3600;
-      const CIRC = 97.4;           // 2*pi*r for r=15.5
       const tick = () => {
         const left = Math.max(0, TOTAL - Math.floor((Date.now() - START) / 1000));
         const d = Math.floor(left / 86400), h = Math.floor((left % 86400) / 3600);
         ends.textContent = d > 0 ? `${d}d ${String(h).padStart(2, '0')}h` : `${h}h`;
         const frac = left / TOTAL;
-        if (fill) {
-          fill.style.strokeDashoffset = String(CIRC * (1 - frac));
-          ring.classList.toggle('warn', frac < 0.15);
-        }
         if (bar) bar.style.width = (frac * 100).toFixed(2) + '%';
       };
       tick();
