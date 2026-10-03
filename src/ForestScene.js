@@ -105,11 +105,12 @@ const FADE_ALPHA = 0.45;
 // source height (232px -> ~79px), which keeps it clearly shorter than the
 // generated trees (~143px).
 const BEACON_SCALE = 0.22;
-// The revealed gem. Drawn gems live on a 64x64 canvas with the art inset
-// (see reveal()), so 1.0 lands around 64px -- bigger than the 42px hunter,
-// smaller than the smallest tree. This is the one moment in the game that is
-// allowed to be the subject of the frame.
-const GEM_SCALE = 1.0;
+// The revealed gem. Source art (art/gem-*.png) has its longest edge at 192px,
+// so 0.34 lands a gem at roughly 64px on screen -- larger than the 42px
+// hunter, well under the smallest tree (134px). This is the one moment in the
+// game allowed to be the subject of the frame.
+// The fan spacing below derives from this so the gaps scale with the sprites.
+const GEM_SCALE = 0.34;
 // Retained only for spawn/legacy callers. There is no world extent any more --
 // see WORLD_FAR and the chunk streamer.
 const WORLD_W = 40, WORLD_H = 30;
@@ -217,24 +218,21 @@ export class ForestScene extends Phaser.Scene {
     load('gen-crystal', 'art/crystal.png');
     load('gen-hunter', 'art/hunter.png');
     load('gen-beacon', 'art/beacon.png');
-    // GEMS ARE DRAWN, NOT LOADED.
+    // The five GENERATED cut gems, one per rarity. Keys are 'gen-gem-N' because
+    // these are painted assets, not baked pixel art -- same convention as the
+    // beacon, which loads fine from 'art/beacon.png'.
     //
-    // This used to load five AI-generated PNGs ("one generated sprite per
-    // rarity, so the reveal shows painted gems rather than pixel art"). Those
-    // files are not gems: gem-quartz.png and friends are 84x84 AI PHOTOGRAPHS --
-    // thousands of unique colours, fully opaque to the corners, no silhouette.
-    // Scaled to 67px they read on screen as a flat rectangle of the gem's
-    // average colour, which is exactly what was reported: "instead of animating
-    // the full gem, it's showing a rectangle of the gem colour". Measured on
-    // the files: quartz has 2381 unique colours and an opaque border; a
-    // faceted pixel gem has ~4.
-    //
-    // `makeGems()` is baked in buildAllTextures(), so keys 'gem0'..'gem4'
-    // already exist as real cut gems with facets, a specular hit and spark
-    // pixels. The reveal now uses those. The AI PNGs stay on disk but unused.
-    //
-    // Keys stay 'gem0'..'gem4' (NOT 'gen-gem-N') so the reveal reads the baked
-    // art without a second lookup path.
+    // The runtime PNGs under public/art/ used to be flattened during asset prep:
+    // alpha was dropped, corner alpha became 255, and the sprite rendered as a
+    // solid rectangle of the gem's average colour. The clean alpha-preserving
+    // originals live in src/assets/ and are what these are now built from
+    // (trim to content, longest edge 192, aspect preserved, alpha intact).
+    // Do NOT round-trip these through a step that drops the alpha channel.
+    load('gen-gem-0', 'art/gem-quartz.png');
+    load('gen-gem-1', 'art/gem-amber.png');
+    load('gen-gem-2', 'art/gem-sapphire.png');
+    load('gen-gem-3', 'art/gem-ruby.png');
+    load('gen-gem-4', 'art/gem-diamond.png');
   }
 
   /** True when the generated art for a role actually loaded. */
@@ -2167,22 +2165,24 @@ export class ForestScene extends Phaser.Scene {
     result.counts.forEach((c, r) => { if (c > 0) shown.push({ rarity: r, count: c }); });
     // Cap the fan-out: a pathological haul should not carpet the screen.
     const FAN = Math.min(shown.length, 5);
-    const baseX = node.x - ((FAN - 1) * 26) / 2;
+    // Spacing derives from the on-screen gem size so the fan never overlaps as
+    // the scale changes. A gem is ~64px wide at GEM_SCALE, so 58px of step
+    // leaves them just touching -- a tight cluster that reads as one catch
+    // rather than five separate items scattered apart.
+    const GEM_STEP = 192 * GEM_SCALE * 0.9;
+    const baseX = node.x - ((FAN - 1) * GEM_STEP) / 2;
 
     shown.slice(0, FAN).forEach((s, i) => {
-      // The DRAWN cut gem, baked by makeGems() -> keys 'gem0'..'gem4'.
-      // This was `gen-gem-${s.rarity}`, pointing at the AI PNGs, which are
-      // photographs rather than gem sprites and rendered as a solid rectangle
-      // of the gem's average colour.
-      const gemKey = `gem${s.rarity}`;
-      if (!this.has(gemKey)) return;
-      // Drawn sprites are all a 64x64 canvas (16 logical px x SCALE 4) with the
-      // art inset inside it, so the gem's real pixels occupy only the middle
-      // ~40x44 of that. At the AI PNG's old scale of 0.8 a cut gem renders about
-      // 32px -- smaller than the 42px hunter, i.e. a treasure you have to hunt
-      // for on screen. GEM_SCALE gives ~64px: clearly the subject, still well
-      // under the smallest tree (134px) so the forest is not overwhelmed.
-      const gem = this.add.image(baseX + i * 26, node.y, gemKey)
+      // The GENERATED cut gem, loaded from art/gem-*.png as 'gen-gem-N'.
+      // Source art has its longest edge at 192px, so GEM_SCALE brings a gem to
+      // roughly 64px on screen: larger than the 42px hunter, well under the
+      // smallest tree (134px). The gems vary in shape and aspect (a marquise
+      // quartz next to a round diamond), so they are scaled by their LONGEST
+      // edge rather than squashed to a common square -- that keeps every stone
+      // undistorted and still lands them all at a similar visual size.
+      const genGem = `gen-gem-${s.rarity}`;
+      if (!this.has(genGem)) return;
+      const gem = this.add.image(baseX + i * GEM_STEP, node.y, genGem)
         .setDepth(10)
         .setScale(0);
       // Pop in with a small stagger so a multi-gem haul unfurls rather than
@@ -2207,7 +2207,7 @@ export class ForestScene extends Phaser.Scene {
       });
       // A count badge when one rarity contributes several stones.
       if (s.count > 1) {
-        const label = this.add.text(baseX + i * 26, node.y + 26, `x${s.count}`, {
+        const label = this.add.text(baseX + i * GEM_STEP, node.y + 26, `x${s.count}`, {
           fontFamily: 'ui-monospace, monospace', fontSize: '13px', color: '#e8f6ff',
         }).setOrigin(0.5).setDepth(11).setAlpha(0.9);
         this.tweens.add({
