@@ -1447,6 +1447,20 @@ export class ForestScene extends Phaser.Scene {
     });
 
     // --- claim the next tier
+    // Clear the slot first. `shop` does `textContent = ''` before rebuilding and
+    // the tool rows are emptied the same way, but the claim slot was only ever
+    // appended to -- so every syncBeltDom() stacked ANOTHER live button on top
+    // of the old one. Duplicate ids and all.
+    //
+    // The visible symptom was that the card stopped responding: the stale copies
+    // kept the label and disabled state they were built with, so a CLAIM the
+    // player could now afford still sat greyed out at the top of the stack
+    // (document.getElementById returns the FIRST match, which is always the
+    // oldest). Meanwhile clicks landed on the invisible newest copy, and the
+    // duplicates stacked every refresh -- 17 of them on the card in the
+    // screenshot. Belt refreshes run on every dig, every chain sync and every
+    // repair, so this compounded fast.
+    claimSlot.textContent = '';
     const claim = document.createElement('button');
     claim.className = 'chip btn';
     claim.id = 'belt-claim';
