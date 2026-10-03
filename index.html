@@ -129,10 +129,16 @@
         <img class="avatar" src="/art/viber.png" width="32" height="32"
              alt="Player portrait" aria-hidden="true">
         <span class="card-title">Season I &middot; Verdant Hollow</span>
+        <!-- Connect lives at the top right of the card, on the season's own
+             header line. It was previously down in the chain block with the
+             status chip, which buried the one control a first-time player needs
+             under three rows of numbers they have no stake in yet. -->
+        <button class="chip" id="connect">Connect wallet</button>
       </div>
       <div class="season-grid">
         <div class="stat"><span class="k">Rank</span><span class="v hi" id="rank">&mdash;</span></div>
         <div class="stat"><span class="k">ROI</span><span class="v" id="roi">&mdash;</span></div>
+        <div class="stat"><span class="k">Finds</span><span class="v" id="finds">&mdash;</span></div>
         <div class="stat"><span class="k">Ends</span><span class="v" id="ends">&mdash;</span></div>
       </div>
       <div class="bar"><i id="seasonbar"></i></div>
@@ -142,7 +148,9 @@
            one piece of information about the same season. -->
       <div id="status">
         <div class="chip" id="chainstat"><span class="dot warn"></span><span id="chaintext">checking&hellip;</span></div>
-        <button class="chip" id="connect">Connect wallet</button>
+        <!-- The Connect button moved up to the season header line. It used to
+             sit here beside the status chip, which put the one control a new
+             player needs three rows below the season title. -->
       </div>
 
       <!-- The toolbelt, in that same card. It is not a panel over the game:
@@ -299,7 +307,12 @@
     // Anchored once per page load so the ring animates from a real start
     // instead of being re-zeroed on every tick.
     const START = Date.now();
+    // Short labels for the inline satchel tiles: "SAPPHIRE 0" will not fit a
+      // fifth of the toolbelt column next to a number, and truncating it to
+      // "SAPPH…" helps nobody. The full name stays in the title attribute, so
+      // the abbreviation costs nothing but the vowel.
     const gemNames = ['Quartz', 'Amber', 'Sapphire', 'Ruby', 'Diamond'];
+    const gemShort = ['Qtz', 'Amb', 'Sapph', 'Ruby', 'Diam'];
     const gemColors = ['#cfd6dd', '#d9a441', '#3a6fd8', '#d83a5a', '#8a3ad8'];
     const gemlist = document.getElementById('gemlist');
     const satchel = document.getElementById('satchel');
@@ -316,8 +329,8 @@
       // box is broken". A zero is information: it names the rarity as a target.
       const rows = gemNames.map((n, i) => {
         const c = totals[i];
-        return `<div class="gem${c ? '' : ' none'}">`
-          + `<span class="n" style="color:${gemColors[i]}">${n}</span>`
+        return `<div class="gem${c ? '' : ' none'}" title="${n}: ${c}">`
+          + `<span class="n" style="color:${gemColors[i]}">${gemShort[i]}</span>`
           + `<span class="c">${c}</span></div>`;
       }).join('');
 

@@ -112,14 +112,21 @@ html, body {
  * vertical layout without needing a separate mobile rule. */
 #season {
   display: grid;
-  grid-template-columns:
-    minmax(150px, auto)      /* identity: avatar + title + countdown ring */
-    minmax(190px, auto)      /* season stats */
-    minmax(0, auto);         /* chain + toolbelt, only as wide as it needs */
+  /* TWO columns, not three.
+   *
+   * The third column was `minmax(150px, auto)` for the season title, and the
+   * Connect button was moved into that header -- which left the button stranded
+   * 878px from the card's right edge, because the title column is sized to its
+   * content and stops well short of the card edge. The title row now spans both
+   * columns, so this template has two entries to match:
+   *   col 1 = season title (full width) over the stats
+   *   col 2 = chain state, toolbelt, satchel
+   */
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto);
   justify-content: start;
-  align-items: center;
-  column-gap: var(--s3);
-  row-gap: var(--s2);
+  align-items: start;
+  column-gap: var(--s2);
+  row-gap: var(--s1);
 }
 /* Everything from the progress bar down spans all three columns. */
 #season > .bar { grid-column: 1 / -1; margin-top: 0; }
@@ -135,11 +142,38 @@ html, body {
  *
  * The toolbelt sits under the chain chips in the same column, so those two stack
  * in the space the old card spent on them being separate full-width bands. */
-.season-head { grid-column: 1; grid-row: 1; margin-bottom: 0; }
-.season-grid { grid-column: 2; grid-row: 1; }
-#status      { grid-column: 3; grid-row: 1; }
-#belt        { grid-column: 3; grid-row: 2; }
-#season > .bar { grid-row: 4; }
+/* Grid shape.
+ *
+ * Reverted to TWO columns, not three. The three-column strip put the season
+ * title in column 1 and the stats in column 2 -- so Rank/ROI/Ends read as a
+ * sibling block beside the title rather than as belonging to it. The brief was
+ * for them to sit BELOW the season header, and they now do.
+ *
+ * Left column  = identity (title + connect) over the stats.
+ * Right column = chain state, toolbelt, satchel.
+ * The bar spans the full width underneath.
+ *
+ * This also removes a column, which is where the height saving comes from. The
+ * card had grown 139 -> 186px because each addition stacked a new row rather
+ * than filling space that was already there.
+ */
+/* Row/column map. The header spans the full width so Connect can sit hard
+ * against the card's right edge; that pushes everything below it down one row.
+ * Every placement below is explicit because implicit auto-placement collides
+ * with an explicitly-placed item -- which is exactly what happened when the
+ * header started spanning: #status stayed on row 1, the grid invented a third
+ * column to keep it out of the header's way, and the card grew a phantom
+ * column that pushed Connect 878px from the edge. */
+.season-head { grid-column: 1 / -1; grid-row: 1; margin-bottom: 0; }
+.season-grid { grid-column: 1; grid-row: 2; }
+/* The satchel goes UNDER THE STATS in the left column, not at the foot of the
+ * right one. Stacked in the right column it made that column 26+58+30 = 114px
+ * while the left held 26px, so the card was as tall as its tallest column plus
+ * the header. Split this way both columns land near 84px. */
+#satchel     { grid-column: 1; grid-row: 3; }
+#status      { grid-column: 2; grid-row: 2; }
+#belt        { grid-column: 2; grid-row: 3; }
+#season > .bar { grid-column: 1 / -1; grid-row: 4; }
 
 /* The belt is the tallest block, so the two rules that used to divide the
  * vertical stack now divide the COLUMNS -- one between stats and chain state,
@@ -161,9 +195,11 @@ html, body {
   .avatar { width: 26px; height: 26px; }
 }
 
+/* 24px, not 32px. The avatar is decorative -- it was setting the height of the
+ * header row, and a decorative circle was costing the whole card 8px. */
 .avatar {
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   object-fit: cover;
   flex: 0 0 auto;
@@ -172,10 +208,13 @@ html, body {
 }
 
 .season-head {
-  display: flex; align-items: center; gap: var(--s2);
-  margin-bottom: var(--s1);
+  display: flex; align-items: center; gap: var(--s1);
+  margin-bottom: 0;
 }
+/* The title takes the slack so Connect sits hard against the card's right edge,
+   level with the season name rather than tucked beside it. */
 .season-head .card-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.season-head #connect { flex: none; margin-left: auto; }
 
 /* The countdown ring's rules lived here. The ring element is deleted from
  * index.html, so these are dead selectors -- removed with it rather than left
@@ -183,8 +222,12 @@ html, body {
 
 .season-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0,1fr));
-  gap: var(--s2) var(--s3);
+  /* Four readouts now: Rank, ROI, Finds, Ends. They sit directly under the
+     season title, so the gap between the title row and this row is the only
+     thing separating them -- keep it to --s1. */
+  grid-template-columns: repeat(4, minmax(0,1fr));
+  gap: 0 var(--s2);
+  margin-top: var(--s1);
 }
 .stat { min-width: 0; }
 .stat .k {
@@ -245,7 +288,10 @@ button.chip:disabled { opacity: .55; cursor: default; }
  * ------------------------------------------------------------------------ */
 
 #satchel {
-  grid-column: 3; grid-row: 3;
+  /* Placement lives in the row map above, with every other block. This rule is
+   * only the satchel's own box now -- repeating grid-column/grid-row here is
+   * what let a stale `column 3` override the map and push the satchel into a
+   * phantom third column. */
   padding-top: var(--s1);
   border-top: 1px solid var(--edge-dim);
 }
@@ -259,18 +305,25 @@ button.chip:disabled { opacity: .55; cursor: default; }
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0 var(--s1);
 }
+/* Name and count on ONE line, not stacked.
+ *
+ * Stacked, each tile was 39px: a 7px label over an 11px number, and the block
+ * alone cost the card more than the entire season header. Laid out inline the
+ * same five tiles are 19px, which is the difference between this card fitting
+ * the top of a phone and not. The abbreviation drops the trailing vowel so
+ * five tiles still fit the toolbelt column without truncating to ellipses. */
 .gem {
-  display: flex; flex-direction: column; align-items: center;
-  gap: 0; min-width: 0; line-height: 1.15;
+  display: flex; align-items: baseline; justify-content: center;
+  gap: 2px; min-width: 0; line-height: 1.1;
 }
-/* The rarity name is abbreviated so five fit the column without truncating to
-   nothing. The full name is in the title attribute. */
 .gem .n {
-  font-size: 7px; letter-spacing: .04em; text-transform: uppercase;
+  font-size: 7px; letter-spacing: .03em; text-transform: uppercase;
+  color: var(--dim);
   max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .gem .c {
   font-size: 11px; color: var(--ink); font-variant-numeric: tabular-nums;
+  flex: none;
 }
 /* A zero is dimmed so the counts you have actually earned read first. The name
    stays at full strength: the point of showing it is to name what to go find. */
@@ -339,7 +392,6 @@ button.chip:disabled { opacity: .55; cursor: default; }
   #belt        { grid-column: 2; grid-row: 2; }
   /* Satchel spans both columns here: five rarity tiles need the full width to
      stay legible, and this row is otherwise empty on the left. */
-  #satchel     { grid-column: 1 / -1; grid-row: 3; border-left: 0; padding-left: 0; }
   #season > .bar { grid-column: 1 / -1; grid-row: 4; margin-top: 0; }
 
   /* Column divider only -- no horizontal rules. On a phone the vertical rules
@@ -365,26 +417,79 @@ button.chip:disabled { opacity: .55; cursor: default; }
  * what a player actually glances at mid-hunt. */
 @media (max-width: 430px) {
   #season {
-    grid-template-columns: minmax(0, 1fr);
+    /* Two columns, not one: the chain chip and the satchel are each one short
+       line and fit side by side at 390px. The old single column here was what
+       put them on two separate rows. */
+    grid-template-columns: minmax(0, 1fr) minmax(0, auto);
     row-gap: 0;
   }
-  .season-head, .season-grid, #status, #belt { grid-column: 1; }
+  .season-head, .season-grid, #belt { grid-column: 1 / -1; }
   .season-head  { grid-row: 1; }
   .season-grid  { grid-row: 1; justify-self: end; text-align: right; }
-  #status       { grid-row: 2; }
-  #belt         { grid-row: 3; }
-  #satchel      { grid-row: 4; }
+  #belt         { grid-row: 2; }
+  /* Chain state and the satchel share one row.
+   *
+   * The chain chip is one short line and the satchel is one short line; stacked
+   * they were costing the phone 19px for a row that has room for both. They sit
+   * side by side here with the vertical rule between them doing the separating,
+   * which is the same trick the desktop grid uses. */
+  /* Stats and satchel take the left column here, because the 430px layout puts
+   * the header and the full-width belt on their own rows above. */
+  .season-grid  { grid-row: 3; grid-column: 1; justify-self: stretch; text-align: left; }
+  #satchel      { grid-row: 4; grid-column: 1; }
+  #status       { grid-row: 3; grid-column: 2; }
   #season > .bar { grid-row: 5; margin-top: var(--s1); }
-  #status, #belt {
+  #belt {
     border-left: 0; padding-left: 0;
     margin-top: var(--s1); padding-top: var(--s1);
     border-top: 1px solid var(--edge-dim);
+  }
+  #satchel {
+    margin-top: var(--s1); padding-top: var(--s1);
+    border-top: 1px solid var(--edge-dim);
+    border-left: 1px solid var(--edge-dim); padding-left: var(--s2);
   }
   /* Chain state and the toolbelt share one row: the wallet chip sits left, the
    * counts and the pick sit right. This is the row that was costing 35px. */
   #status { display: flex; gap: var(--s1); }
   .chip { font-size: 9px; padding: 1px 6px; }
   #belt .belt-row { gap: var(--s1); }
+
+  /* The toolbelt is 104px on a phone, taller than the entire season header,
+   * because its three rows each wrap onto their own line at 390px: counts, then
+   * the pick, then CLAIM, then the shop. The rows are merged instead --
+   * `#belt-msg` and the mode line are already hidden or empty here, so a row
+   * that only holds CLAIM and the shop has nothing in it but buttons and can
+   * sit beside the counts rather than below them. */
+  #belt .belt-row + .belt-row { margin-top: 0; }
+  /* The spacer exists to push CLAIM and the shop apart on one line. On a phone
+   * there is no room for that: it was claiming 240px of a 340px row and
+   * forcing the shop onto its own line underneath. Removed here, so CLAIM and
+   * the shop share the line the way they do on desktop. */
+  #belt .spacer { display: none; }
+  #belt-counts { font-size: 10px; }
+  .chip.btn { font-size: 9px; padding: 1px 5px; }
+  .belt-tool { font-size: 10px; }
+  /* The shop is the last 42px of the belt: two rows, each a rarity name, a
+   * price and a button, stacked. At 390px both rows fit SIDE BY side once the
+   * price drops the "ETH" suffix, so they are laid out as a two-column grid
+   * instead of stacked flex lines. That is the difference between the belt
+   * being 78px and 99px. */
+  .belt-shop {
+    /* Needs the !important: belt.css sets `.belt-shop { display: flex }` in a
+     * plain rule, and a bare `display: grid` here loses the cascade while its
+     * sibling `grid-template-columns` still applied -- so the rows stayed
+     * flex-stacked with grid tracks that were doing nothing. */
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2px var(--s1);
+    width: 100%;
+  }
+  .belt-shop .row { min-width: 0; gap: var(--s1); }
+  .belt-shop .row > span {
+    font-size: 9px; min-width: 0; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+  }
   /* The mode line ("PREVIEW - simulation only") restates the chain chip two
      lines above it. On a phone that is a whole line spent saying nothing. */
   #belt-mode { display: none; }

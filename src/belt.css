@@ -15,15 +15,15 @@
 }
 .belt-counts { color: var(--text); font-size: 11px; }
 .belt-mode   { color: var(--warn); font-size: 9px; }
-.belt-tools  { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: 2px; }
+.belt-tools  { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: 0; }
 .belt-tool   { color: var(--text); }
 .belt-tool.held { color: var(--ok); }
 .belt-tool.broke { color: var(--bad); }
-.belt-claim  { display: flex; align-items: center; gap: var(--s2); margin-top: var(--s2); flex-wrap: wrap; }
+.belt-claim  { display: flex; align-items: center; gap: var(--s2); margin-top: 0; flex-wrap: wrap; }
 .belt-msg    { color: var(--warn); font-size: 9px; }
 .belt-msg.ok { color: var(--ok); }
 .belt-msg.bad { color: var(--bad); }
-.belt-shop   { display: flex; flex-wrap: wrap; gap: var(--s3); margin-top: var(--s2); }
+.belt-shop   { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: 0; }
 .belt-shop .row { display: flex; align-items: center; gap: var(--s2); }
 .chip.btn {
   cursor: pointer;

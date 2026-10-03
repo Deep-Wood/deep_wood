@@ -1154,6 +1154,7 @@ export class ForestScene extends Phaser.Scene {
   }
 
   updateHud() {
+    this.paintSeasonStats();
     const tool = activeTool(this.belt);
     const pct = tool ? tool.left / tool.max : 0;
     this.durBar.width = 200 * pct;
@@ -1692,6 +1693,49 @@ export class ForestScene extends Phaser.Scene {
     }
     if (!tools.length) return; // never empty a belt we failed to read
     this.belt.tools = tools;
+  }
+
+  /**
+   * Rank / ROI / Finds, read off the live season board.
+   *
+   * These three readouts sat at a permanent em dash for the entire life of the
+   * card: #rank and #roi had markup but NO code anywhere in the repo ever wrote
+   * them (checked every getElementById/querySelector in src/ and index.html).
+   * The board already holds everything they need -- recordHunt() runs on every
+   * completed dig -- so they were never a missing-data problem, just a missing
+   * painter.
+   *
+   * `standing()` is the same call the board overlay makes, so the card and the
+   * overlay can never disagree about the player's position.
+   */
+  paintSeasonStats() {
+    const rankEl = document.getElementById('rank');
+    const roiEl = document.getElementById('roi');
+    const findsEl = document.getElementById('finds');
+    if (!rankEl || !roiEl || !findsEl) return;
+
+    const me = String(this.wallet ?? '0xplayer').toLowerCase();
+    const entry = this.board.players.get(me);
+
+    // Finds is the one that always has an answer: it counts hunts, so it moves
+    // from the first dig onward. Rank and ROI need spend above the splay floor,
+    // so a player who has only hunted is genuinely unranked -- say so rather
+    // than showing a bare dash.
+    findsEl.textContent = entry ? fmt(entry.hunts) : '0';
+
+    if (!entry || entry.hunts === 0) {
+      rankEl.textContent = '—';
+      roiEl.textContent = '—';
+      return;
+    }
+    const st = standing(this.board, me);
+    if (!st.ranked) {
+      rankEl.textContent = 'unranked';
+      roiEl.textContent = `${(Number(entry.leq) / Math.max(1, Number(entry.ethSpent)) * 100).toFixed(1)}%`;
+      return;
+    }
+    rankEl.textContent = `#${st.rank}`;
+    roiEl.textContent = `${(Number(entry.leq) / Math.max(1, Number(entry.ethSpent)) * 100).toFixed(1)}%`;
   }
 
   refreshBelt() {
