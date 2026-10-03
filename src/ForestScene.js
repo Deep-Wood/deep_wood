@@ -2046,8 +2046,18 @@ export class ForestScene extends Phaser.Scene {
     if (!tool) {
       // Every tool is broken. Send them to the belt panel rather than
       // silently ignoring SPACE.
-      this.openBelt();
-      this.flash('Tool broken - repair it to hunt again.');
+      //
+      // Throttled. This used to flash on EVERY press, so a player who kept
+      // striking a broken pick got the identical line reprinted several times a
+      // second and no sense of what to do next -- it read as the game erroring
+      // rather than as a resource being exhausted. Once every 2s, and the
+      // message names the fix.
+      const now = this.time.now;
+      if (now - (this._brokenAt ?? -1e9) > 2000) {
+        this._brokenAt = now;
+        this.openBelt();
+        this.flash('Pick broken - claim or repair a tool to keep hunting.');
+      }
       return;
     }
     this.busy = true;
@@ -2181,6 +2191,18 @@ export class ForestScene extends Phaser.Scene {
       // Rebuild the chunk AFTER the reveal has read everything it needs off the
       // node. With scarcity (isChunkSpent) this removes the spent site.
       this.completeNodeDig();
+
+      // Warn BEFORE the pick dies rather than after. Durability is charged on
+      // the final strike, so a pick with 1 use left breaks at the exact moment a
+      // dig completes -- and the player only discovers that by pressing HUNT
+      // afterwards and being told the tool is broken. A short warning at <=2
+      // uses makes the last dig a decision instead of a surprise.
+      const left = activeTool(this.belt)?.left ?? 0;
+      if (left <= 2) {
+        this.flash(left === 0
+          ? 'Pick broke - claim or repair a tool to hunt again.'
+          : `Pick has ${left} use${left === 1 ? '' : 's'} left.`);
+      }
     }
 
   /** One pick impact: the hunter rocks, the site shakes, dirt flies. */
