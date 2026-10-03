@@ -894,7 +894,12 @@ export class ForestScene extends Phaser.Scene {
     // Rebuild rather than mutate: the rectangles all change on resize and
     // tracking nine zones' geometry by hand is how they end up mismatched.
     const zone = (btn, rect, label, opts = {}) => {
-      const { radius = 0, fontSize = 13, alpha = 0.34, tint = 0x9fbc9f } = opts;
+      // Alpha was 0.34 for the d-pad (0.42 HUNT, 0.30 BOARD) and stayed there
+      // when the 3D faces were added, so face AND base were both translucent
+      // and the extrusion had no solid mass to sit on -- the buttons read as
+      // glassy smudges rather than pressed metal. The d-pad is the worst case:
+      // at 0.34 over a dark forest floor it was barely legible.
+      const { radius = 0, fontSize = 13, alpha = 0.9, tint = 0x9fbc9f } = opts;
       const cx = rect.x + rect.w / 2;
       const cy = rect.y + rect.h / 2;
 
@@ -906,21 +911,27 @@ export class ForestScene extends Phaser.Scene {
       // 38px HUNT and a 46px d-pad key get the same visual weight rather than
       // the small one looking moulded and the large one stamped.
       const DEPTH = Math.max(2, Math.round(Math.min(rect.w, rect.h) * 0.13));
-      const BASE = 0x060d09;        // the extruded side, in shadow
-      const FACE = 0x16291a;        // the top surface
-      const EDGE = 0x2f5c42;        // rim light on the up-left lip
+      const BASE = 0x050a07;        // the extruded side, in shadow
+      const FACE = 0x1b3322;        // the top surface
+      const EDGE = 0x4e8a63;        // rim light on the up-left lip
+      // The base is drawn FULLY OPAQUE regardless of the button's alpha. A
+      // translucent extrusion makes the whole thing look like a smudge: the eye
+      // reads the shadowed side as part of the forest and the face as a tint on
+      // top of it, so the button loses its edge. The alpha still controls the
+      // face, so a quiet button reads quieter -- but it keeps a solid body.
       const dx2 = Math.max(1, Math.round(DEPTH * 0.5));
       const dy2 = DEPTH;
 
       const place = (shape) => {
+        const a = shape === 'base' ? 1 : alpha;
         if (radius) {
           return this.add.circle(shape === 'base' ? cx + dx2 : cx, shape === 'base' ? cy + dy2 : cy,
-            rect.w / 2, shape === 'base' ? BASE : FACE, alpha * (shape === 'base' ? 0.95 : 1));
+            rect.w / 2, shape === 'base' ? BASE : FACE, a);
         }
         return this.add.rectangle(
           rect.x + (shape === 'base' ? dx2 : 0), rect.y + (shape === 'base' ? dy2 : 0),
           rect.w, rect.h, shape === 'base' ? BASE : FACE,
-        ).setOrigin(0).setAlpha(alpha * (shape === 'base' ? 0.95 : 1));
+        ).setOrigin(0).setAlpha(a);
       };
 
       const base = place('base');
@@ -1007,11 +1018,11 @@ export class ForestScene extends Phaser.Scene {
 
     // HUNT is the core verb, so it gets its own large target rather than
     // living on the d-pad where it competes with the directions.
-    zone('hunt', r.hunt, 'HUNT', { radius: 1, fontSize: 15, alpha: 0.42, tint: 0x3f8a52 });
+    zone('hunt', r.hunt, 'HUNT', { radius: 1, fontSize: 15, alpha: 0.96, tint: 0x6fd08c });
 
     // Only BOARD. The TOOLBELT button is gone: the toolbelt is permanent rows
     // in the top card, so there is nothing left to open.
-    zone('board', r.board, 'BOARD', { fontSize: 11, alpha: 0.3 });
+    zone('board', r.board, 'BOARD', { fontSize: 11, alpha: 0.82, tint: 0x86a98c });
 
     this.touchLayer.setVisible(this.touchVisible);
 
