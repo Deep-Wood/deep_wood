@@ -226,7 +226,7 @@ before(async () => {
     window.ethereum = provider;
     window.dispatchEvent(new Event('ethereum#initialized'));
   }, CHAIN_ID);
-  await page.goto('http://localhost:4188', { waitUntil: 'domcontentloaded', timeout: 120000 });
+  await page.goto(process.env.PARITY_URL || 'http://localhost:4188', { waitUntil: 'domcontentloaded', timeout: 120000 });
   await new Promise((r) => setTimeout(r, 4000));
 
   // CONNECT. The app never connects on its own -- it waits for a click on
@@ -332,7 +332,7 @@ test('a page that boots with an already-authorised wallet is ON-CHAIN', async ()
       };
     }, WALLET, CHAIN_ID, RPCS);
 
-    await pg.goto('http://localhost:4188', { waitUntil: 'domcontentloaded', timeout: 120000 });
+    await pg.goto(process.env.PARITY_URL || 'http://localhost:4188', { waitUntil: 'domcontentloaded', timeout: 120000 });
     await new Promise((r) => setTimeout(r, 15000));
 
     const d = await pg.evaluate(() => ({
