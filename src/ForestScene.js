@@ -1205,6 +1205,9 @@ export class ForestScene extends Phaser.Scene {
   }
 
   updateHud() {
+    // The HUD is built in create() -> setupHud(). An external caller (the
+    // wallet sync) can reach here before that; the end of create() redraws.
+    if (!this.durBar) return;
     this.paintSeasonStats();
     const tool = heldTool(this.econ);
     const pct = tool ? tool.left / tool.max : 0;
