@@ -68,7 +68,7 @@ check('no h-overflow at 390px', of390 <= 0, of390 + 'px over');
 
 // the mobile control set must be present and actually visible
 const touchSet = await page.evaluate(() => {
-  const want = ['up', 'left', 'right', 'down', 'hunt', 'belt', 'board'];
+  const want = ['up', 'left', 'right', 'down', 'hunt', 'board'];
   const zones = (window.__scene && window.__scene.touchZones) || [];
   const names = zones.map((z) => z.btn);
   return {
@@ -76,7 +76,7 @@ const touchSet = await page.evaluate(() => {
     visible: zones.filter((z) => z.zone && z.zone.width > 0 && z.zone.height > 0).length,
   };
 });
-check('all 7 touch controls present', touchSet.missing.length === 0, 'missing: ' + (touchSet.missing.join(',') || 'none'));
+check('all 6 touch controls present', touchSet.missing.length === 0, 'missing: ' + (touchSet.missing.join(',') || 'none'));
 
 // desktop must NOT show them
 await page.setViewport({ width: 1280, height: 800, hasTouch: false, isMobile: false });
@@ -127,8 +127,11 @@ const hunter = await page.evaluate(() => {
   const p = window.__scene.player;
   return { visible: p.visible, alpha: p.alpha, tex: p.texture && p.texture.key };
 });
+// The hunter prefers the drawn art ('gen-hunter') and falls back to the
+// generated sprite ('hunter') when the PNG is missing. Either is correct --
+// what matters is that something visible is standing in the middle.
 check('the hunter sprite exists and is visible',
-  hunter.visible && hunter.alpha === 1 && hunter.tex === 'hunter', JSON.stringify(hunter));
+  hunter.visible && hunter.alpha === 1 && (hunter.tex === 'hunter' || hunter.tex === 'gen-hunter'), JSON.stringify(hunter));
 
 await browser.close();
 

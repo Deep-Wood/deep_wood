@@ -13,16 +13,17 @@ await p.goto(URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
 await p.waitForFunction('window.deepwoodChain !== undefined', { timeout: 30000 }).catch(() => {});
 await new Promise((r) => setTimeout(r, 2500));
 
-const out = await p.evaluate(() => {
-  const res = { windowDeepwoodChain: window.deepwoodChain, chipText: null };
+const out = (await p.evaluate(() => {
+  const res = { hasChain: typeof window.deepwoodChain !== 'undefined', chain: null, chipText: null, hint: null };
+  try { res.chain = window.deepwoodChain ? JSON.parse(JSON.stringify(window.deepwoodChain, (k, v) => typeof v === 'bigint' ? String(v) : v)) : null; } catch { res.chain = 'unserializable'; }
   const chip = document.getElementById('chainstat');
   res.chipText = chip ? chip.innerText.trim() : null;
   const hint = document.getElementById('hint');
   res.hint = hint ? hint.innerText.trim().slice(0, 160) : null;
   return res;
-});
+})) || { hasChain: false, chain: null, chipText: null, hint: null };
 
-console.log('deepwoodChain:', JSON.stringify(out && out.windowDeepwoodChain));
+console.log('deepwoodChain:', JSON.stringify(out.chain));
 console.log('chip          :', out.chipText);
 console.log('hint          :', out.hint);
 console.log('net failures  :', netlog.length ? netlog.slice(0, 5) : 'none');

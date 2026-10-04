@@ -1980,13 +1980,16 @@ export class ForestScene extends Phaser.Scene {
 
     // Which rarities actually hold something. Zero rows are skipped so a
     // player with one rarity does not sign four no-op transactions.
-    const held = ALL_RARITIES.filter((r) => (p.gems[r] ?? 0n) > 0n);
+    // gems is a plain Number array in both modes (preview seeds [0,0,0,0,0]
+    // and the chain mirror Number()s each gemsOf word), so compare against 0,
+    // not 0n -- `number > 0n` throws "Cannot mix BigInt and other types".
+    const held = ALL_RARITIES.filter((r) => (p.gems[r] ?? 0) > 0);
     if (!held.length) { this.beltMsg('No gems to sell.', 'bad'); return; }
 
     if (!onchainActive()) {
       const check = canRedeem(p);
       if (!check.ok) { this.beltMsg(check.reason, 'bad'); return; }
-      const total = p.gems.reduce((a, b) => a + b, 0n);
+      const total = p.gems.reduce((a, b) => a + b, 0);
       const res = redeemGems(p);
       if (!res.ok) { this.beltMsg(res.reason, 'bad'); return; }
       this.simBalance += res.value;
@@ -2000,10 +2003,10 @@ export class ForestScene extends Phaser.Scene {
     // On chain: redeem rarities in ascending order, cheapest first, so if the
     // player is signing several they have already banked the small ones.
     let totalPayout = 0n;
-    let totalSold = 0n;
+    let totalSold = 0;
     for (const rarity of held) {
-      const count = p.gems[rarity] ?? 0n;
-      if (count <= 0n) continue;
+      const count = p.gems[rarity] ?? 0;
+      if (count <= 0) continue;
       this.beltMsg(`Selling ${RARITY_NAMES[rarity]} (${count})\u2026`, 'busy');
       // Sell is SEVERAL transactions, so the pending label has to be re-raised
       // for each one -- cleared by the loop's own finally, then set again.
@@ -2028,10 +2031,10 @@ export class ForestScene extends Phaser.Scene {
       totalPayout += r.payoutWei ?? 0n;
       totalSold += count;
       // Zero it locally only once the chain has confirmed THAT rarity.
-      p.gems[rarity] = 0n;
+      p.gems[rarity] = 0;
     }
 
-    if (totalSold > 0n) {
+    if (totalSold > 0) {
       await this.refreshChainBalance();
       this.beltMsg(`Sold ${fmtGem(totalSold)} gems for ${fmtEth(totalPayout)}.`, 'ok');
     }
