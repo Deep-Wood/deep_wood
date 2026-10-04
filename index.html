@@ -533,6 +533,28 @@
     // button honest without a reload.
     onWallet(render);
 
+    // RECONNECT ON BOOT.
+    //
+    // The app only ever connected when the player CLICKED, so a returning
+    // visitor whose wallet was already authorised for this site booted into
+    // PREVIEW with an empty local mirror: the card read "no tool - buy Wood"
+    // and "no gems yet" for a wallet the chain reports as tier 1, 20/20, not
+    // broken. Nothing was wrong with the reconciliation code -- it was never
+    // invoked, because the only caller was the button.
+    //
+    // `silent: true` uses eth_accounts, which cannot open a wallet prompt, so
+    // a returning player is reconnected without being nagged. A first-time
+    // visitor has no authorised account, gets an empty list, and the button
+    // still works as the way to connect.
+    //
+    // Swallowed deliberately: a wallet-less browser, or a wallet that throws
+    // on eth_accounts, must not surface as a connection error the player did
+    // not cause.
+    Promise.resolve()
+      .then(() => connect({ silent: true }))
+      .then((r) => { if (r && r.ok) render(); })
+      .catch(() => {});
+
     // A connected wallet must show its REAL balance, because a purchase is
     // sized against it. The scene starts with a simulated balance for the
     // offline preview, and that fiction must never size a real transaction.
@@ -553,6 +575,19 @@
       window.__syncBalance = sync;
       sync();
       onWallet(sync);
+      // The immediate sync() above runs BEFORE the silent reconnect resolves,
+      // so onchainActive() is false and it returns without doing anything. If
+      // the provider never emits an event for that transition, the page would
+      // sit connected with an empty mirror again -- so ask the wallet directly
+      // once the app's own reconnect has had a chance to land.
+      import('/src/wallet.js').then(({ getState }) => {
+        const waitForConnect = (n) => {
+          if (getState().connected) return sync();
+          if (n <= 0) return;
+          setTimeout(() => waitForConnect(n - 1), 400);
+        };
+        setTimeout(() => waitForConnect(25), 600);
+      });
     }).catch(() => {
       // No chain module in this build: the offline preview keeps working.
     });

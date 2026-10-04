@@ -291,6 +291,65 @@ test('the satchel shows the chain gem balances, not local finds', async () => {
     `mirror gems ${JSON.stringify(d.mirror?.gems)} != chain ${JSON.stringify(truth.gems)}`);
 });
 
+test('a page that boots with an already-authorised wallet is ON-CHAIN', async () => {
+  // This is the case that produced the screenshot: a returning player whose
+  // wallet was already authorised. The app only ever connected on a BUTTON
+  // CLICK, so it booted into PREVIEW with an empty mirror and told a player
+  // holding a full 20/20 pick to "buy Wood". Silent reconnect on boot fixes it.
+  //
+  // A separate browser: the main `before` clicks Connect, which would mask
+  // this entirely.
+  const b2 = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+  try {
+    const pg = await b2.newPage();
+    await pg.evaluateOnNewDocument((ADDR, CHAIN_ID_P, RPCS_P) => {
+      const READS = new Set(['eth_chainId', 'eth_accounts', 'eth_requestAccounts',
+        'eth_getBalance', 'eth_call', 'eth_blockNumber', 'eth_getBlockByNumber']);
+      window.ethereum = {
+        isMetaMask: true,
+        async request({ method, params }) {
+          if (!READS.has(method)) throw new Error('refuses ' + method);
+          if (method === 'eth_chainId') return '0x' + CHAIN_ID_P.toString(16);
+          // An authorised wallet answers without a prompt, and emits NO
+          // accountsChanged event -- which is precisely why nothing fired.
+          if (method === 'eth_accounts' || method === 'eth_requestAccounts') return [ADDR];
+          if (method === 'eth_getBlockByNumber') {
+            return { number: '0x1', timestamp: '0x' + Math.floor(Date.now() / 1000).toString(16) };
+          }
+          let last;
+          for (const u of RPCS_P) {
+            try {
+              const r = await fetch(u, { method: 'POST', headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
+              const j = await r.json();
+              if (j.error) return { error: j.error };
+              return j.result;
+            } catch (e) { last = String(e); await new Promise((x) => setTimeout(x, 700)); }
+          }
+          throw new Error('all RPCs failed: ' + last);
+        },
+        on() {}, removeListener() {},
+      };
+    }, WALLET, CHAIN_ID, RPCS);
+
+    await pg.goto('http://localhost:4188', { waitUntil: 'domcontentloaded', timeout: 120000 });
+    await new Promise((r) => setTimeout(r, 15000));
+
+    const d = await pg.evaluate(() => ({
+      mode: document.getElementById('belt-mode')?.textContent.trim() ?? '',
+      tool: document.getElementById('belt-tool')?.textContent.trim() ?? '',
+      tier: window.__scene?.econ.tier,
+      left: window.__scene?.econ.left,
+    }));
+    assert.match(d.mode, /ON-CHAIN/i,
+      `an already-authorised wallet must not boot into preview. got ${JSON.stringify(d.mode)}`);
+    assert.equal(d.tier, truth.toolTier, `mirror tier ${d.tier} != chain ${truth.toolTier}`);
+    assert.equal(d.left, truth.durability, `mirror left ${d.left} != chain ${truth.durability}`);
+  } finally {
+    await b2.close();
+  }
+});
+
 test('the harness itself is sound: it read a real chain', async () => {
   // If this fails the other assertions are meaningless -- e.g. if every RPC
   // failed and truth came back as zeros, "card matches chain" would pass
