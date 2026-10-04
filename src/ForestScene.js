@@ -1504,7 +1504,44 @@ export class ForestScene extends Phaser.Scene {
     } else {
       const cost = toolPrice(nt);
       const chk = canBuyTool(p, nt, balance);
-      buy.textContent = `${buyOrUpgradeLabel(p)} ${toolName(nt)} ${fmtEth(cost)}`;
+      // Short label: all three action buttons share ONE row now, so a phone
+      // with a broken tool gives each about 65px. "upgrade tool Bronze
+      // 0.052 ETH" ellipsised to "upgrade tool Bronze 0." on a 390px screen --
+      // hiding the very price the button exists to quote. The tier and price
+      // are what the row has to show; the verb and the word "tool" are already
+      // established by the tool name above. Full wording stays in the title.
+      // All three buttons share one row; on a 390px phone with a broken tool
+      // that is ~300px for three buttons. Trailing zeros are pure waste here --
+      // 0.052 and 0.1935 both read the same as 0.0520 and 0.1935 -- so the
+      // label drops them, and the exact wei figure stays in the title.
+      const trimEth = (w) => String(Number(w) / 1e18).replace(/0+$/, '').replace(/\.$/, '');
+      const shortLabel = `${buyOrUpgradeLabel(p)} ${toolName(nt)} ${fmtEth(cost)}`;
+      // With a broken tool there are three buttons on one row, and a narrow
+      // phone cannot fit three prices legibly no matter how the type is
+      // shrunk. So below the breakpoint the ETH figures move to the title and
+      // the buttons keep the verb and the tier -- which is still enough to
+      // choose between them, and the price is one hover/second away.
+      // Equal-width buttons: with three of them (a broken tool) even a desktop
+      // row only fits ~70px each, which is not enough for "upg Bronze 0.052".
+      // So the price shows whenever there is room for it -- two buttons, or a
+      // wide row -- and moves to the title when there are three. Either way the
+      // price is always available; it is never simply hidden.
+      // Measured against the ACTIONS ROW, not the viewport: the belt sits in a
+      // grid column that is content-sized, so on desktop it can be narrower
+      // than the window even with 1000px to spare. window.innerWidth said
+      // "plenty of room" while the buttons were truncating.
+      const rowW = (el.getBoundingClientRect().width) || window.innerWidth;
+      const threeUp = p.left === 0 || rowW < 260;
+      // "upgrade"/"buy" both fit; at 56px (three buttons, content-sized belt
+      // column) the word "Bronze" alone is what overflows, so the tier keeps its
+      // first letter plus a full stop rather than being cut mid-word.
+      const nm = toolName(nt);
+      const tier = nm;
+      const verb = buyOrUpgradeLabel(p) === 'upgrade' ? 'upg' : 'buy';
+      buy.textContent = threeUp
+        ? `${verb} ${tier}`
+        : `${verb} ${tier} ${trimEth(cost)}`;
+      buy.title = `${shortLabel}` + (chk.ok ? '' : '\n' + chk.reason);
       buy.disabled = !chk.ok;
       // The disabled button explains nothing on its own -- canBuyTool already
       // computed why -- so the reason is surfaced here as a title. The old
@@ -1521,7 +1558,14 @@ export class ForestScene extends Phaser.Scene {
     sell.id = 'belt-sell';
     const held = p.gems.reduce((a, b) => a + b, 0);
     const val = redeemValueWei(p);
-    sell.textContent = held > 0 ? `sell gems ${fmtEth(val)}` : 'sell gems';
+    // 4dp is plenty for a gem payout and saves 4 characters, which is what
+    // lets all three buttons read in full on a 390px phone. The exact figure
+    // is in the title.
+    const shortVal = held > 0 ? String(Number(val) / 1e18).replace(/0+$/, '').replace(/\.$/, '') : 'sell gems';
+    const rowW2 = (el.getBoundingClientRect().width) || window.innerWidth;
+    const tight = p.left === 0 || rowW2 < 260;
+    sell.textContent = held > 0 ? (tight ? 'sell gems' : `sell ${shortVal}`) : 'sell gems';
+    sell.title = held > 0 ? `sell ${held} gems for ${fmtEth(val)}` : 'no gems to sell';
     const rchk = canRedeem(p);
     sell.disabled = !rchk.ok;
     if (!rchk.ok) sell.title = rchk.reason;
@@ -1536,7 +1580,8 @@ export class ForestScene extends Phaser.Scene {
       r.id = 'belt-repair';
       const need = repairNeeds(p);
       const chk = canRepair(p);
-      r.textContent = `repair ${fmtRepair(p.tier)}`;
+      r.textContent = `fix ${fmtRepair(p.tier)}`;
+      r.title = `repair ${toolName(p.tier)} for ${fmtRepair(p.tier)}`;
       r.disabled = !chk.ok;
       if (!chk.ok) r.title = chk.reason;
       r.onclick = () => this.doRepair();

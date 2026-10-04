@@ -141,7 +141,16 @@ html, body {
    *   col 1 = season title (full width) over the stats
    *   col 2 = chain state, toolbelt, satchel
    */
-  grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+  /* Column 2 was `minmax(0, auto)`, so it sized to the CONTENT of the belt
+   * -- which meant the actions row got ~170px on a 1280px desktop and three
+   * buttons had to truncate their labels, while column 1 sat mostly empty.
+   *
+   * Splitting the space instead (1fr / 1fr on wide screens) hands the belt
+   * room for three buttons at full size and fills the card, rather than
+   * shrinking type or abbreviating tier names to fit an artificially narrow
+   * column. The phone stack is unaffected: below 720px both columns collapse
+   * to full width. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   justify-content: start;
   align-items: start;
   column-gap: var(--s2);
@@ -328,6 +337,19 @@ button.chip:disabled { opacity: .55; cursor: default; }
 .belt-msg:empty, .belt-msg { display: none; }
 .belt-msg.has-text { display: block; }
 .belt-shop  { grid-column: 1 / -1; grid-row: 4; }
+/* The action row spans the whole belt.
+ *
+ * #belt is `minmax(0,1fr) auto`, and .belt-actions was auto-placed -- which put
+ * it in column 2, the `auto` column. That column sizes to its widest child, and
+ * since the row's own width came from its buttons the two fed each other: the
+ * row measured 184px inside a 626px column, and equal-basis gave three buttons
+ * 56px each, truncating "buy Bronze" with 440px of free space beside it.
+ *
+ * Spanning both columns makes the row take the belt's full width, which is what
+ * `width: 100%` in belt.css was asking for. Row 3 keeps the message on row 4 so
+ * the two cannot collide. */
+.belt-actions { grid-column: 1 / -1; grid-row: 3; }
+.belt-msg:not(:empty) { grid-row: 4; }
 
 /* --- satchel ------------------------------------------------------------
  * Now a permanent block INSIDE the header card, in the toolbelt column.
@@ -474,7 +496,16 @@ button.chip:disabled { opacity: .55; cursor: default; }
     /* Two columns, not one: the chain chip and the satchel are each one short
        line and fit side by side at 390px. The old single column here was what
        put them on two separate rows. */
-    grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+    /* Column 2 was `minmax(0, auto)`, so it sized to the CONTENT of the belt
+   * -- which meant the actions row got ~170px on a 1280px desktop and three
+   * buttons had to truncate their labels, while column 1 sat mostly empty.
+   *
+   * Splitting the space instead (1fr / 1fr on wide screens) hands the belt
+   * room for three buttons at full size and fills the card, rather than
+   * shrinking type or abbreviating tier names to fit an artificially narrow
+   * column. The phone stack is unaffected: below 720px both columns collapse
+   * to full width. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     row-gap: 0;
   }
   .season-head, .season-grid, #belt { grid-column: 1 / -1; }
@@ -592,27 +623,26 @@ button.chip:disabled { opacity: .55; cursor: default; }
  * the card clips rather than growing. A clipped control is a visible bug; a
  * card that grows pushes the playfield down and the player loses sight of the
  * forest, which is the thing this was asked to stop. */
+/* The card is pinned to the size it has when a player is actually playing --
+ * holding a tool -- which is 153px on desktop and 195px on a phone. It does not
+ * grow from there.
+ *
+ * This is deliberately NOT the worst case. Pinning to the worst case (178/232)
+ * was correct in that nothing moved, but it made an empty card cost 41px more
+ * on desktop and 53px more on a phone than it ever needed to, pushing the
+ * forest down permanently for a state that is only briefly real. The actions
+ * row no longer varies (all three buttons share one line) and the footer
+ * ellipsises, so the natural size no longer changes and needs no worst-case
+ * budget at all.
+ *
+ * The breakpoint is on WIDTH, not height: what costs the extra 42px on a phone
+ * is the columns stacking, and that is the width. */
 #season {
-  /* DESKTOP lock: 178px, the worst case measured at 1280x800 (empty 137, a
-   * tool 153, broken+repair+full satchel+long message 178). */
-  height: 178px;
+  height: 156px;
   overflow: hidden;
 }
-
-/* PHONE lock: 232px. The same states at 390x844 and 360x640 measure 179 /
- * 195 / 220 / 231, because the two columns stack and the footer message takes
- * its own line. 232 is that worst case.
- *
- * Two numbers rather than one because a single lock had to be the phone's
- * worst case, which left 54px of dead space down the bottom of the desktop card
- * -- sparse without looking broken, but the forest starts lower for nothing on
- * the largest screens, which is exactly what this was meant to stop.
- *
- * The breakpoint is on WIDTH, not height: what drives the extra space is the
- * column stack, and that is the width. 720px is below the two-column layout's
- * comfortable minimum. */
 @media (max-width: 720px) {
-  #season { height: 232px; }
+  #season { height: 198px; }
 }
 
 /* The one message line: ellipsis instead of wrapping. A wallet error is long
@@ -637,3 +667,9 @@ button.chip:disabled { opacity: .55; cursor: default; }
   min-height: 0;
   overflow: hidden;
 }
+/* 153px left the belt's bottom edge 3px past the card once the action row took
+ * its own full-width line (the row gained 3px of gap it did not have when it
+ * shared a column). 156/198 is the smallest height where nothing overflows at
+ * either breakpoint -- 3px more than before, not the ~25px the separate repair
+ * row used to cost. */
+#belt { row-gap: 2px; }

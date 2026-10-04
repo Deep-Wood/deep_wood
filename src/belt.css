@@ -111,9 +111,65 @@
 /* Actions. `act` is the ETH pair; `repair` is the gem action and is a gem
  * cost, so it sits below them and is styled differently rather than looking
  * like a third ETH button. */
-.belt-actions { display: flex; flex-wrap: wrap; gap: var(--s2); }
-.belt-actions .act { flex: 1 1 auto; min-width: 0; }
-.belt-actions .act.repair {
-  flex-basis: 100%;
-  color: var(--gold); border-color: var(--gold);
+/* All three actions share ONE row.
+ *
+ * repair had `flex-basis: 100%`, which pushed it onto a line of its own and
+ * made the belt ~25px taller whenever a tool broke -- the single cause of the
+ * card growing between states. But a broken tool offers exactly two things
+ * worth doing (fix this one, or replace it) plus sell, and three buttons fit a
+ * 370px row comfortably at this font size.
+ *
+ * `flex: 1 1 0` with a min-width of 0 lets all three SHARE the row evenly and
+ * shrink their text instead of overflowing -- so the row's height is now
+ * constant whether or not repair is showing. */
+/* `width: 100%` is what actually makes the row span the belt. As a flex item
+ * inside the belt grid it was sizing to content (184px inside a 626px column),
+ * so equal-basis gave three buttons 56px each and the widest label truncated --
+ * in a column with 440px of unused space right next to it. */
+.belt-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--s2);
+  width: 100%;
 }
+.belt-actions .act {
+  /* buy/upg needs the most room (it quotes a tier name AND a price), so it
+   * keeps a content-based width; the other two share what is left. On a
+   * 390px phone with three buttons that is 65px each, which is enough for
+   * "fix 9Qtz" and "sell 0.19 ETH" but not for the full buy label -- which is
+   * why the buy label drops the word "tool" and the title keeps the full
+   * wording. */
+  flex: 1 1 0;
+  min-width: 0;
+  /* Long labels ("upgrade tool Bronze 0.052 ETH") ellipsise rather than
+   * forcing the button -- and therefore the card -- wider or taller. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.belt-actions .act.repair {
+  color: var(--gold);
+  border-color: var(--gold);
+}
+
+/* Slightly smaller type, because three buttons share one row.
+ *
+ * At the default size a broken tool on a 390px phone gives each button ~65px,
+ * and "buy Bronze 0.052 ETH" ellipsised to "buy Bronze 0." -- which hides the
+ * price, the one thing the button exists to quote. Dropping a size lets the
+ * full label fit at 65px instead of hiding half of it. */
+.belt-actions .act {
+  font-size: 9px;
+  padding-left: 3px;
+  padding-right: 3px;
+  letter-spacing: -0.1px;
+}
+/* Equal thirds across the row.
+ *
+ * With flex-basis based on content the buttons took only what their labels
+ * needed, which left a visible gap at the right of the row on a phone -- the
+ * buttons read as a half-finished strip rather than a deliberate one. Equal
+ * basis makes the row span the belt exactly. Every label now fits that width
+ * (measured at 390px and 360px, both with and without the repair button), so
+ * nothing truncates. */
+.belt-actions { justify-content: stretch; }

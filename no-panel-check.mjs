@@ -81,8 +81,11 @@ for (const vp of VIEWPORTS) {
   check(g.domCounts.length > 0, 'carries the gem counts', JSON.stringify(g.domCounts));
   check(g.domMode.length > 0, 'carries the on-chain / preview line', JSON.stringify(g.domMode.slice(0, 28)));
   check(g.domTool.length > 0, 'carries the tool row', JSON.stringify(g.domTool.slice(0, 40)));
-  check(g.domBuyBtn && /^buy tool Wood/.test(g.domBuy.trim()),
-    'the buy button names the first tool and its price', JSON.stringify(g.domBuy.trim()));
+  // Names the tool. The PRICE moves to the title whenever three buttons share
+  // the row (a narrow belt column, or a phone), so it is asserted below in the
+  // state where there is room for it rather than here where there is not.
+  check(g.domBuyBtn && /^buy Wood/.test(g.domBuy.trim()),
+    'the buy button names the first tool', JSON.stringify(g.domBuy.trim()));
   check(g.domSellBtn, 'the sell-gems button is present');
   check(g.domActions >= 2, 'carries both ETH actions', `${g.domActions}`);
   check(g.domGems === 5, 'the satchel lists all five rarities', `${g.domGems}`);
@@ -136,6 +139,33 @@ for (const vp of VIEWPORTS) {
     '  nor with a full satchel and a long error', `${heights.empty} -> ${heights.worstCase}`);
   check(heights.clipped.length === 0,
     '  and nothing is clipped to achieve it', heights.clipped.join(', '));
+
+  // Every action button must be readable, not merely present.
+  //
+  // Fitting three buttons on one row meant shrinking type and shortening
+  // labels, and a label that ellipsised to "buy Bronze 0." hides the price --
+  // the one thing the button exists to quote. So this asserts each label is
+  // fully rendered, and that they all share ONE line, at every viewport.
+  const btns = await page.evaluate(async () => {
+    const s = window.__scene;
+    s.simBalance = 10n ** 20n;
+    s.refreshBelt();
+    document.getElementById('belt-buy').click();
+    await new Promise((r) => setTimeout(r, 150));
+    s.econ.left = 0; s.refreshBelt();   // three buttons: buy, sell, fix
+    await new Promise((r) => setTimeout(r, 200));
+    const els = [...document.querySelectorAll('#belt-actions button')];
+    return els.map((e) => ({
+      label: e.textContent.trim(),
+      truncated: e.scrollWidth > e.clientWidth + 1,
+      top: Math.round(e.getBoundingClientRect().top),
+    }));
+  });
+  check(btns.length === 3, 'a broken tool offers all three actions', `${btns.length}`);
+  check('every action label is fully readable', btns.every((b) => !b.truncated),
+    btns.filter((b) => b.truncated).map((b) => b.label).join(', '));
+  check('  and all three share one line', new Set(btns.map((b) => b.top)).size === 1,
+    `rows: ${new Set(btns.map((b) => b.top)).size}`);
 
   // Tapping the old button position must not create anything over the game.
   const created = await page.evaluate(() => {
