@@ -1643,6 +1643,41 @@ export class ForestScene extends Phaser.Scene {
     if (wei !== null) this.refreshBelt();
   }
 
+  /**
+   * Adopt the chain's own view of what this player holds.
+   *
+   * The belt is rendered from the LOCAL mirror, which starts empty. So a
+   * player who buys a tool and reloads -- or who already holds a tool from an
+   * earlier session -- was shown "buy Wood" and offered to buy a tool they
+   * already had. On this chain that second buy reverts TierLocked: it costs a
+   * signature, shows no purchase, and looks like the button is simply broken.
+   *
+   * The chain is authoritative, so it gets to overwrite the mirror. A failed
+   * read changes nothing, because an unreadable tool is not the same as owning
+   * no tool.
+   */
+  async refreshChainTool() {
+    if (!onchainActive()) return;
+    let tool;
+    try {
+      const { getReader } = await import('./onchain.js');
+      const r = await getReader();
+      if (!r) return;
+      const { getState } = await import('./wallet.js');
+      const { account } = getState();
+      if (!account) return;
+      tool = await r.toolOf(account);
+    } catch {
+      return; // unreadable -> leave the mirror alone rather than blank it
+    }
+    if (!tool) return;
+    this.econ.tool = Number(tool.tier) || 0;
+    this.econ.durability = Number(tool.durability ?? 0);
+    this.econ.broken = Boolean(tool.broken);
+    this.refreshBelt();
+    this.updateHud();
+  }
+
   /** Refresh the on-chain balance. Safe to call often; failures leave it null. */
   async refreshChainBalance() {
     if (!onchainActive()) return;
@@ -1707,6 +1742,11 @@ export class ForestScene extends Phaser.Scene {
     // `toolOf` until the tier actually moves, and only then do we believe it.
     const cost = toolPrice(tier);
     this.beltMsg('Confirm the purchase in your wallet\u2026', 'busy');
+    // Read the REAL balance BEFORE the local mirror is touched. The mirror step
+    // sizes itself against walletBalanceWei(), and on a first purchase that
+    // value is still null -> 0n, which fails the local affordability check and
+    // leaves the card showing no tool after a purchase that actually landed.
+    await this.refreshChainBalance();
     const r = await buyToolOnchain(tier, cost);
 
     if (!r.ok) {
@@ -1714,12 +1754,30 @@ export class ForestScene extends Phaser.Scene {
       return;
     }
 
-    // Confirmed by the chain. Now mirror it locally so the UI updates without
-    // re-deriving durability the client cannot know.
+    // Confirmed by the chain. Now mirror it locally so the UI updates.
+    //
+    // The mirror is set from the values the CHAIN confirmed (r.tier and
+    // r.durability), not from a re-run of the local buyTool(). That re-run
+    // used to be the only path, and it silently failed on the first purchase
+    // of a session: it sized the buy against walletBalanceWei(), which is
+    // `chainBalanceWei ?? 0n`, and chainBalanceWei is still null at this point
+    // because refreshChainBalance() runs afterwards. So the local buy was
+    // refused for insufficient funds, the mirror stayed empty, the button kept
+    // reading "buy Wood" for a player who already owned Wood, and clicking it
+    // again opened a second wallet signature that the contract then rejected
+    // with TierLocked. The purchase had actually succeeded on both attempts.
+    //
+    // The chain is the authority on what the player now holds, so its answer
+    // is what gets written.
     const res = buyTool(p, tier, this.walletBalanceWei());
-    if (res.ok) {
-      recordToolSpend(this.board, this.wallet ?? '0xplayer', res.cost ?? cost);
+    if (!res.ok) {
+      // The chain proved the purchase applied, so the local refusal is a
+      // STALE-MIRROR artifact, not a real failure. Trust the chain.
+      p.tool = tier;
+      p.durability = Number(r.durability ?? 0);
+      p.broken = false;
     }
+    recordToolSpend(this.board, this.wallet ?? '0xplayer', res.cost ?? cost);
     this.beltMsg(
       `${res.replaced ? 'Upgraded to' : 'Bought'} ${toolName(r.tier)} \u2014 ${r.durability}/${this.econ.max} uses`,
       'ok',

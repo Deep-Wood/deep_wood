@@ -541,6 +541,11 @@
     import('/src/onchain.js').then(({ walletBalanceWeiOnchain, onchainActive }) => {
       const sync = async () => {
         if (!onchainActive()) return;
+        // Adopt the chain's view of the held TOOL as well as the balance. The
+        // belt renders from a local mirror that starts empty, so without this a
+        // player who already owns a tool is told to buy it again -- and that
+        // second purchase reverts TierLocked after they have signed it.
+        await window.__scene?.refreshChainTool?.();
         const b = await walletBalanceWeiOnchain();
         window.__scene?.setChainBalance?.(b);
         render();
