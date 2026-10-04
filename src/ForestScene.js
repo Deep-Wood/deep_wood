@@ -1678,11 +1678,63 @@ export class ForestScene extends Phaser.Scene {
       return; // unreadable -> leave the mirror alone rather than blank it
     }
     if (!tool) return;
-    this.econ.tool = Number(tool.tier) || 0;
-    this.econ.durability = Number(tool.durability ?? 0);
-    this.econ.broken = Boolean(tool.broken);
+    // Field names matter: the player shape is { tier, left, max }, not
+    // { tool, durability }. Writing `tool`/`durability` created properties
+    // nothing reads, so `left` stayed 0 and the game called a full-health tool
+    // broken -- "tool broken - repair below" for a player holding 20/20.
+    const tier = Number(tool.tier) || 0;
+    this.econ.tier = tier;
+    this.econ.left = Number(tool.durability ?? 0);
+    // `max` is the tier's full durability, which the chain does not return; it
+    // comes from the economy mirror. Without it a healthy tool would read as
+    // "20/0 uses".
+    this.econ.max = tier > 0 ? durabilityOf(tier) : 0;
+
+    // GEMS too, not just the tool. The belt renders the satchel from this local
+    // mirror, and gemsOf() was only ever read to CONFIRM a sale -- never to
+    // populate the balance. So a player holding gems on chain was permanently
+    // shown "no gems yet", and the sell button stayed disabled against a real
+    // balance. Same class of bug as the stale tool: the mirror was written from
+    // one side of an action and never from the chain's own state.
+    await this.refreshChainGems();
+
     this.refreshBelt();
     this.updateHud();
+  }
+
+  /**
+   * Adopt the chain's own gem balances into the local satchel.
+   *
+   * The satchel, the "N gems" count and the sell button all render from
+   * `econ.gems`. Nothing wrote that array from the chain -- gemsOf() was only
+   * ever read to confirm that a sale had landed -- so a player who had mined on
+   * chain was shown "no gems yet" forever, with sell disabled against a balance
+   * they actually held.
+   *
+   * All five rarities, because V2 lets the player redeem any of them. A partial
+   * read is discarded rather than merged: half the satchel is a lie, and the
+   * sell button would then be priced from the wrong figure.
+   */
+  async refreshChainGems() {
+    if (!onchainActive()) return;
+    try {
+      const { getReader } = await import('./onchain.js');
+      const r = await getReader();
+      if (!r) return;
+      const { getState } = await import('./wallet.js');
+      const { account } = getState();
+      if (!account) return;
+      const held = await Promise.all(ALL_RARITIES.map((x) => r.gemsOf(account, x)));
+      this.econ.gems = held.map((n) => Number(n ?? 0));
+      // Lifetime finds are never stored per-rarity on chain in a way the client
+      // can read, so they accumulate locally from this session's hunts.
+      for (let i = 0; i < held.length; i++) {
+        const n = Number(held[i] ?? 0);
+        if (n > (this.econ.found[i] ?? 0)) this.econ.found[i] = n;
+      }
+    } catch {
+      // Leave the mirror alone: an unreadable balance is not an empty one.
+    }
   }
 
   /** Refresh the on-chain balance. Safe to call often; failures leave it null. */
@@ -1788,9 +1840,13 @@ export class ForestScene extends Phaser.Scene {
     if (!res.ok) {
       // The chain proved the purchase applied, so the local refusal is a
       // STALE-MIRROR artifact, not a real failure. Trust the chain.
-      p.tool = tier;
-      p.durability = Number(r.durability ?? 0);
-      p.broken = false;
+      //
+      // Field names must match player.js: { tier, left, max }. Writing
+      // `tool`/`durability` here created properties nothing reads, leaving
+      // `left` at 0 -- a bought tool still shown as broken.
+      p.tier = tier;
+      p.left = Number(r.durability ?? 0);
+      p.max = durabilityOf(tier);
     }
     recordToolSpend(this.board, this.wallet ?? '0xplayer', res.cost ?? cost);
     this.beltMsg(
@@ -2301,7 +2357,7 @@ export class ForestScene extends Phaser.Scene {
     } else if (near) {
       this.prompt.setVisible(true);
       this.prompt.setText(
-        !this._canHuntNow() ? (this.hasTouchPad ? 'tool broken - repair below' : 'tool broken - repair below')
+        !this._canHuntNow() ? this._blockedReason()
           : this.busy ? 'hunting...'
             : (this.hasTouchPad ? 'tap HUNT' : 'SPACE  hunt')
       );
@@ -2447,10 +2503,29 @@ export class ForestScene extends Phaser.Scene {
   }
 
   /**
+   * Why a dig cannot start RIGHT NOW, in the player's own terms.
+   *
+   * The prompt used to say "tool broken - repair below" for every blocked
+   * state. That is wrong advice for a player who has not bought anything yet --
+   * there is nothing to repair -- and the comment on _canHuntNow() even said so
+   * while the code went on ignoring it.
+   */
+  _blockedReason() {
+    if (this.econ.tier === 0) {
+      return this.hasTouchPad ? 'no pick yet - buy Wood' : 'no pick yet - buy Wood';
+    }
+    // Owned and undamaged means this is not a repair situation at all: the
+    // local mirror has desynced from the chain, and telling a player with 20/20
+    // durability to repair their pick is the same class of lie.
+    if (this.econ.left > 0) {
+      return this.hasTouchPad ? 'pick ready - sync issue' : 'pick ready - sync issue';
+    }
+    return this.hasTouchPad ? 'tool broken - repair below' : 'tool broken - repair below';
+  }
+
+  /**
    * Can this player start a dig right now? Three distinct reasons no:
-   * no tool at all, a broken tool, or a dig already running. The prompt has to
-   * say which, because "tool broken - repair below" is wrong advice for a
-   * player who has not bought anything yet.
+   * no tool at all, a broken tool, or a dig already running.
    */
   _canHuntNow() {
     if (this.econ.tier === 0) return false;

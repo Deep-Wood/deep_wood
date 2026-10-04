@@ -24,11 +24,14 @@ test('the mirror is written from the chain-confirmed tier, not the local sim', (
   // silently discards a purchase the chain already granted.
   assert.match(
     scene,
-    /p\.tool = tier/,
+    // The player shape is { tier, left, max }. This asserted `p.tool` and
+    // `p.durability`, which were INVENTED names -- so the test passed while the
+    // mirror wrote properties nothing read and a bought tool stayed "broken".
+    /p\.tier = tier/,
     'the chain-confirmed tier must be adopted',
   );
-  assert.match(scene, /p\.durability = Number\(r\.durability/);
-  assert.match(scene, /p\.broken = false/);
+  assert.match(scene, /p\.left = Number\(r\.durability/);
+  assert.match(scene, /p\.max = durabilityOf\(tier\)/);
 });
 
 /** The ON-CHAIN branch only: the preview branch above it legitimately differs. */
@@ -60,7 +63,7 @@ test('a failed local mirror does not discard a confirmed purchase', () => {
     !/if \(res\.ok\) \{\s*\n\s*recordToolSpend/.test(scene),
     'recording spend must not be the only thing gated on the local result',
   );
-  assert.match(scene, /if \(!res\.ok\) \{[\s\S]{0,320}?p\.tool = tier/,
+  assert.match(scene, /if \(!res\.ok\) \{[\s\S]{0,420}?p\.tier = tier/,
     'a local refusal must fall back to the chain value');
 });
 
