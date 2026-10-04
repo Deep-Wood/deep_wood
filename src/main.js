@@ -30,7 +30,20 @@ window.addEventListener('resize', () => game.scale.refresh());
 
 // Expose the scene for the headless smoke test / probe. Read-only handles
 // only -- nothing in the game reads these.
+//
+// Published only once the scene's create() has run. The game's 'ready' event
+// fires at boot, before preload/create, and index.html's wallet sync calls
+// window.__scene.refreshChainTool() -> updateHud() as soon as it can -- which
+// touched HUD objects (durBar) that setupHud() had not built yet.
 game.events.once('ready', () => {
   const s = game.scene.getScene('forest');
-  if (s) window.__scene = s;
+  if (!s) return;
+  const publish = () => {
+    window.__scene = s;
+    // A wallet sync that ran while the scene was unpublished skipped it, so
+    // re-run it now that the chain's tool/gems/balance can be applied.
+    window.__syncBalance?.();
+  };
+  if (s.sys.settings.status >= Phaser.Scenes.RUNNING) publish();
+  else s.events.once(Phaser.Scenes.Events.CREATE, publish);
 });
