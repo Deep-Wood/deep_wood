@@ -357,7 +357,7 @@
       const rows = gemNames.map((n, i) => {
         const c = bal[i];
         return `<div class="gem${c ? '' : ' none'}" title="${n}: ${c}">`
-          + `<span class="n" style="color:${gemColors[i]}">${gemShort[i]}</span>`
+          + `<span class="n" style="color:${gemColors[i]}">${n.slice(0, 3)}</span>`
           + `<span class="c">${c}</span></div>`;
       }).join('');
 

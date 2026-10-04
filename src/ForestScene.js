@@ -1437,12 +1437,15 @@ export class ForestScene extends Phaser.Scene {
     // --- counts: the satchel balance is the only gem number on the card.
     // The old line read "COMMON n . BURNED n . FEES n" while the satchel beside
     // it showed the same gem as "Qtz n". One gem, two counters, and they
-    // diverged on the first spend because only one of them was decremented.
-    // Now: total held and total found, summed across every rarity.
+    // The headline must not disagree with the satchel. "N gems" is the spendable
+    // balance -- exactly what the five tiles sum to -- and "M found" the lifetime
+    // tally, which keeps counting after a sale. Label both so a player who has
+    // sold does not read "10 gems  7 found" as a bug: they are different numbers
+    // on purpose.
     const held = p.gems.reduce((a, b) => a + b, 0);
     const found = p.found.reduce((a, b) => a + b, 0);
     q('belt-counts').textContent = held > 0
-      ? `${fmtGem(held)} gems \u00b7 ${fmtGem(found)} found`
+      ? `${fmtGem(held)} held · ${fmtGem(found)} found`
       : 'no gems yet';
 
     const m = chainMode();
@@ -2154,17 +2157,15 @@ export class ForestScene extends Phaser.Scene {
 
     const say = (label) => { el.textContent = label; };
 
-    if (!onchainActive()) {
-      // No wallet, so no chain to read. Say which mode this actually is rather
-      // than naming a season nothing has confirmed.
-      say(chainMode() === 'preview' ? 'Preview mode' : 'Offline');
-      return;
-    }
-
+    // The SEASON NAME is chain state, readable without a wallet: the contract
+    // knows phase() whether or not the player has connected. "Preview mode"
+    // belongs to the belt-mode row (it describes how WRITES behave); the card
+    // title must say which season is actually on the contract, or a live
+    // preseason reads as a broken game to every first-time visitor.
     try {
       const { getReader } = await import('./onchain.js');
       const r = await getReader();
-      if (!r) { say('Connecting...'); return; }
+      if (!r) { say(chainMode() === 'preview' ? 'Preview mode' : 'Offline'); return; }
 
       const [phaseHex, current] = await Promise.all([r.phase(), r.current()]);
 
@@ -2174,18 +2175,19 @@ export class ForestScene extends Phaser.Scene {
       let phase = null;
       try { phase = phaseHex === null || phaseHex === undefined ? null : Number(BigInt(phaseHex)); } catch { phase = null; }
 
-      if (phase === null) { say('Connecting...'); return; }
-      if (phase === 0) { say('Preseason'); return; }
+      if (phase === null) { say(onchainActive() ? 'Connecting...' : (chainMode() === 'preview' ? 'Preview mode' : 'Offline')); return; }
+      if (phase === 0) { say('Preseason' + (onchainActive() ? '' : ' — preview')); return; }
       if (phase === 2) { say('Season closed'); return; }
 
       // Live. Name it from the chain's own id, never an assumed 1, so a future
       // season 2 cannot be labelled "Season 1".
       const id = Number(current?.id ?? 0);
-      say(id > 0 ? `Season ${id} · Verdant Hollow` : 'Season live');
+      say((id > 0 ? `Season ${id} · Verdant Hollow` : 'Season live') + (onchainActive() ? '' : ' — preview'));
     } catch {
       // A failed read must NOT leave the previous season name up -- a stale name
-      // is a lie. "Connecting..." is the honest thing to show.
-      say('Connecting...');
+      // is a lie. "Connecting..." is the honest thing to show when connected;
+      // a preview client that cannot reach the chain owns the preview label.
+      say(onchainActive() ? 'Connecting...' : (chainMode() === 'preview' ? 'Preview mode' : 'Offline'));
     }
   }
 

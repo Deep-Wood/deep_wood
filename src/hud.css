@@ -395,7 +395,9 @@ button.chip:disabled { opacity: .55; cursor: default; }
 .gem .n {
   font-size: 7px; letter-spacing: .03em; text-transform: uppercase;
   color: var(--dim);
-  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  /* Three-letter abbreviations derived from the name in code, so every rarity
+     renders the same width and none ever truncates to an ellipsis. */
+  flex: none; white-space: nowrap;
 }
 .gem .c {
   font-size: 11px; color: var(--ink); font-variant-numeric: tabular-nums;

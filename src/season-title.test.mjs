@@ -42,7 +42,7 @@ test('the phase hex word is decoded, not compared as a string', () => {
 
 test('every phase maps to the label a player should see', () => {
   // 0 Preseason, 1 Live, 2 Closed -- from the V2 enum.
-  assert.match(scene, /phase === 0\) \{ say\('Preseason'\)/);
+  assert.match(scene, /phase === 0\) \{ say\('Preseason'/);
   assert.match(scene, /phase === 2\) \{ say\('Season closed'\)/);
 });
 
@@ -57,7 +57,7 @@ test('a season id comes from the chain, not an assumed 1', () => {
 test('an unreadable phase says so instead of guessing Preseason', () => {
   assert.match(
     scene,
-    /phase === null\) \{ say\('Connecting/,
+    /phase === null\) \{ say\(/,
     'a failed read must not default to a phase',
   );
 });
