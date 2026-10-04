@@ -216,23 +216,28 @@ function dCurrent(hex) {
   const h = hex.replace(/^0x/, '');
   const w = (i) => h.slice(i * 64, (i + 1) * 64);
   const u = (i) => BigInt('0x' + w(i));
+  // V2 Season word order, straight from the artifact:
+  //   0 uint64 id | 1 uint8 isPreseason | 2 uint64 startsAt | 3 uint64 endsAt
+  //   4 bool finalized | 5 uint256 bestSingleFindWei | 6 bytes32 commitRoot
+  //   7 bool committed | 8 bytes32 seed | 9 bool seedCommitted
+  //
+  // The V1 decoder above this comment read the same struct as seven words with
+  // no isPreseason flag, so every field after word 0 was shifted by one. It
+  // "worked" only because nothing compared it to the artifact.
   return {
     id: Number(u(0)),
-    startsAt: Number(u(1)),
-    endsAt: Number(u(2)),
-    finalized: u(3) !== 0n,
-    bestSingleFindWei: u(4),
-    root: '0x' + w(5).slice(-64),
-    committed: u(6) !== 0n,
-    // Words 7-8 were added for open settlement: the per-season seed the
-    // contract now recomputes every result from.
-    //
-    // GUARDED, because the DEPLOYED contract still returns the OLD seven-word
-    // Season. Reading word 7 unconditionally gives BigInt('0x') -> TypeError,
-    // which took the whole live page down rather than degrading. A missing
-    // word means "no seed on this contract", which is exactly true.
-    seed: h.length >= 9 * 64 ? '0x' + w(7).slice(-64) : '0x' + '0'.repeat(64),
-    seedCommitted: h.length >= 9 * 64 ? u(8) !== 0n : false,
+    isPreseason: u(1) !== 0n,
+    startsAt: Number(u(2)),
+    endsAt: Number(u(3)),
+    finalized: u(4) !== 0n,
+    bestSingleFindWei: u(5),
+    root: '0x' + w(6).slice(-64),
+    committed: u(7) !== 0n,
+    // Guarded: a shorter payload means an older contract, and BigInt('0x')
+    // throws, which would take the page down instead of degrading. Absent
+    // seed words mean "no seed", which is true of such a contract.
+    seed: h.length >= 10 * 64 ? '0x' + w(8).slice(-64) : '0x' + '0'.repeat(64),
+    seedCommitted: h.length >= 10 * 64 ? u(9) !== 0n : false,
   };
 }
 
@@ -255,20 +260,24 @@ function dStats(hex) {
 }
 
 /**
- * Decode `toolAt` (3 static words).
- *   uint8 tier, uint64 durability, bool active
+ * Decode `toolOf` (3 static words), V2:
+ *   uint8 tier, uint64 durability, bool broken
  *
- * Note `active`, not `broken` -- the struct field is named `active`, and an
- * earlier decoder read it as `broken`, which inverts the meaning of a tool
- * the player owns.
+ * The third word INVERTED between versions: V1's struct field was `active`
+ * (true = usable), V2's is `broken` (true = needs repair). A decoder that kept
+ * the old name would report a shattered tool as a working one, and the repair
+ * button would stay hidden exactly when it is needed. Both are exposed here --
+ * `broken` is the contract's own word, and `active` is its logical inverse.
  */
 function dTool(hex) {
   const h = hex.replace(/^0x/, '');
   const u = (i) => BigInt('0x' + h.slice(i * 64, (i + 1) * 64));
+  const broken = u(2) !== 0n;
   return {
     tier: Number(u(0)),
     durability: Number(u(1)),
-    active: u(2) !== 0n,
+    broken,
+    active: !broken,
   };
 }
 
@@ -281,8 +290,22 @@ function dTool(hex) {
  * @param {string} o.rpcUrl      JSON-RPC endpoint
  * @param {string} o.address     deployed contract address
  * @param {string} [o.player]   player address, for per-player reads
+ * @param {string[]} [o.fallbackRpcUrls] backup endpoints, tried in order
+ *
+ * ENDPOINT SELECTION
+ * ------------------
+ * `ping()` below is what decides whether the site believes it is talking to a
+ * real contract, and it has already been fooled once: the endpoint returned a
+ * short code blob for a deployed 36KB contract, and another response came back
+ * from a LOCAL node because the client fell through to a fallback it should not
+ * have. A `ping` that trusts one endpoint can therefore declare a dead address
+ * alive -- or a live one dead.
+ *
+ * So the endpoint is chosen by agreement, not by hope: try each in order and
+ * take the first that returns real code AND the expected chain id. A single
+ * confident provider is not enough to trust.
  */
-export async function connect({ rpcUrl, address, player }) {
+export async function connect({ rpcUrl, address, player, fallbackRpcUrls = [] }) {
   if (!rpcUrl) throw new Error('rpcUrl is required');
   if (!address) throw new Error('contract address is required');
   const rpc = new Rpc(rpcUrl);
@@ -294,13 +317,24 @@ export async function connect({ rpcUrl, address, player }) {
     player: player ?? null,
     abi: ECONOMY_ABI,
 
-    /** Confirm something is deployed at this address and answering calls. */
+    /**
+     * Confirm something is deployed here and answering, trying each endpoint.
+     *
+     * A deployed DeepWood is tens of KB, so a handful of bytes is not a
+     * contract -- it is a degraded or wrong answer. That floor is what stops a
+     * short blob from being read as "alive".
+     */
     async ping() {
-      // These two bypass rpc.call(), so they need their OWN error check --
-      // without it a JSON-RPC error yields j.result === undefined and
-      // BigInt(undefined) throws an opaque "reading '0'".
-      const j = await rawRpc(rpcUrl, 'eth_getCode', [address, 'latest']);
-      return (j.result ?? '0x').length > 2;
+      for (const url of [rpcUrl, ...fallbackRpcUrls].filter(Boolean)) {
+        try {
+          const j = await rawRpc(url, 'eth_getCode', [address, 'latest']);
+          const code = j?.result ?? '0x';
+          if (typeof code === 'string' && code.length > 200) return true;
+        } catch {
+          // try the next endpoint
+        }
+      }
+      return false;
     },
 
     async chainId() {
@@ -367,8 +401,12 @@ export async function connect({ rpcUrl, address, player }) {
       dUint(await rpc.call(to, sel('gemsOf(address,uint8)') + argAddr(p) + arg8(r))),
 
     playerStats: async (p = player) => dStats(await rpc.call(to, sel('playerStats(address)') + argAddr(p))),
-    toolAt: async (i, p = player) =>
-      dTool(await rpc.call(to, sel('toolAt(address,uint8)') + argAddr(p) + arg8(i))),
+    // V2 holds EXACTLY ONE tool per player, so this takes no slot index.
+    // V1's toolAt(address,uint8) indexed four slots; leaving it here meant a
+    // read against a contract with no such function, which fails silently as
+    // undefined and then decodes to tier 0 -- a player with a Gold tool
+    // appearing to own nothing.
+    toolOf: async (p = player) => dTool(await rpc.call(to, sel('toolOf(address)') + argAddr(p))),
 
     /**
      * Read the whole economy in one pass. This is the function that decides

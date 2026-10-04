@@ -121,7 +121,12 @@ export async function bootChain({ player } = {}) {
   try {
     // connect() is async -- awaiting it yields the handle. Calling it without
     // await yields a Promise, which then looks like an object with no methods.
-    chain = await connect({ rpcUrl: config.rpcUrl, address: config.gameAddress, player });
+    chain = await connect({
+      rpcUrl: config.rpcUrl,
+      fallbackRpcUrls: config.fallbackRpcUrls,
+      address: config.gameAddress,
+      player,
+    });
   } catch (e) {
     return { ok: false, reason: `bad config: ${e.message}` };
   }

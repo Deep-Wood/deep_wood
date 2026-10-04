@@ -29,6 +29,7 @@ import {
   redeemGems as wRedeemGems,
   settleHunt as wSettleHunt,
 } from './wallet.js';
+import { rpcCall } from './rpc.js';
 import { connect as readConnect } from './chain.js';
 import { config } from './config.js';
 
@@ -86,7 +87,11 @@ export function __setReader(r) {
 async function getReader() {
   if (reader) return reader;
   if (!config.gameAddress) return null;
-  reader = await readConnect({ rpcUrl: config.rpcUrl, address: config.gameAddress });
+  reader = await readConnect({
+    rpcUrl: config.rpcUrl,
+    fallbackRpcUrls: config.fallbackRpcUrls,
+    address: config.gameAddress,
+  });
   return reader;
 }
 
@@ -105,19 +110,13 @@ export async function walletBalanceWeiOnchain() {
   const { account } = getState();
   if (!config.rpcUrl || !account) return null;
   try {
-    const res = await fetch(config.rpcUrl, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'eth_getBalance',
-        params: [account, 'latest'],
-      }),
-    });
-    const j = await res.json();
-    if (!j?.result) return null;
-    return BigInt(j.result);
+    // Failover: an endpoint answering with a 1-byte hex string instead of a
+    // balance is a WRONG answer, not a failed one, so it must not be believed.
+    // A balance is a 32-byte word, so anything shorter than 64 hex chars
+    // (the 0x excluded) is implausible and worth retrying elsewhere.
+    const hex = await rpcCall('eth_getBalance', [account, 'latest'], { minHexChars: 64 });
+    if (!hex) return null;
+    return BigInt(hex);
   } catch {
     // A failed balance read must not be reported as zero -- "you have nothing"
     // would disable every button and read as a real answer. null means unknown.

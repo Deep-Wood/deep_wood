@@ -6,7 +6,13 @@
  * pointed at testnet or mainnet without editing code.
  *
  * Env vars (Vite only exposes VITE_* to the client):
- *   VITE_RPC_URL       JSON-RPC endpoint
+ *   VITE_RPC_URL       JSON-RPC endpoint (primary)
+ *   VITE_RPC_FALLBACKS comma-separated backup endpoints, tried in order.
+ *                      Needed because the primary endpoint has been observed
+ *                      serving WRONG answers rather than errors -- it returned a
+ *                      short code blob for a contract with 36KB of code, and
+ *                      once fell back to a local node. A failed request is
+ *                      easy to retry; a confidently wrong one is not.
  *   VITE_GAME_ADDRESS  deployed DeepWood address
  *   VITE_CHAIN_ID      expected chain id, decimal. Guards against the site
  *                      silently reading the wrong chain after a bad deploy.
@@ -28,11 +34,23 @@ const env = (() => {
 /** Testnet defaults, used when the build has no env configured. */
 export const DEFAULTS = {
   rpcUrl: 'https://rpc.testnet.chain.robinhood.com',
+  // A second provider, so a single endpoint answering incorrectly cannot make
+  // the whole game read as broken (or, worse, read as correct). Chain 46630.
+  fallbackRpcUrls: ['https://robinhood-testnet.drpc.org'],
   chainId: 46630,
 };
 
 export const config = {
   rpcUrl: env.VITE_RPC_URL || DEFAULTS.rpcUrl,
+  /** Backups tried in order when the primary is unreachable or wrong. */
+  fallbackRpcUrls: (
+    env.VITE_RPC_FALLBACKS !== undefined && env.VITE_RPC_FALLBACKS !== ''
+      ? String(env.VITE_RPC_FALLBACKS)
+      : (DEFAULTS.fallbackRpcUrls || []).join(',')
+  )
+    .split(',')
+    .map((u) => u.trim())
+    .filter((u) => u && u !== DEFAULTS.rpcUrl),
   gameAddress: (env.VITE_GAME_ADDRESS || '').trim(),
   chainId: Number(env.VITE_CHAIN_ID || DEFAULTS.chainId),
   tokenAddress: (env.VITE_TOKEN_ADDRESS || '').trim(),

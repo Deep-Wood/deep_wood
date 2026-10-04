@@ -11,7 +11,10 @@
  * artifact and, when a node is available, against live contract state.
  *
  * Runs in two modes:
- *   - always      : static checks against out/DeepWood.sol/DeepWood.json
+ *   - always      : static checks against the V2 artifact
+ *                      (out/DeepWoodV2.sol/DeepWoodV2.json -- this pointed at
+ *                      V1 until the V2 cutover, so it was auditing a contract
+ *                      the client no longer talks to)
  *   - with RPC    : full runtime read via DW_RPC + DW_CONTRACT
  */
 
@@ -24,8 +27,8 @@ import * as season from './season.js';
 import { SIGS } from './chain.js';
 
 const require = createRequire(import.meta.url);
-const ART = '/home/administrator/gem-hunter/out/DeepWood.sol/DeepWood.json';
-const SOL = '/home/administrator/gem-hunter/src/DeepWood.sol';
+const ART = '/home/administrator/gem-hunter/out/DeepWoodV2.sol/DeepWoodV2.json';
+const SOL = '/home/administrator/gem-hunter/src/DeepWoodV2.sol';
 
 let pass = 0;
 let fail = 0;
@@ -89,7 +92,7 @@ group('every selector names a function the artifact actually has');
 group('client ABI covers the real functions');
 {
   // spot-check that the shapes the client decodes exist with the right types
-  const need = ['current', 'playerStats', 'toolAt', 'dropTable', 'toolCost', 'roi'];
+  const need = ['current', 'playerStats', 'toolOf', 'dropTable', 'toolCost', 'roi'];
   for (const n of need) {
     const f = abi.find((e) => e.type === 'function' && e.name === n);
     check(`${n}() in artifact`, !!f, f ? `${(f.inputs || []).length} in / ${(f.outputs || []).length} out` : 'MISSING');
@@ -113,23 +116,37 @@ group('client ABI covers the real functions');
     seasonStruct.join(' | '),
     seasonStruct.join(' | '),
   );
-  // Words 5-6 are still commitRoot/committed; 7-8 are the seed added for open
-  // settlement, where settleHunt recomputes each result from the committed seed
-  // instead of trusting a keeper-signed one.
-  check('  commitRoot is word 5, committed is word 6, seed is word 7',
-    /^uint64 id, uint64 startsAt, uint64 endsAt, bool finalized, uint256 bestSingleFindWei, bytes32 commitRoot, bool committed, bytes32 seed, bool seedCommitted$/.test(seasonStruct.join(', ')),
+  // V2 inserted `isPreseason` as word 1, which shifts EVERY later field by one.
+  // The V1 pattern matched the V2 struct with words simply misaligned, which is
+  // the kind of bug this guard exists to catch -- so it now pins the full V2
+  // order including the preseason flag.
+  check('  Season word order is V2, with isPreseason at word 1',
+    /^uint64 id, uint8 isPreseason, uint64 startsAt, uint64 endsAt, bool finalized, uint256 bestSingleFindWei, bytes32 commitRoot, bool committed, bytes32 seed, bool seedCommitted$/.test(seasonStruct.join(', ')),
     seasonStruct.join(', '),
   );
   const toolStruct = structOf('Tool');
-  check('  Tool has active, not broken', toolStruct.join(', '), 'uint8 tier, uint64 durability, bool active');
+  check('  Tool struct keeps active; breakage is durability == 0',
+    toolStruct.join(', ') === 'uint8 tier, uint64 durability, bool active',
+    toolStruct.join(', '));
+  // The struct field is `active`, but toolOf() RETURNS a computed `broken`
+  // (tier != 0 && durability == 0). Those are opposites, so the decoder must
+  // follow the function signature, not the struct -- reading word 3 as the
+  // struct's meaning would report a shattered tool as a working one and keep
+  // the repair button hidden exactly when it is needed.
+  const toolOfAbi = (abi.find((e) => e.name === 'toolOf') || {}).outputs || [];
+  check('  toolOf() returns (tier, durability, broken)',
+    toolOfAbi.map((o) => o.type).join(',') === 'uint8,uint64,bool',
+    toolOfAbi.map((o) => o.type).join(','));
 
   // playerStats is a named multi-return, so its order IS readable.
   const ps = abi.find((e) => e.type === 'function' && e.name === 'playerStats');
   const psTypes = (ps.outputs || []).map((o) => o.type);
   check('playerStats() returns 6 values matching dStats()',
     psTypes.join(',') === 'uint256,uint256,uint256,uint256,uint256,uint64', psTypes.join(','));
-  const ta = abi.find((e) => e.type === 'function' && e.name === 'toolAt');
-  check('toolAt() returns 3 values matching dTool()',
+  // V2 replaced V1's slot-indexed toolAt(address,uint8) with toolOf(address):
+  // one held tool, so there is no slot to pass.
+  const ta = abi.find((e) => e.type === 'function' && e.name === 'toolOf');
+  check('toolOf() returns 3 values matching dTool()',
     (ta.outputs || []).map((o) => o.type).join(',') === 'uint8,uint64,bool',
     (ta.outputs || []).map((o) => o.type).join(','));
 }
