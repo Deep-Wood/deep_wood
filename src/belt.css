@@ -131,18 +131,23 @@
   flex-wrap: nowrap;
   gap: var(--s2);
   width: 100%;
+  /* Actions size to their own labels instead of splitting the row into equal
+     thirds. `flex: 1 1 0` gave two buttons 181px each on a 390px phone -- half
+     the card for the words "buy Wood" -- so the buttons read as two long empty
+     slabs rather than controls. Content-sized buttons sit next to each other
+     and leave the rest of the row as deliberate empty space. */
+  justify-content: flex-start;
 }
 .belt-actions .act {
-  /* buy/upg needs the most room (it quotes a tier name AND a price), so it
-   * keeps a content-based width; the other two share what is left. On a
-   * 390px phone with three buttons that is 65px each, which is enough for
-   * "fix 9Qtz" and "sell 0.19 ETH" but not for the full buy label -- which is
-   * why the buy label drops the word "tool" and the title keeps the full
-   * wording. */
-  flex: 1 1 0;
+  /* flex-grow: 0 so the label decides the width; min-width: 0 so a long label
+     can still ellipsise rather than forcing the card wider. */
+  flex: 0 1 auto;
   min-width: 0;
-  /* Long labels ("upgrade tool Bronze 0.052 ETH") ellipsise rather than
-   * forcing the button -- and therefore the card -- wider or taller. */
+  /* A floor so a two-word label is a button, not a hairline. Content sizing on
+     a 9px font gives "buy Wood" ~60px, which reads as an accident. */
+  min-width: 64px;
+  padding-left: 10px;
+  padding-right: 10px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -160,16 +165,5 @@
  * full label fit at 65px instead of hiding half of it. */
 .belt-actions .act {
   font-size: 9px;
-  padding-left: 3px;
-  padding-right: 3px;
   letter-spacing: -0.1px;
 }
-/* Equal thirds across the row.
- *
- * With flex-basis based on content the buttons took only what their labels
- * needed, which left a visible gap at the right of the row on a phone -- the
- * buttons read as a half-finished strip rather than a deliberate one. Equal
- * basis makes the row span the belt exactly. Every label now fits that width
- * (measured at 390px and 360px, both with and without the repair button), so
- * nothing truncates. */
-.belt-actions { justify-content: stretch; }

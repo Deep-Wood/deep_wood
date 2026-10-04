@@ -75,6 +75,15 @@ import {
   walletBalanceWeiOnchain, priceFor, ALL_RARITIES, RARITY_NAMES,
 } from './onchain.js';
 import sha3 from 'js-sha3';
+
+/**
+ * Starting testnet ETH for the OFFLINE preview only.
+ *
+ * Enough to buy Wood (0.005) many times over and to clear the 0.005 redemption
+ * floor several times, so the full loop is demonstrable without a wallet.
+ * Never used on chain.
+ */
+const PREVIEW_ETH = 200_000_000_000_000_000n; // 0.2 ETH
 import {
   TouchState, readIntent, frameScale, touchRects, shouldShowTouch, TOUCH_LAYOUT,
 } from './touch.js';
@@ -206,10 +215,19 @@ export class ForestScene extends Phaser.Scene {
     // overwrote one with the other. The symptom was `p.gems is undefined`,
     // because `player` had become a texture rather than a player.
     this.econ = newPlayer();
-    // Simulated wallet. Preview mode has no chain and no wallet, so buy/upgrade
-    // and sell need a balance to check against. This becomes a real
-    // eth_getBalance when the redeployed contract is wired in.
-    this.simBalance = 0n;
+    // Simulated wallet for PREVIEW mode only.
+    //
+    // This was 0n, which made the preview unplayable: "buy Wood" is disabled
+    // with "Need 0.005 ETH, have 0 ETH" and there is no way for a visitor to
+    // ever earn any, because hunting requires a tool and buying one requires
+    // money. A preview that cannot demonstrate the game is not a preview --
+    // and it read as "the site is broken" rather than "connect a wallet".
+    //
+    // On chain this is NEVER read -- walletBalanceWei() returns the real
+    // eth_getBalance there. It exists only so an offline visitor can buy Wood,
+    // hunt, break it, repair with mined gems and cash out, which is the whole
+    // loop the UI is meant to show.
+    this.simBalance = PREVIEW_ETH;
     // Real balance, read on connect. null until the first successful read.
     this.chainBalanceWei = null;
     // Guards a double-click while a wallet signature is pending.
