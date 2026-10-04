@@ -76,8 +76,8 @@ test('there is exactly one drop table and one price list', () => {
 test('a hunt rolls against the tier the player HOLDS', () => {
   // `this.player` is the Phaser sprite, so `this.player.tier` is undefined and
   // every hunt silently rolled on tier 1's table.
-  const i = scene.indexOf('  reveal(node) {');
-  const seg = bare(scene.slice(i, i + 700));
+  const i = scene.indexOf('reveal(node) {');
+  const seg = bare(scene.slice(i, scene.indexOf('let result', i)));
   assert.match(seg, /this\.econ\.tier \|\| 1/);
   assert.ok(!/this\.player\.tier/.test(seg), 'must not read the sprite for the tier');
 });

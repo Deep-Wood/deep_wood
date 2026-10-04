@@ -359,3 +359,32 @@ test('the harness itself is sound: it read a real chain', async () => {
   assert.ok(truth.balWei > 0n, 'the wallet holds ETH on testnet');
   assert.ok(truth.gems.length === 5);
 });
+
+test('a connected HUNT routes through the contract, not the local roll', async () => {
+  // The connected reveal must call the contract's previewHunt (an eth_call)
+  // rather than rolling locally. This harness's provider refuses WRITES, so
+  // settleHuntOnchain returns send-failed and reveal() must report failure,
+  // grant NOTHING, and leave the hunt index unmoved.
+  const before = await page.evaluate(() => ({
+    gems: window.__scene ? [...window.__scene.econ.gems] : null,
+    hunts: window.__scene ? window.__scene.huntIndex : null,
+  }));
+  const r = await page.evaluate(async () => {
+    const s = window.__scene;
+    if (!s) return { err: 'no scene' };
+    // A synthetic dig-node: reveal only needs x/y/active/setData/scale tweens.
+    const calls = { previews: 0 };
+    const node = { x: 0, y: 0, active: true, depth: 5, setData() {} };
+    const out = { ok: null, gems: null, hunts: null };
+    try {
+      out.ok = await s.reveal(node);
+      out.gems = [...s.econ.gems];
+      out.hunts = s.huntIndex;
+    } catch (e) { out.err = String((e && e.message) || e); }
+    return out;
+  });
+  assert.equal(r.ok, false,
+    `settlement through a read-only provider must fail cleanly, got ${JSON.stringify(r)}`);
+  assert.deepEqual(r.gems, before.gems, 'a failed settlement must not credit gems');
+  assert.equal(r.hunts, before.hunts, 'a failed settlement must not advance the hunt index');
+});

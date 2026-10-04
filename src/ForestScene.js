@@ -2691,13 +2691,16 @@ export class ForestScene extends Phaser.Scene {
       this.prompt.setVisible(false);
       this.player.setScale(1);
       this.player.setRotation(0);
-      this.busy = false;
 
-      // The pick's durability is spent HERE, not when the dig started. A dig is
-      // now three separate player inputs, so a player who abandons one halfway
-      // must not be charged for a swing they never completed -- and must not be
-      // credited a gem either, since the site was already flagged dug.
-      const used = consumeUse(this.econ);
+      // The pick's durability is spent by the CHAIN in the connected game
+      // (settleHunt deducts it against the committed seed), and refreshChainTool()
+      // after settlement pulls the authoritative count back. Spending it locally
+      // too would double-charge every hunt. The consumeUse() path below is the
+      // PREVIEW simulation, where no contract is involved.
+      let used = { broke: false };
+      if (!onchainActive()) {
+        used = consumeUse(this.econ);
+      }
       this.updateHud();
       // Repaint the DOM toolbelt row. `consumeUse` is the ONLY thing that
       // decrements `left`, and the belt readout the player actually sees is a
@@ -2709,10 +2712,16 @@ export class ForestScene extends Phaser.Scene {
       // This is the missing call.
       this.refreshBelt();
 
-      this.reveal(m.node);
-      // Rebuild the chunk AFTER the reveal has read everything it needs off the
-      // node. With scarcity (isChunkSpent) this removes the spent site.
-      this.completeNodeDig();
+      this.reveal(m.node).then((ok) => {
+        // On a failed on-chain settlement the node was un-marked inside
+        // reveal() so it stays diggable -- do NOT retire it here.
+        if (ok !== false && m.node?.active) {
+          // Rebuild the chunk AFTER the reveal has read everything it needs
+          // off the node. With scarcity (isChunkSpent) this removes the spent
+          // site.
+          this.completeNodeDig();
+        }
+      });
 
       // One message about the pick, not two. This block used to be reached twice
       // on a breaking dig -- a `used.broke` flash here AND the low-durability
@@ -2765,7 +2774,7 @@ export class ForestScene extends Phaser.Scene {
     cap.explode(2);
   }
 
-  reveal(node) {
+  async reveal(node) {
     // Snapshot the tier BEFORE the reveal, so a tool that breaks on this
     // hunt still rolls against the tier that swung the pick.
     //
@@ -2774,17 +2783,74 @@ export class ForestScene extends Phaser.Scene {
     // against tier 1 -- a Steel pick hunting on Wood's table, and Gold
     // throwing outright.
     const tier = this.econ.tier || 1;
-    const result = rollHunt(
-      this.seed, this.wallet ?? '0xplayer', this.huntIndex, tier,
-      this.econ.skill ?? 1,
-    );
-    this.huntIndex += 1;
 
-    // Credit the FULL haul, per rarity. The old line only did counts[0]
-    // into `belt.common` and let the satchel derive its own totals separately,
-    // which is how the card ended up showing two different numbers for the
-    // same gem that drifted apart on the first spend.
-    creditGems(this.econ, result.counts);
+    let result;
+    if (onchainActive()) {
+      // The connected game settles ON THE CONTRACT. The numbers are the
+      // chain's own previewHunt, which settleHunt recomputes from the
+      // committed season seed and reverts ResultMismatch on any difference --
+      // so the credited find is exactly what the contract recorded. The local
+      // rollHunt below remains the PREVIEW path for players with no wallet.
+      //
+      // Nothing is credited until the contract's own state moves:
+      // settleHuntOnchain polls huntIndexOf(player) and only reports success
+      // when it increments, because on 46630 a reverted call still returns a
+      // status 0x1 receipt. A hunt that never landed grants nothing.
+      this.busy = true;
+      this.beltMsg?.('Settling hunt on chain — confirm in your wallet', 'busy');
+      this.setTxPending('belt-hunt', 'settling');
+      let settled;
+      try {
+        const { settleHuntOnchain } = await import('./onchain.js');
+        settled = await settleHuntOnchain(tier);
+      } finally {
+        this.clearTxPending();
+      }
+      if (!settled.ok) {
+        // Un-mark the dig site: nothing was settled, so the player has not
+        // been charged a hunt and the node must stay diggable. The durability
+        // was already spent in finishDig(); refreshChainTool() restores the
+        // chain's own remaining durability in that case.
+        if (node?.setData) node.setData('used', false);
+        this.flash(settled.reason || 'Could not settle the hunt — the dig stays open.');
+        this.beltMsg?.(settled.reason || 'Settlement failed.', 'bad');
+        await this.refreshChainTool();
+        this.updateHud();
+        this.busy = false;
+        return false;
+      }
+      result = {
+        counts: settled.counts.map((n) => Number(n)),
+        bestSingleWei: settled.bestSingleWei,
+        total: settled.counts.reduce((a, b) => a + Number(b), 0),
+        valueWei: settled.bestSingleWei,
+      };
+      this.huntIndex += 1;
+      // Pull the chain's tool (durability was spent) and gem balances (the
+      // contract credited the haul) so the mirror is the chain's truth rather
+      // than a locally-computed guess.
+      await this.refreshChainTool();
+    } else {
+      result = rollHunt(
+        this.seed, this.wallet ?? '0xplayer', this.huntIndex, tier,
+        this.econ.skill ?? 1,
+      );
+      this.huntIndex += 1;
+    }
+
+    this.busy = false;
+
+    // Credit the haul. On chain the credit ALREADY happened -- settleHunt
+    // wrote the gems into the contract and refreshChainTool() just pulled the
+    // authoritative balances into the mirror. Crediting locally on top would
+    // double-count every find. `found` (the lifetime tally) has no on-chain
+    // read, so it is credited either way; it powers RANK/FINDS, not the sell
+    // button.
+    if (!onchainActive()) {
+      creditGems(this.econ, result.counts);
+    } else {
+      result.counts.forEach((n, r) => { this.econ.found[r] = (this.econ.found[r] ?? 0) + Number(n); });
+    }
     window.renderGems?.();
 
     // Season board. Recorded with the tier that swung the pick, since that
