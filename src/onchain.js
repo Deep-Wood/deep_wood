@@ -83,8 +83,13 @@ export function __setReader(r) {
   reader = r;
 }
 
-/** Lazily open (and reuse) the read-only handle. */
-async function getReader() {
+/**
+ * Lazily open (and reuse) the read-only handle.
+ *
+ * Exported because the UI must read chain state to render honestly -- the
+ * season title comes from phase(), not from a string baked into the HTML.
+ */
+export async function getReader() {
   if (reader) return reader;
   if (!config.gameAddress) return null;
   reader = await readConnect({

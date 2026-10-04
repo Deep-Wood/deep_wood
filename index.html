@@ -128,7 +128,16 @@
              framing is the correct format. -->
         <img class="avatar" src="/art/viber.png" width="32" height="32"
              alt="Player portrait" aria-hidden="true">
-        <span class="card-title">Season I &middot; Verdant Hollow</span>
+        <!-- The season name is CHAIN STATE, not decoration. It was a hardcoded
+             "Season I - Verdant Hollow" string, so after the V2 cutover it kept
+             claiming Season I while the deployed contract was in Preseason --
+             a header that lied about the phase the player was actually in.
+
+             It starts as "Connecting..." rather than a guess, because a wrong
+             season name is worse than an absent one: it implies the chain has
+             been read when it has not. paintSeasonState() fills it in from
+             phase() and current(). -->
+        <span class="card-title" id="season-title">Connecting&hellip;</span>
         <!-- Connect lives at the top right of the card, on the season's own
              header line. It was previously down in the chain block with the
              status chip, which buried the one control a first-time player needs

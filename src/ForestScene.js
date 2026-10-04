@@ -1927,7 +1927,62 @@ export class ForestScene extends Phaser.Scene {
    * `standing()` is the same call the board overlay makes, so the card and the
    * overlay can never disagree about the player's position.
    */
+  /**
+   * Name the season from the chain's own phase.
+   *
+   * This was a hardcoded "Season I - Verdant Hollow" string, which after the V2
+   * cutover kept claiming Season I while the deployed contract sat in Preseason.
+   * A title that names the wrong phase is worse than none: the player has no way
+   * to tell it is fiction.
+   *
+   * V2 phase() returns 0=Preseason, 1=Live, 2=Closed. Preseason is id 0 and has
+   * no end date, so it is named rather than numbered. Season 1 is only claimed
+   * once phase() actually says Live AND current().id is 1 -- the id check stops
+   * a future season 2 from being labelled "Season 1".
+   */
+  async paintSeasonTitle() {
+    const el = document.getElementById('season-title');
+    if (!el) return;
+
+    const say = (label) => { el.textContent = label; };
+
+    if (!onchainActive()) {
+      // No wallet, so no chain to read. Say which mode this actually is rather
+      // than naming a season nothing has confirmed.
+      say(chainMode() === 'preview' ? 'Preview mode' : 'Offline');
+      return;
+    }
+
+    try {
+      const { getReader } = await import('./onchain.js');
+      const r = await getReader();
+      if (!r) { say('Connecting...'); return; }
+
+      const [phaseHex, current] = await Promise.all([r.phase(), r.current()]);
+
+      // phase() is uint8, so it arrives as a hex word. Comparing that string to
+      // 0 would be false for every real value -- hence the decode, and a null
+      // check so an unreadable phase reads as unknown rather than as Preseason.
+      let phase = null;
+      try { phase = phaseHex === null || phaseHex === undefined ? null : Number(BigInt(phaseHex)); } catch { phase = null; }
+
+      if (phase === null) { say('Connecting...'); return; }
+      if (phase === 0) { say('Preseason'); return; }
+      if (phase === 2) { say('Season closed'); return; }
+
+      // Live. Name it from the chain's own id, never an assumed 1, so a future
+      // season 2 cannot be labelled "Season 1".
+      const id = Number(current?.id ?? 0);
+      say(id > 0 ? `Season ${id} · Verdant Hollow` : 'Season live');
+    } catch {
+      // A failed read must NOT leave the previous season name up -- a stale name
+      // is a lie. "Connecting..." is the honest thing to show.
+      say('Connecting...');
+    }
+  }
+
   paintSeasonStats() {
+    this.paintSeasonTitle();
     const rankEl = document.getElementById('rank');
     const roiEl = document.getElementById('roi');
     const findsEl = document.getElementById('finds');

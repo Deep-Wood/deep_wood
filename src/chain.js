@@ -360,6 +360,16 @@ export async function connect({ rpcUrl, address, player, fallbackRpcUrls = [] })
 
     current: async () => dCurrent(await rpc.call(to, sel('current()'))),
 
+    // --- V2 lifecycle ---
+    // `phase` is the only honest source for what the game is doing right now.
+    // It did not exist in V1, which had a single season and a `paused` flag.
+    // The header previously named a season from a hardcoded string and so
+    // claimed "Season I" while the chain was in Preseason.
+    phase: () => rpc.call(to, sel('phase()')),
+    preseasonPaused: async () => dBool(await rpc.call(to, sel('preseasonPaused()'))),
+    seasonOpen: async () => dBool(await rpc.call(to, sel('seasonOpen()'))),
+    seasonSeed: async () => rpc.call(to, sel('seasonSeed()')),
+
     // Owner-controlled season gate. Absent from the OLD keeper contract, which
     // is why this tolerates a revert: a contract without the function returns
     // null and the client treats "no gate" as "open", rather than declaring the
