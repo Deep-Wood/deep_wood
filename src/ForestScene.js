@@ -232,6 +232,10 @@ export class ForestScene extends Phaser.Scene {
     this.chainBalanceWei = null;
     // Guards a double-click while a wallet signature is pending.
     this.txBusy = false;
+    // Which belt button is mid-flight, and the verb it shows. Set while a
+    // wallet signature or a chain poll is outstanding.
+    this.txPendingId = null;
+    this.txPendingVerb = null;
     // Season board. Off-chain: hunts are recorded here as they happen, and
     // the same totals would come off the chain once hunts settle.
     this.board = newSeasonRecord(1, Math.floor(Date.now() / 1000));
@@ -1573,6 +1577,7 @@ export class ForestScene extends Phaser.Scene {
       if (!chk.ok) buy.title = chk.reason;
       buy.onclick = () => this.doBuyTool(nt);
     }
+    this.decoratePending(buy);
     el.appendChild(buy);
 
     // --- sell gems
@@ -1593,6 +1598,7 @@ export class ForestScene extends Phaser.Scene {
     sell.disabled = !rchk.ok;
     if (!rchk.ok) sell.title = rchk.reason;
     sell.onclick = () => this.doSellGems();
+    this.decoratePending(sell);
     el.appendChild(sell);
 
     // --- repair, shown only when broken and affordable. It is a gem action
@@ -1608,6 +1614,7 @@ export class ForestScene extends Phaser.Scene {
       r.disabled = !chk.ok;
       if (!chk.ok) r.title = chk.reason;
       r.onclick = () => this.doRepair();
+      this.decoratePending(r);
       el.appendChild(r);
     }
   }
@@ -1747,7 +1754,15 @@ export class ForestScene extends Phaser.Scene {
     // value is still null -> 0n, which fails the local affordability check and
     // leaves the card showing no tool after a purchase that actually landed.
     await this.refreshChainBalance();
-    const r = await buyToolOnchain(tier, cost);
+    this.setTxPending('belt-buy', 'buying');
+    let r;
+    try {
+      r = await buyToolOnchain(tier, cost);
+    } finally {
+      // Cleared before the local mirror is updated, because that path calls
+      // refreshBelt() and the belt must not stay stuck in the busy label.
+      this.clearTxPending();
+    }
 
     if (!r.ok) {
       this.beltMsg(r.reason || 'purchase failed', 'bad');
@@ -1788,6 +1803,50 @@ export class ForestScene extends Phaser.Scene {
     this.updateHud();
   }
 
+  /**
+ * Mark a chain action as in-flight and say so ON THE BUTTON.
+ *
+ * The message line was the only feedback during a wallet signature or a poll,
+ * which made a pending action look identical to a dead button -- the player
+ * clicked again, and the second signature was the thing that actually broke
+ * (see the TierLocked report). `txBusy` alone prevented re-entry but showed
+ * nothing, so "busy" had to be visible on the control itself.
+ *
+ * @param {string} id   button id, so only the acting button reads as busy
+ * @param {string} verb short label, e.g. 'buying' -- must fit ~100px
+ */
+  setTxPending(id, verb) {
+    this.txPendingId = id;
+    this.txPendingVerb = verb;
+    this.refreshBelt();
+  }
+
+  clearTxPending() {
+    // Refresh the belt, or the button keeps the "buying…" label forever. The
+    // fields alone are not enough: refreshBelt() is what rebuilds the label,
+    // and nothing else happens on this path once the transaction resolves.
+    this.txPendingId = null;
+    this.txPendingVerb = null;
+    this.refreshBelt();
+  }
+
+  /**
+   * Apply the pending state to a freshly built belt button.
+   *
+   * Called from refreshBelt() for every action, so a belt rebuilt mid-flight
+   * (the balance refresh does rebuild it) cannot lose the busy indication.
+   */
+  decoratePending(btn) {
+    if (this.txPendingId !== btn.id) return false;
+    btn.disabled = true;
+    btn.classList.add('busy');
+    btn.textContent = `${this.txPendingVerb}\u2026`;
+    // No affordance/tooltip: a disabled button does not open one, and the old
+    // "Need X ETH" reason under a pending label would read as a failure.
+    btn.removeAttribute('title');
+    return true;
+  }
+
   /** Repair with gems. Burns them outright; no treasury claim (spec s10). */
   async doRepair() {
     if (this.txBusy) return;
@@ -1802,7 +1861,13 @@ export class ForestScene extends Phaser.Scene {
   async _doRepair() {
     if (onchainActive()) {
       this.beltMsg('Confirm the repair in your wallet\u2026', 'busy');
-      const r = await repairToolOnchain();
+      this.setTxPending('belt-repair', 'repairing');
+      let r;
+      try {
+        r = await repairToolOnchain();
+      } finally {
+        this.clearTxPending();
+      }
       if (!r.ok) { this.beltMsg(r.reason || 'repair failed', 'bad'); return; }
 
       // Only now does the local tool become whole, and only to the durability
@@ -1884,8 +1949,16 @@ export class ForestScene extends Phaser.Scene {
       const count = p.gems[rarity] ?? 0n;
       if (count <= 0n) continue;
       this.beltMsg(`Selling ${RARITY_NAMES[rarity]} (${count})\u2026`, 'busy');
+      // Sell is SEVERAL transactions, so the pending label has to be re-raised
+      // for each one -- cleared by the loop's own finally, then set again.
+      this.setTxPending('belt-sell', 'selling');
 
-      const r = await redeemGemsOnchain(rarity, count);
+      let r;
+      try {
+        r = await redeemGemsOnchain(rarity, count);
+      } finally {
+        this.clearTxPending();
+      }
       if (!r.ok) {
         // Stop at the first failure rather than pressing on: a below-floor
         // rejection means the rest will likely fail too, and continuing would
