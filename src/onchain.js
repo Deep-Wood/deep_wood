@@ -23,16 +23,24 @@
  */
 import {
   getState,
-  claimTool as wcClaimTool,
-  buyGems as wBuyGems,
+  buyTool as wBuyTool,
+  repairTool as wRepairTool,
+  upgradeSkill as wUpgradeSkill,
+  redeemGems as wRedeemGems,
   settleHunt as wSettleHunt,
 } from './wallet.js';
 import { connect as readConnect } from './chain.js';
 import { config } from './config.js';
 
 /** Rarities the contract sells. Rare+ are hunt-only and revert. */
-export const FOR_SALE = [0, 1];
-export const RARITY_NAME_ONSALE = { 0: 'Common', 1: 'Uncommon' };
+// V1 sold gems for Common/Uncommon only. V2 has no gem SHOP at all: gems are
+// mined, and every rarity the player holds is redeemable. These lists survive
+// only so callers that iterate rarities have a single source of truth for the
+// five-slot shape.
+export const ALL_RARITIES = [0, 1, 2, 3, 4];
+export const RARITY_NAMES = {
+  0: 'Quartz', 1: 'Amber', 2: 'Sapphire', 3: 'Ruby', 4: 'Diamond',
+};
 
 const POLL_INTERVAL_MS = 1200;
 const POLL_ATTEMPTS = 20; // ~24s; a testnet block is sub-second in practice
@@ -83,6 +91,40 @@ async function getReader() {
 }
 
 /** True when writes would go to the chain rather than the local simulation. */
+/**
+ * The player's spendable ETH, in wei.
+ *
+ * Preview mode has no wallet, so ForestScene used a simulated `simBalance`.
+ * That is exactly the kind of number that must never reach a real transaction:
+ * it would size a buy against a fiction. When the chain is active this reads
+ * the actual balance, and callers should route through here rather than
+ * reading a balance themselves.
+ */
+export async function walletBalanceWeiOnchain() {
+  const { getState } = await import('./wallet.js');
+  const { account } = getState();
+  if (!config.rpcUrl || !account) return null;
+  try {
+    const res = await fetch(config.rpcUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'eth_getBalance',
+        params: [account, 'latest'],
+      }),
+    });
+    const j = await res.json();
+    if (!j?.result) return null;
+    return BigInt(j.result);
+  } catch {
+    // A failed balance read must not be reported as zero -- "you have nothing"
+    // would disable every button and read as a real answer. null means unknown.
+    return null;
+  }
+}
+
 export function onchainActive() {
   return getState().connected && Boolean(config.gameAddress);
 }
@@ -94,82 +136,195 @@ export function mode() {
 }
 
 /**
- * Claim a tool tier on chain.
+ * Buy the ONE tool, or upgrade to the next tier, paying ETH.
  *
- * Sends the transaction, then waits for `toolCount(account)` to increase.
- * Grants nothing unless it does.
+ * Confirmation signal: `toolOf(account)` returns (tier, durability, broken),
+ * and the tier must have RISEN to the one requested. In V2 exactly one tool is
+ * held, so this is a single tuple rather than V1's growing `toolCount`.
  *
- * @param {number} tier 1..4
- * @returns {Promise<{ok:boolean, code?:string, reason?:string, fee?:number,
- *                    hash?:string, confirmed?:boolean}>}
+ * Grants nothing unless the chain's own state proves it applied. On 46630 a
+ * reverted call still yields a receipt with status 0x1, so a hash proves
+ * nothing.
+ *
+ * @param {number} tier 1..5
+ * @returns {Promise<{ok:boolean, code?:string, reason?:string, hash?:string,
+ *                    confirmed?:boolean, tier?:number, durability?:bigint}>}
  */
-export async function claimToolOnchain(tier) {
+export async function buyToolOnchain(tier, costWei) {
+  const r = await getReader();
+  if (!r) return fail('not-configured', 'GAME_ADDRESS not set - no contract to write to');
+  if (costWei === undefined || costWei === null) {
+    // Never guess a price. Reading it live is one call; inventing it sends the
+    // player to sign a transaction the chain will reject with Underpaid.
+    return fail('bad-arg', 'buyToolOnchain needs { costWei } from toolCost(tier)');
+  }
+
+  const { account } = getState();
+  const before = await r.toolOf(account);
+
+  const sent = await wBuyTool(tier, { valueWei: costWei });
+  if (!sent.ok) return fail(sent.code || 'send-failed', sent.reason || 'transaction was not sent');
+
+  const after = await pollUntilChanged(
+    () => r.toolOf(account),
+    before,
+    (b, a) => a.tier > b.tier,
+  );
+
+  if (!after.changed) {
+    // The tx was broadcast but the contract never applied it: it reverted. A
+    // duplicate buy, a skipped tier, or a wrong value all land here.
+    return fail('reverted', 'contract did not apply the purchase (it reverted) - nothing granted');
+  }
+  if (after.value.tier !== tier) {
+    return fail('wrong-tier', `bought tier ${tier} but the chain holds tier ${after.value.tier}`);
+  }
+
+  return {
+    ok: true,
+    hash: sent.hash,
+    confirmed: true,
+    tier: after.value.tier,
+    durability: after.value.durability,
+  };
+}
+
+/**
+ * Repair the held tool by burning gems.
+ *
+ * Confirmation signal: `toolOf(account).broken` goes from true to false, and
+ * durability returns to the tier's maximum. Checking `broken` rather than the
+ * durability value alone matters because a repair restores a KNOWN number --
+ * a poll on "durability increased" would be satisfied by any partial change.
+ *
+ * The gem vector is NOT sent. `repairTool()` takes no arguments; the contract
+ * derives the exact cost per tier, so the client cannot get it wrong and must
+ * not try.
+ */
+export async function repairToolOnchain() {
   const r = await getReader();
   if (!r) return fail('not-configured', 'GAME_ADDRESS not set - no contract to write to');
 
   const { account } = getState();
-  const before = await r.toolCount(account);
+  const before = await r.toolOf(account);
 
-  const sent = await wcClaimTool(tier);
+  // Refuse locally rather than paying gas to be told: the contract reverts
+  // NotBroken when durability is above zero, and ToolNotOwned when there is no
+  // tool at all. Both are states the button can see coming.
+  if (before.tier === 0) return fail('no-tool', 'you do not own a tool yet');
+  if (!before.broken) return fail('not-broken', 'the tool is not broken - no repair needed');
+
+  const sent = await wRepairTool();
   if (!sent.ok) return fail(sent.code || 'send-failed', sent.reason || 'transaction was not sent');
 
   const after = await pollUntilChanged(
-    () => r.toolCount(account),
+    () => r.toolOf(account),
+    before,
+    (b, a) => b.broken === true && a.broken === false,
+  );
+
+  if (!after.changed) {
+    return fail('reverted', 'contract did not apply the repair (it reverted) - gems not burned');
+  }
+
+  return { ok: true, hash: sent.hash, confirmed: true, durability: after.value.durability };
+}
+
+/**
+ * Raise the skill level by one, paying gems.
+ *
+ * Confirmation signal: `skillOf(account)` rose to exactly the level asked for.
+ * The contract only accepts `skill + 1`, so anything else is a revert and must
+ * not be reported as a purchase.
+ *
+ * @param {number} level 1..4, and must be the player's current skill + 1
+ */
+export async function upgradeSkillOnchain(level, currentSkill) {
+  const r = await getReader();
+  if (!r) return fail('not-configured', 'GAME_ADDRESS not set - no contract to write to');
+  if (currentSkill !== undefined && level !== currentSkill + 1) {
+    // Caught before the wallet opens. The contract's own guard is
+    // RarityLocked, but paying gas to be told you skipped a level is silly.
+    return fail('skill-not-next', `skill must go ${currentSkill + 1}, not ${level}`);
+  }
+
+  const { account } = getState();
+  const before = await r.skillOf(account);
+
+  const sent = await wUpgradeSkill(level);
+  if (!sent.ok) return fail(sent.code || 'send-failed', sent.reason || 'transaction was not sent');
+
+  const after = await pollUntilChanged(
+    () => r.skillOf(account),
     before,
     (b, a) => a > b,
   );
 
   if (!after.changed) {
-    // The tx was broadcast but the contract never applied it: it reverted.
-    // The receipt would have said 'success'. Do not grant anything.
-    return fail('reverted', 'contract did not apply the claim (it reverted) - nothing granted');
+    return fail('reverted', 'contract did not apply the skill (it reverted) - gems not spent');
+  }
+  if (after.value !== level) {
+    return fail('wrong-level', `asked for skill ${level} but the chain reads ${after.value}`);
   }
 
-  return { ok: true, hash: sent.hash, confirmed: true, count: after.value };
+  return { ok: true, hash: sent.hash, confirmed: true, skill: after.value };
 }
 
 /**
- * Buy gems on chain. Common (0) and Uncommon (1) only.
+ * Cash gems out for ETH.
  *
- * Confirms via `gemsOf(account, rarity)` increasing. `priceWei` should come
- * from the chain's own `priceOf` so we never guess a price.
+ * Confirmation signal: the gem balance FELL by the amount redeemed. The ETH
+ * arrives asynchronously in the same transaction, so there is nothing to poll
+ * on the ETH side -- and the payout is the contract's, not the client's, so it
+ * must never be computed locally or shown as guaranteed.
  *
- * @param {number} rarity 0 or 1
- * @param {number} count > 0
- * @param {bigint} priceWei on-chain priceOf(rarity)
- * @returns {Promise<{ok:boolean, code?:string, reason?:string, hash?:string}>}
+ * The 0.005 ETH floor is enforced on chain with BelowMinRedeem. Ask the
+ * contract's own `redeemQuote` before sending so the button can explain why a
+ * redemption is too small, rather than letting the player sign and fail.
  */
-export async function buyGemsOnchain(rarity, count, priceWei) {
+export async function redeemGemsOnchain(rarity, count) {
   const r = await getReader();
   if (!r) return fail('not-configured', 'GAME_ADDRESS not set - no contract to write to');
-  if (!FOR_SALE.includes(rarity)) {
-    return fail('not-for-sale', `${rarity >= 2 ? 'Rare+' : 'that rarity'} is hunt-only, not for sale`);
-  }
   if (!Number.isInteger(count) || count <= 0) {
     return fail('bad-arg', `count must be a positive integer, got ${count}`);
-  }
-  if (priceWei === undefined || priceWei === null) {
-    return fail('bad-arg', 'priceWei is required - read it from the chain, never guess');
   }
 
   const { account } = getState();
   const before = await r.gemsOf(account, rarity);
-  const value = BigInt(priceWei) * BigInt(count);
 
-  const sent = await wBuyGems(rarity, count, { valueWei: value, priceWei });
+  if (before < BigInt(count)) {
+    return fail('insufficient-gems', `you hold ${before}, cannot redeem ${count}`);
+  }
+
+  // Quote first: the floor is a real rejection, not a formality.
+  const [payout, aboveFloor] = await r.redeemQuote(rarity, count);
+  if (!aboveFloor) {
+    return fail(
+      'below-floor',
+      `that redeems for ${payout} wei, below the ${r.minRedeemWei?.() ?? 'minimum'} minimum`,
+    );
+  }
+
+  const sent = await wRedeemGems(rarity, count);
   if (!sent.ok) return fail(sent.code || 'send-failed', sent.reason || 'transaction was not sent');
 
   const after = await pollUntilChanged(
     () => r.gemsOf(account, rarity),
     before,
-    (b, a) => a > b,
+    (b, a) => a < b,
   );
 
   if (!after.changed) {
-    return fail('reverted', 'contract did not apply the purchase (it reverted) - nothing credited');
+    return fail('reverted', 'contract did not apply the redemption (it reverted) - gems not spent');
   }
 
-  return { ok: true, hash: sent.hash, confirmed: true, count: after.value, spentWei: value };
+  return {
+    ok: true,
+    hash: sent.hash,
+    confirmed: true,
+    // The chain's own number, never a locally computed one.
+    payoutWei: payout,
+  };
 }
 
 /**

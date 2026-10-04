@@ -9,7 +9,7 @@
     "preview": "vite preview --port 5173",
     "smoke": "node smoke.mjs",
     "smoke:touch": "node smoke-touch.mjs",
-    "test": "node --test src/reporter.test.mjs src/chunks.test.mjs src/layout.test.mjs src/depth-order.test.mjs src/live.test.mjs src/wallet.test.mjs src/rabby.test.mjs src/onchain-gating.test.mjs src/touch.test.mjs && node src/chain.test.mjs && node --test src/economy.test.mjs src/player.test.mjs && node src/season.test.mjs && node src/commitment.test.mjs && node smoke.mjs && node smoke-touch.mjs",
+    "test": "node --test src/abi-selectors.test.mjs src/reporter.test.mjs src/chunks.test.mjs src/layout.test.mjs src/depth-order.test.mjs src/live.test.mjs src/wallet.test.mjs src/rabby.test.mjs src/onchain-gating.test.mjs src/touch.test.mjs && node src/chain.test.mjs && node --test src/economy.test.mjs src/player.test.mjs && node src/season.test.mjs && node src/commitment.test.mjs && node smoke.mjs && node smoke-touch.mjs",
     "test:season": "node src/season.test.mjs",
     "test:commitment": "node src/commitment.test.mjs",
     "test:chain": "node src/chain.test.mjs",

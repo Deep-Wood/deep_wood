@@ -131,35 +131,69 @@ export function fromQuantity(h) {
  * reaches the chain looking right, so a caller passing '2' gets the error and
  * fixes the caller.
  */
-export function checkTier(tier) {
+/**
+ * V2 tier check: 1..MAX_TIER, which is FIVE.
+ *
+ * The client must mirror `MAX_TIER` from the contract rather than assume it.
+ * V1 capped at 4 and this transcribed 4 as well; with V2 that would have made
+ * Gold -- the top of the ladder -- permanently unreachable from the UI while
+ * every test still passed, because the test used the same wrong constant.
+ * Read `MAX_TIER()` off the chain at startup and pass it in; the default here
+ * matches the contract today so a missing read is still correct.
+ */
+export const MAX_TIER_DEFAULT = 5;
+
+export function checkTier(tier, maxTier = MAX_TIER_DEFAULT) {
+  const range = `1..${maxTier}`;
   if (typeof tier !== 'number' || !Number.isInteger(tier)) {
-    throw new WalletError('tier-out-of-range', `claimTool: tier must be an integer 1..4, got ${typeof tier === 'string' ? `"${tier}"` : String(tier)}`);
+    throw new WalletError(
+      'tier-out-of-range',
+      `buyTool: tier must be an integer ${range}, got ${typeof tier === 'string' ? `"${tier}"` : String(tier)}`,
+    );
   }
-  if (tier < 1 || tier > 4) {
-    throw new WalletError('tier-out-of-range', `claimTool: tier must be 1..4, got ${tier}`);
+  if (tier < 1 || tier > maxTier) {
+    throw new WalletError('tier-out-of-range', `buyTool: tier must be ${range}, got ${tier}`);
   }
   return tier;
 }
 
 /**
- * buyGems: `if (count == 0) revert ZeroAmount();`
- *           `if (rarity > Rarity.Uncommon) revert RarityNotForSale();`
- *
- * Rarity 0 = Common, 1 = Uncommon. Rare+ is HUNT-ONLY by design (SPEC §4,
- * R1) -- an ETH path to Rare would make hunting decorative.
+ * Skill level check. The contract requires EXACTLY the next level
+ * (`_burn(repairNeeds(skill + 1))`), so a jump of more than one is a revert,
+ * not a discount.
  */
-export function checkBuy(rarity, count) {
-  if (typeof rarity !== 'number' || !Number.isInteger(rarity) || rarity < 0 || rarity > 1) {
-    throw new WalletError('rarity-not-for-sale', `buyGems: rarity must be 0 (Common) or 1 (Uncommon), got ${typeof rarity === 'string' ? `"${rarity}"` : String(rarity)}`);
+export function checkSkill(level) {
+  if (typeof level !== 'number' || !Number.isInteger(level) || level < 1 || level > 4) {
+    throw new WalletError(
+      'skill-out-of-range',
+      `upgradeSkill: level must be an integer 1..4, got ${typeof level === 'string' ? `"${level}"` : String(level)}`,
+    );
+  }
+  return level;
+}
+
+/**
+ * redeemGems: `if (count == 0) revert ZeroAmount();`
+ *
+ * Every rarity is redeemable in V2 -- there is no RarityNotForSale gate, since
+ * gems are no longer purchasable at all. They are only ever mined, so any
+ * rarity a player holds is theirs to cash out.
+ */
+export function checkRedeem(rarity, count) {
+  if (typeof rarity !== 'number' || !Number.isInteger(rarity) || rarity < 0 || rarity > 4) {
+    throw new WalletError(
+      'rarity-out-of-range',
+      `redeemGems: rarity must be an integer 0..4, got ${typeof rarity === 'string' ? `"${rarity}"` : String(rarity)}`,
+    );
   }
   let n;
   try {
     n = BigInt(count);
   } catch {
-    throw new WalletError('zero-amount', `buyGems: count must be an integer, got ${String(count)}`);
+    throw new WalletError('zero-amount', `redeemGems: count must be an integer, got ${String(count)}`);
   }
   if (n <= 0n) {
-    throw new WalletError('zero-amount', `buyGems: count must be > 0, got ${String(count)}`);
+    throw new WalletError('zero-amount', `redeemGems: count must be > 0, got ${String(count)}`);
   }
   return { rarity, count: n };
 }
@@ -173,21 +207,62 @@ export function checkBuy(rarity, count) {
 // calldata must be exactly 8 + 64*n characters.
 
 // `claimTool(uint8)` -- 8 + 64 hex chars.
-export function calldataClaimTool(tier) {
+/**
+ * `buyTool(uint8)`.
+ *
+ * PAYABLE and SEQUENTIAL: the contract requires the next tier only
+ * (`held.tier + 1`), and refunds any overpayment, so the client sends exactly
+ * `toolCost(tier)` read live from the chain rather than a transcribed price.
+ * Tier 1 is NOT free in V2 -- buying it for free would let a player reach the
+ * reward loop without ever committing ETH, which is the whole revenue basis.
+ *
+ * @param {number} tier 1..MAX_TIER (5)
+ */
+export function calldataBuyTool(tier) {
   const t = checkTier(tier);
-  return sel('claimTool(uint8)').slice(2) + encUint8(t);
+  return sel('buyTool(uint8)').slice(2) + encUint8(t);
 }
 
 /**
- * `buyGems(uint8,uint256)` -- 8 + 64 + 64 hex chars.
+ * `repairTool()` -- no arguments.
  *
- * PAYABLE: the wei value travels in the transaction envelope, not in the
- * calldata, so it is deliberately absent here. The contract checks
- * `msg.value < priceOf(rarity) * count`.
+ * Not payable and takes nothing: the contract derives the exact gem vector
+ * from the held tier via `repairNeeds`, so the client cannot ask to repair with
+ * the wrong gems or the wrong count. It reverts NotBroken if durability is
+ * above zero, so the button must be disabled unless the tool is broken.
  */
-export function calldataBuyGems(rarity, count) {
-  const { rarity: r, count: n } = checkBuy(rarity, count);
-  return sel('buyGems(uint8,uint256)').slice(2) + encUint8(r) + encUint256(n);
+export function calldataRepairTool() {
+  return sel('repairTool()').slice(2);
+}
+
+/**
+ * `upgradeSkill(uint8)` -- 4 + 32 hex chars.
+ *
+ * Not payable. Skills cost GEMS, never ETH (`_burn` spends Quartz only), so
+ * there is no value here -- a value would be silently absorbed by nothing and
+ * strand funds in the contract.
+ *
+ * @param {number} level 1..4, must be exactly skill+1: the contract rejects
+ *                        any other jump with RarityLocked
+ */
+export function calldataUpgradeSkill(level) {
+  const n = checkSkill(level);
+  return sel('upgradeSkill(uint8)').slice(2) + encUint8(n);
+}
+
+/**
+ * `redeemGems(uint8,uint256)` -- 4 + 32 + 32 hex chars.
+ *
+ * Not payable. The payout comes OUT of the contract's own ETH backing, so
+ * sending value with this call would be sending money to buy the thing you are
+ * already being paid for.
+ *
+ * @param {number} rarity 0..4
+ * @param {bigint|number} count > 0
+ */
+export function calldataRedeemGems(rarity, count) {
+  const { rarity: r, count: n } = checkRedeem(rarity, count);
+  return sel('redeemGems(uint8,uint256)').slice(2) + encUint8(r) + encUint256(n);
 }
 
 /**
@@ -198,9 +273,7 @@ export function calldataBuyGems(rarity, count) {
  * (bytes length) = 292 bytes = 584 hex chars plus the selector.
  *
  * The trailing `bytes signature` is RETAINED IN THE ABI BUT IGNORED by the
- * contract: it was never verified even under the keeper, and open settlement
- * has no keeper. We still send `0x` so the selector stays `0x2ded79da` and
- * existing tooling keeps working -- changing it would be a different function.
+ * contract. We still send `0x` so the selector stays `0x2ded79da`.
  *
  * The counts MUST be the chain's own `previewHunt` output. The contract
  * recomputes the result from (season seed, season, player, hunt index) and
@@ -209,7 +282,7 @@ export function calldataBuyGems(rarity, count) {
  * address instead of the bare hex made every client find unrepresentable.
  *
  * @param {string} player      the settling player's address (must be you)
- * @param {number} tier        1..4
+ * @param {number} tier        1..5
  * @param {(bigint|number)[]} counts  five rarity counts, from previewHunt
  * @param {bigint|number|string} bestSingleWei  from previewHunt
  */
@@ -227,11 +300,6 @@ export function calldataSettleHunt(player, tier, counts, bestSingleWei) {
   head += encUint256(bestSingleWei);
   // Offset to the bytes payload. The head is 9 slots (player, tier, 5 counts,
   // best, this offset), so the tail -- the bytes length word -- starts at 0x120.
-  //
-  // Zero here is NOT an acceptable encoding of "empty bytes": the contract
-  // reads the offset as a position, not as a presence flag, and reverts with a
-  // bare `data: "0x"` -- no error name, which is why it looked like an unrelated
-  // failure. Caught only by sending the client's own bytes to a real contract.
   head += encUint(9n * 32n, 256, 'uint256');
   head += encUint(0n, 256, 'uint256'); // its length -- empty, and ignored
   return head;
@@ -551,15 +619,73 @@ async function send(data, { valueWei } = {}) {
 }
 
 /**
- * Claim a tool tier. Tier 1 is free; 2..4 cost gems and must be claimed in
- * order (the chain enforces both -- TierLocked / ToolAlreadyOwned).
+ * Buy the ONE tool, or upgrade it to the next tier. Costs ETH.
  *
+ * @param {number} tier 1..5
+ * @param {object} [o]
+ * @param {bigint|number|string} [o.valueWei] wei to send. Should be the
+ *        chain's own `toolCost(tier)`; the contract refunds any excess, but
+ *        sending the exact figure avoids a pointless extra transfer.
  * @returns {Promise<{ok:boolean, hash?:string, code?:string, reason?:string}>}
  */
-export async function claimTool(tier) {
+export async function buyTool(tier, { valueWei } = {}) {
   let data;
   try {
-    data = calldataClaimTool(tier);
+    data = calldataBuyTool(tier);
+  } catch (e) {
+    return { ok: false, code: e.code || 'bad-arg', reason: e.message };
+  }
+  // A missing value must be caught HERE, not on chain. The contract reverts
+  // Underpaid(cost, msg.value), so sending zero would open the wallet, get the
+  // player to sign, and only then tell them what was wrong. Same discipline the
+  // old buyGems path used, and the same reason: a "not-configured" complaint
+  // about an unaffordable purchase is true and useless.
+  if (valueWei === undefined || valueWei === null) {
+    return {
+      ok: false,
+      code: 'bad-arg',
+      reason: 'buyTool needs { valueWei } -- read toolCost(tier) from the chain, it is payable',
+    };
+  }
+  let value;
+  try {
+    value = BigInt(valueWei);
+  } catch {
+    return { ok: false, code: 'bad-arg', reason: `valueWei is not an integer: ${String(valueWei)}` };
+  }
+  if (value < 0n) {
+    return { ok: false, code: 'bad-arg', reason: `valueWei must be >= 0, got ${value}` };
+  }
+  return send(data, { valueWei: value });
+}
+
+/** Repair the held tool by burning gems. No arguments, no value. */
+export async function repairTool() {
+  let data;
+  try {
+    data = calldataRepairTool();
+  } catch (e) {
+    return { ok: false, code: e.code || 'bad-arg', reason: e.message };
+  }
+  return send(data);
+}
+
+/** Raise the skill level by exactly one, paying gems. */
+export async function upgradeSkill(level) {
+  let data;
+  try {
+    data = calldataUpgradeSkill(level);
+  } catch (e) {
+    return { ok: false, code: e.code || 'bad-arg', reason: e.message };
+  }
+  return send(data);
+}
+
+/** Cash gems out for ETH at the contract's quoted payout. */
+export async function redeemGems(rarity, count) {
+  let data;
+  try {
+    data = calldataRedeemGems(rarity, count);
   } catch (e) {
     return { ok: false, code: e.code || 'bad-arg', reason: e.message };
   }
@@ -586,59 +712,4 @@ export async function settleHunt({ player, tier, counts, bestSingleWei }) {
     return { ok: false, code: e.code || 'bad-arg', reason: e.message };
   }
   return send(data);
-}
-
-/**
- * Buy gems. Common (0) and Uncommon (1) only; Rare+ is hunt-only.
- *
- * @param {number} rarity 0 or 1
- * @param {number|bigint} count > 0
- * @param {object} [o]
- * @param {bigint|number|string} [o.valueWei] wei to send. Required by the
- *        contract: `if (msg.value < cost) revert ZeroAmount();`
- * @param {bigint|number|string} [o.priceWei] on-chain priceOf(rarity), for a
- *        pre-flight underpayment check. Omit it and the chain decides.
- * @returns {Promise<{ok:boolean, hash?:string, code?:string, reason?:string}>}
- */
-export async function buyGems(rarity, count, { valueWei, priceWei } = {}) {
-  let data;
-  try {
-    data = calldataBuyGems(rarity, count);
-  } catch (e) {
-    return { ok: false, code: e.code || 'bad-arg', reason: e.message };
-  }
-  if (valueWei === undefined || valueWei === null) {
-    return { ok: false, code: 'bad-arg', reason: 'buyGems needs { valueWei } -- buyGems is payable' };
-  }
-  // Value validation happens BEFORE the wallet is touched, so an underpayment
-  // names itself instead of reporting whatever preflight happens to fail
-  // first -- a "not-configured" complaint about an unaffordable purchase is
-  // true and useless.
-  let value;
-  try {
-    value = BigInt(valueWei);
-  } catch {
-    return { ok: false, code: 'bad-arg', reason: `valueWei is not an integer: ${String(valueWei)}` };
-  }
-  if (value < 0n) {
-    return { ok: false, code: 'bad-arg', reason: `valueWei must be >= 0, got ${value}` };
-  }
-  if (priceWei !== undefined && priceWei !== null) {
-    let cost;
-    try {
-      cost = BigInt(priceWei) * BigInt(count);
-    } catch {
-      return { ok: false, code: 'bad-arg', reason: `priceWei is not an integer: ${String(priceWei)}` };
-    }
-    if (value < cost) {
-      // Caught before the wallet opens, so the player is not asked to sign a
-      // transaction the chain will revert.
-      return {
-        ok: false,
-        code: 'zero-amount',
-        reason: `value ${value} wei is below the ${cost} wei cost of ${count} gem(s)`,
-      };
-    }
-  }
-  return send(data, { valueWei: value });
 }

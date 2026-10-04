@@ -523,6 +523,26 @@
     // Provider events (accountsChanged / chainChanged / disconnect) keep the
     // button honest without a reload.
     onWallet(render);
+
+    // A connected wallet must show its REAL balance, because a purchase is
+    // sized against it. The scene starts with a simulated balance for the
+    // offline preview, and that fiction must never size a real transaction.
+    // Refreshed here and on every provider event, so an account switch or a
+    // chain change cannot leave a stale figure on screen.
+    import('/src/onchain.js').then(({ walletBalanceWeiOnchain, onchainActive }) => {
+      const sync = async () => {
+        if (!onchainActive()) return;
+        const b = await walletBalanceWeiOnchain();
+        window.__scene?.setChainBalance?.(b);
+        render();
+      };
+      window.__syncBalance = sync;
+      sync();
+      onWallet(sync);
+    }).catch(() => {
+      // No chain module in this build: the offline preview keeps working.
+    });
+
     render();
   </script>
 </body>

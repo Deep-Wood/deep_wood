@@ -22,6 +22,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { TOOL_PRICE } from './economy.js';
 
 // Same reason live.test.mjs does this: Vite loads .env.* into import.meta.env
 // at BUILD time, but plain `node` does not, so config.gameAddress would be
@@ -48,16 +49,17 @@ for (const f of ['.env.local', '.env.production', '.env']) {
 // live.test.mjs avoids this with the same `await import()` shape.
 const {
   WalletError, GAME_CHAIN_ID, sel, encUint8, encUint256, encAddress,
-  toQuantity, fromQuantity, checkTier, checkBuy,
-  calldataClaimTool, calldataBuyGems, calldataSettleHunt, decodeHeader,
-  connect, claimTool, buyGems, getState, getAccount, getChainId,
+  toQuantity, fromQuantity, checkTier, checkSkill, checkRedeem,
+  calldataBuyTool, calldataRepairTool, calldataUpgradeSkill, calldataRedeemGems, calldataSettleHunt, decodeHeader,
+  connect, buyTool, repairTool, upgradeSkill, redeemGems,
+  getState, getAccount, getChainId,
   resetWallet, installListeners,
 } = await import('./wallet.js');
 const { GEM_PRICE } = await import('./season.js');
 const { config } = await import('./config.js');
 
 const require = createRequire(import.meta.url);
-const ART = '/home/administrator/gem-hunter/out/DeepWood.sol/DeepWood.json';
+const ART = '/home/administrator/gem-hunter/out/DeepWoodV2.sol/DeepWoodV2.json';
 
 const skip = (why) => console.log(`  skip  ${why}`);
 
@@ -97,98 +99,147 @@ test('selectors match the compiled artifact', async (t) => {
   const { keccak256 } = require('js-sha3');
   const abi = JSON.parse(fs.readFileSync(ART, 'utf8')).abi;
 
+  // Returns null for a name the artifact does not have, rather than asserting.
+  // Absence is a real answer here: proving a V1 function is GONE is part of the
+  // check, so a helper that throws on missing names cannot express it.
   const want = (name) => {
     const f = abi.find((e) => e.type === 'function' && e.name === name);
-    assert.ok(f, `artifact has no ${name}`);
+    if (!f) return null;
     const sig = `${name}(${f.inputs.map((i) => i.type).join(',')})`;
-    return { sig, selector: '0x' + keccak256(sig).slice(0, 8) };
+    return { sig, selector: '0x' + keccak256(sig).slice(0, 8), fn: f };
+  };
+  // ...and a strict variant for the positive cases, so a genuinely missing V2
+  // function still fails loudly instead of quietly passing as null.
+  const need = (name) => {
+    const w = want(name);
+    assert.ok(w, `artifact has no ${name} -- the V2 ABI changed`);
+    return w;
   };
 
-  await t.test('claimTool(uint8)', () => {
-    const { sig, selector } = want('claimTool');
-    assert.equal(sig, 'claimTool(uint8)');
-    assert.equal(selector, '0xcbc15b3a', 'derived selector');
-    assert.equal(sel('claimTool(uint8)'), selector, 'table entry wallet.js reads');
-    assert.equal(decodeHeader(calldataClaimTool(1)), selector, 'calldata header');
+  await t.test('buyTool(uint8)', () => {
+    const { sig, selector } = need('buyTool');
+    assert.equal(sig, 'buyTool(uint8)');
+    assert.ok(selector, 'artifact must expose buyTool');
+    assert.equal(sel('buyTool(uint8)'), selector, 'table entry wallet.js reads');
   });
 
-  await t.test('buyGems(uint8,uint256)', () => {
-    const { sig, selector } = want('buyGems');
-    assert.equal(sig, 'buyGems(uint8,uint256)');
-    assert.equal(selector, '0xaf6520db', 'derived selector');
-    assert.equal(sel('buyGems(uint8,uint256)'), selector, 'table entry wallet.js reads');
-    assert.equal(decodeHeader(calldataBuyGems(0, 1)), selector, 'calldata header');
+  await t.test('repairTool()', () => {
+    const { sig, selector } = need('repairTool');
+    assert.equal(sig, 'repairTool()');
+    assert.ok(selector, 'artifact must expose repairTool');
+    assert.equal(sel('repairTool()'), selector, 'table entry wallet.js reads');
   });
 
-  await t.test('the artifact signatures are the ones we encode for', async () => {
-    const abiSigs = abi
-      .filter((e) => e.type === 'function')
-      .map((e) => `${e.name}(${e.inputs.map((i) => i.type).join(',')})`);
-    for (const s of ['claimTool(uint8)', 'buyGems(uint8,uint256)']) {
-      assert.ok(abiSigs.includes(s), `${s} must exist in the ABI`);
+  await t.test('upgradeSkill(uint8)', () => {
+    const { sig, selector } = need('upgradeSkill');
+    assert.equal(sig, 'upgradeSkill(uint8)');
+    assert.equal(sel('upgradeSkill(uint8)'), selector);
+  });
+
+  await t.test('redeemGems(uint8,uint256)', () => {
+    const { sig, selector } = need('redeemGems');
+    assert.equal(sig, 'redeemGems(uint8,uint256)');
+    assert.equal(sel('redeemGems(uint8,uint256)'), selector);
+  });
+
+  // V1's claimTool and buyGems are GONE from the contract. If they ever
+  // resolve again, the client is aimed at the old ABI and every send would
+  // hit a function the deployed contract does not have.
+  await t.test('the V1 writes are gone', () => {
+    for (const gone of ['claimTool', 'buyGems']) {
+      assert.equal(want(gone), null, `${gone} is not in the V2 artifact`);
+      assert.throws(() => sel(`${gone}(uint8)`), /no selector for/);
+      assert.throws(() => sel(`${gone}(uint8,uint256)`), /no selector for/);
     }
   });
 
-  await t.test('buyGems is payable and claimTool is not', () => {
-    const m = (n) => abi.find((e) => e.type === 'function' && e.name === n);
-    assert.equal(m('buyGems').stateMutability, 'payable');
-    assert.equal(m('claimTool').stateMutability, 'nonpayable');
+  await t.test('buyTool is payable, the rest are not', () => {
+    // Only buyTool sends value. Sending ETH with repair/upgrade/redeem would
+    // strand funds: repair and upgrade are paid in GEMS, and redeem PAYS OUT.
+    assert.equal(need('buyTool').fn.stateMutability, 'payable');
+    for (const f of ['repairTool', 'upgradeSkill', 'redeemGems', 'settleHunt']) {
+      assert.equal(need(f).fn.stateMutability, 'nonpayable', `${f} must not be payable`);
+    }
   });
 });
+
 
 // ---------------------------------------------------------------------------
 // Encoding: decode the calldata BACK and check the words.
 // ---------------------------------------------------------------------------
-test('calldata encodes claimTool correctly', () => {
+test('calldata encodes buyTool correctly', () => {
   // A hand-typed selector is how this file nearly shipped wrong, so the
   // assertion is on the DECODED bytes, not on a copied constant.
-  for (const tier of [1, 2, 3, 4]) {
-    const data = calldataClaimTool(tier);
-    // 4-byte selector + one 32-byte word == 8 + 64 hex chars.
-    assert.equal(data.length, 8 + 64, `claimTool(${tier}) is 4+32 bytes`);
+  //
+  // V2 has FIVE tiers, not four. A client still capping at 4 would make Gold
+  // -- the top of the ladder -- unreachable from the UI.
+  for (const tier of [1, 2, 3, 4, 5]) {
+    const data = calldataBuyTool(tier);
+    assert.equal(data.length, 8 + 64, `buyTool(${tier}) is 4+32 bytes`);
     assert.match(data, /^[0-9a-f]+$/, 'bare hex, exactly one 0x at most');
     assert.ok(!data.startsWith('0x'), 'calldata must not carry a 0x prefix');
     const head = '0x' + data.slice(0, 8);
     const word = data.slice(8);
-    assert.equal(head, sel('claimTool(uint8)'));
+    assert.equal(head, sel('buyTool(uint8)'));
     assert.equal(head, decodeHeader(data));
     assert.match(word, /^[0-9a-f]{64}$/);
     // Left-padded: a uint8 argument occupies the LAST byte.
     assert.equal(BigInt('0x' + word), BigInt(tier), `tier ${tier}`);
     assert.equal(word.slice(0, 62), '0'.repeat(62), 'padding must be zero, not absent');
   }
-  assert.equal(BigInt('0x' + calldataClaimTool(4).slice(8)), 4n);
+  assert.equal(BigInt('0x' + calldataBuyTool(5).slice(8)), 5n);
 });
 
-test('calldata encodes buyGems correctly', () => {
+test('calldata encodes repairTool correctly', () => {
+  // No arguments at all. The contract derives the gem vector from the held
+  // tier, so the client cannot pass the wrong gems or the wrong count.
+  const data = calldataRepairTool();
+  assert.equal(data.length, 8, 'repairTool() is a bare 4-byte selector');
+  assert.equal('0x' + data, sel('repairTool()'));
+  assert.equal(decodeHeader(data), sel('repairTool()'));
+});
+
+test('calldata encodes upgradeSkill and redeemGems correctly', () => {
+  // upgradeSkill takes the TARGET level and must be skill+1 exactly.
+  const s = calldataUpgradeSkill(2);
+  assert.equal(s.length, 8 + 64);
+  assert.equal('0x' + s.slice(0, 8), sel('upgradeSkill(uint8)'));
+  assert.equal(BigInt('0x' + s.slice(8)), 2n);
+
   const cases = [
     [0, 1n],
     [1, 1n],
     [0, 10n],
-    [1, 4_294_967_296n],               // > 2^32
-    [0, (1n << 256n) - 1n],            // max uint256
+    [4, 4_294_967_296n],               // > 2^32
+    [4, (1n << 256n) - 1n],            // max uint256
   ];
   for (const [rarity, count] of cases) {
-    const data = calldataBuyGems(rarity, count);
-    assert.equal(data.length, 8 + 64 + 64, `buyGems(${rarity},${count}) is 4+32+32 bytes`);
-    assert.equal('0x' + data.slice(0, 8), sel('buyGems(uint8,uint256)'));
-    assert.equal(decodeHeader(data), sel('buyGems(uint8,uint256)'));
+    const data = calldataRedeemGems(rarity, count);
+    assert.equal(data.length, 8 + 64 + 64, `redeemGems(${rarity},${count}) is 4+32+32 bytes`);
+    assert.equal('0x' + data.slice(0, 8), sel('redeemGems(uint8,uint256)'));
+    assert.equal(decodeHeader(data), sel('redeemGems(uint8,uint256)'));
     const rWord = data.slice(8, 8 + 64);
     const cWord = data.slice(8 + 64);
     assert.equal(BigInt('0x' + rWord), BigInt(rarity), `rarity ${rarity}`);
     assert.equal(BigInt('0x' + cWord), count, `count ${count}`);
     assert.match(cWord, /^[0-9a-f]{64}$/);
   }
-  // Distinct selectors: if these two collided, one function's calldata would
-  // be the other's and the test above would pass for the wrong reason.
-  assert.notEqual(sel('claimTool(uint8)'), sel('buyGems(uint8,uint256)'));
-  assert.notEqual(calldataClaimTool(1).slice(10), calldataBuyGems(1, 1).slice(10));
+  // Distinct selectors: if these collided, one function's calldata would be
+  // the other's and the test above would pass for the wrong reason.
+  assert.notEqual(sel('buyTool(uint8)'), sel('upgradeSkill(uint8)'));
+  // Compare the ARGUMENT word, not the selector prefix: both are `...01` as a
+  // tier, so slicing past the selector would compare two equal values and the
+  // assertion would be vacuous.
+  assert.notEqual(calldataBuyTool(1), calldataUpgradeSkill(1), 'different selectors, different calldata');
 });
 
 test('payable value is NOT in the calldata', () => {
-  // value travels in the tx envelope. A buyGems call whose "value" appeared
-  // as a third word would be 4+32+32+32 bytes and would not decode.
-  assert.equal(calldataBuyGems(0, 1).length, 8 + 64 + 64);
+  // value travels in the tx envelope. A buyTool call whose "value" appeared as
+  // a second word would be 4+32+32 bytes and would not decode.
+  assert.equal(calldataBuyTool(1).length, 8 + 64);
+  // And the non-payable writes must carry no value word at all.
+  assert.equal(calldataRepairTool().length, 8);
+  assert.equal(calldataUpgradeSkill(1).length, 8 + 64);
 });
 
 test('encoders', () => {
@@ -204,47 +255,63 @@ test('encoders', () => {
   assert.throws(() => encUint8(-1), /uint8 range/);
   assert.throws(() => encUint8('abc'), WalletError);
   assert.throws(() => encAddress('0x1234'), /not an address/);
-  assert.throws(() => sel('claimTool(uint256)'), /no selector/);
+  assert.throws(() => sel('buyTool(uint256)'), /no selector/);
 });
 
 // ---------------------------------------------------------------------------
 // Argument validation: the client must not offer what the chain will revert.
 // ---------------------------------------------------------------------------
-test('claimTool tier validation mirrors ToolOutOfRange', () => {
-  for (const t of [1, 2, 3, 4]) assert.equal(checkTier(t), t);
-  // claimTool(uint8): `if (tier == 0 || tier > 4) revert ToolOutOfRange();`
-  for (const t of [0, 5, -1, 255, 1.5, null, undefined, NaN]) {
-    assert.throws(() => calldataClaimTool(t), /tier must be/, `tier ${String(t)}`);
+test('buyTool tier validation mirrors ToolOutOfRange', () => {
+  // FIVE tiers in V2. Asserting 1..4 here would have hidden a real bug: the
+  // UI could never offer Gold, and the test would agree with the bug.
+  for (const t of [1, 2, 3, 4, 5]) assert.equal(checkTier(t), t);
+  for (const t of [0, 6, -1, 255, 1.5, null, undefined, NaN]) {
+    assert.throws(() => calldataBuyTool(t), /tier must be/, `tier ${String(t)}`);
   }
   // A numeric STRING is rejected rather than coerced: Number('2') === 2, so
   // accepting it would let a mistyped call site reach the chain looking right.
-  assert.throws(() => calldataClaimTool('2'), /tier must be an integer/, "string '2'");
-  assert.throws(() => calldataClaimTool(2n), /tier must be an integer/, 'bigint 2n');
-  // The error names the rule, so a UI can show the reason.
-  assert.throws(() => calldataClaimTool(5), /1\.\.4/);
+  assert.throws(() => calldataBuyTool('2'), /tier must be an integer/, "string '2'");
+  assert.throws(() => calldataBuyTool(2n), /tier must be an integer/, 'bigint 2n');
+  // The error names the range, so a UI can show the reason.
+  assert.throws(() => calldataBuyTool(6), /1\.\.5/);
+
+  // The bound is a PARAMETER, so the client can follow MAX_TIER() off the
+  // chain instead of trusting a transcribed constant.
+  assert.equal(checkTier(5, 5), 5);
+  assert.throws(() => checkTier(5, 4), /1\.\.4/, 'if the contract ever drops to 4');
 });
 
-test('buyGems validation mirrors ZeroAmount and RarityNotForSale', () => {
-  assert.deepEqual(checkBuy(0, 3), { rarity: 0, count: 3n });
-  assert.deepEqual(checkBuy(1, 1), { rarity: 1, count: 1n });
-  // `if (rarity > Rarity.Uncommon) revert RarityNotForSale();`
-  for (const r of [2, 3, 4, -1, 1.5, '1', null]) {
-    assert.throws(() => calldataBuyGems(r, 1), /rarity must be 0/, `rarity ${r}`);
+test('upgradeSkill level validation', () => {
+  for (const l of [1, 2, 3, 4]) assert.equal(checkSkill(l), l);
+  for (const l of [0, 5, -1, 1.5, '1', null, undefined]) {
+    assert.throws(() => calldataUpgradeSkill(l), /level must be/, `level ${String(l)}`);
   }
-  // `if (count == 0) revert ZeroAmount();`
+});
+
+test('redeemGems validation mirrors ZeroAmount, with every rarity sellable', () => {
+  // ALL five rarities are redeemable. V1 had a RarityNotForSale gate because
+  // gems could be bought; in V2 they can only be mined, so any rarity held is
+  // the player's to cash out.
+  assert.deepEqual(checkRedeem(0, 3), { rarity: 0, count: 3n });
+  assert.deepEqual(checkRedeem(4, 1), { rarity: 4, count: 1n });
+  for (const r of [2, 3, 4]) {
+    assert.equal(BigInt('0x' + calldataRedeemGems(r, 1).slice(8, 72)), BigInt(r), `rarity ${r} allowed`);
+  }
+  for (const r of [5, -1, 1.5, '1', null]) {
+    assert.throws(() => calldataRedeemGems(r, 1), /rarity must be an integer/, `rarity ${r}`);
+  }
   for (const c of [0, 0n, -1]) {
-    assert.throws(() => calldataBuyGems(0, c), /count must be > 0/, `count ${c}`);
+    assert.throws(() => calldataRedeemGems(0, c), /count must be > 0/, `count ${c}`);
   }
-  // uint256 bound on count.
-  assert.throws(() => calldataBuyGems(0, 1n << 256n), /uint256 range/);
+  assert.throws(() => calldataRedeemGems(0, 1n << 256n), /uint256 range/);
 });
 
 test('a rejected argument never becomes calldata', () => {
-  const before = calldataBuyGems(0, 1);
-  assert.throws(() => calldataBuyGems(9, 1), WalletError);
-  assert.throws(() => calldataClaimTool(0), WalletError);
+  const before = calldataRedeemGems(0, 1);
+  assert.throws(() => calldataRedeemGems(9, 1), WalletError);
+  assert.throws(() => calldataBuyTool(0), WalletError);
   // ...and the module is not left half-initialised by a throw.
-  assert.equal(calldataBuyGems(0, 1), before);
+  assert.equal(calldataRedeemGems(0, 1), before);
 });
 
 // ---------------------------------------------------------------------------
@@ -269,8 +336,10 @@ test('no provider installed', async (t) => {
 
   await t.test('writes refuse with a typed result, never an exception', async () => {
     for (const r of [
-      await claimTool(1),
-      await buyGems(0, 1, { valueWei: 50000000000000n }),
+      await buyTool(1, { valueWei: 5000000000000n }),
+      await repairTool(),
+      await upgradeSkill(1),
+      await redeemGems(0, 1),
     ]) {
       assert.equal(r.ok, false);
       assert.equal(r.code, 'no-provider');
@@ -332,7 +401,7 @@ test('connect on the wrong chain is NOT connected', async () => {
   assert.equal(getState().rightChain, false);
   assert.equal(getAccount(), '0x1111111111111111111111111111111111111111', 'account is still known');
   // ...and writes are refused on exactly the same rule.
-  const w = await claimTool(1);
+  const w = await buyTool(1, { valueWei: 5000000000000n });
   assert.equal(w.ok, false);
   assert.equal(w.code, 'wrong-chain');
 });
@@ -396,80 +465,61 @@ test('a throwing listener does not break the others', async () => {
 // ---------------------------------------------------------------------------
 // Payable write path, through an injected fake.
 // ---------------------------------------------------------------------------
-test('buyGems needs a value; the contract would revert without one', async () => {
+test('buyTool with no value is refused before the wallet opens', async () => {
+  // V2: the ONLY payable write is buyTool. Every other write sends no value
+  // at all, because repair and upgrade are paid in GEMS and redeemGems PAYS
+  // OUT -- sending ETH with those would strand funds in the contract.
   const p = fakeProvider();
   await connect({ provider: p });
-  const r = await buyGems(0, 1);
+  const r = await buyTool(1);
   assert.equal(r.ok, false);
   assert.match(r.code, /bad-arg/);
-  assert.match(r.reason, /payable/);
 });
 
-test('buyGems underpayment is refused before the wallet opens', async () => {
-  const p = fakeProvider();
-  await connect({ provider: p });
-  // Take the price from the client mirror, not a hand-typed literal: season.js
-  // GEM_PRICE is the same number the contract's priceOf() returns, and
-  // chain.test.mjs pins the two together. Restating the digit here would be a
-  // second copy to drift.
-  const price = GEM_PRICE[0];
-  assert.equal(price, 50_000_000_000_000n, 'mirror price for rarity 0');
-
-  const under = await buyGems(0, 1, { valueWei: price - 1n, priceWei: price });
-  assert.equal(under.ok, false);
-  assert.equal(under.code, 'zero-amount');
-  assert.match(under.reason, /below the/);
-
-  // Underpaying a BATCH must scale, not compare against a single gem.
-  const batchUnder = await buyGems(0, 3, { valueWei: price * 3n - 1n, priceWei: price });
-  assert.equal(batchUnder.ok, false, '3 gems cost 3x, so 3x-1 is short');
-  assert.equal(batchUnder.code, 'zero-amount');
-
-  // Surplus is ALLOWED: the contract only requires msg.value >= cost and the
-  // surplus stays as backing, so over-paying must never be refused client-side.
-  const over = await buyGems(0, 1, { valueWei: price * 2n, priceWei: price });
-  if (!over.ok) {
-    assert.equal(over.code, 'not-configured',
-      'surplus was only ever blocked by the missing address, never by the value: ' + JSON.stringify(over));
-  }
-});
-
-test('without priceWei the client defers to the chain, it does not guess', async () => {
-  // The client mirror can be stale, so a missing price must not become a
-  // fabricated one. buyGems only preflights what it was told.
-  const p = fakeProvider();
-  await connect({ provider: p });
-  const r = await buyGems(0, 1, { valueWei: 0n });
-  if (!config.gameAddress) {
-    assert.equal(r.code, 'not-configured', 'no value error invented without a price');
-  } else {
-    assert.equal(r.ok, true, 'the chain decides, not the client: ' + JSON.stringify(r));
-  }
-});
-
-test('the exact-cost buyGems sends a well-formed transaction', async () => {
+test('the exact-cost buyTool sends a well-formed transaction', async () => {
   const p = fakeProvider();
   await connect({ provider: p });
   if (!config.gameAddress) return skip('GAME_ADDRESS not set - no contract to send to');
-  const price = 50000000000000n;
-  const r = await buyGems(0, 1, { valueWei: price, priceWei: price });
+  // Wood costs 0.005 ETH. Read from the client mirror rather than restating the
+  // digit, so this cannot drift from the contract the way a literal would.
+  const price = TOOL_PRICE[1];
+  assert.equal(price, 5_000_000_000_000_000n, 'Wood costs 0.005 ETH, mirroring toolCost(1)');
+
+  const r = await buyTool(1, { valueWei: price });
   assert.equal(r.ok, true, JSON.stringify(r));
   assert.equal(r.hash, '0xdeadbeef');
   assert.equal(r.tx.value, toQuantity(price), 'value must be a hex quantity');
   assert.equal(r.tx.from, '0x1111111111111111111111111111111111111111');
   assert.equal(r.tx.to, config.gameAddress);
   // Exactly ONE 0x -- the double-prefix bug this suite was written to catch.
-  assert.equal(r.tx.data, '0x' + calldataBuyGems(0, 1));
+  assert.equal(r.tx.data, '0x' + calldataBuyTool(1));
   assert.ok(!/^0x0x/.test(r.tx.data), 'data must not be double-prefixed');
-  assert.match(r.tx.data, /^0x[0-9a-f]{136}$/, 'selector + 2 words');
+  assert.match(r.tx.data, /^0x[0-9a-f]{72}$/, 'selector + 1 word');
+});
+
+test('the non-payable writes send NO value', async () => {
+  // A value on any of these is a bug that only shows up as stranded ETH. The
+  // contract would not revert -- it would silently accept the money.
+  const p = fakeProvider();
+  await connect({ provider: p });
+  if (!config.gameAddress) return skip('GAME_ADDRESS not set - no contract to send to');
+  for (const [label, call, expect] of [
+    ['repairTool', () => repairTool(), 8],
+    ['upgradeSkill', () => upgradeSkill(1), 72],
+    ['redeemGems', () => redeemGems(0, 1), 136],
+  ]) {
+    const r = await call();
+    assert.equal(r.ok, true, `${label}: ` + JSON.stringify(r));
+    assert.equal(r.tx.value, undefined, `${label} must not attach a value`);
+    assert.match(r.tx.data, new RegExp(`^0x[0-9a-f]{${expect}}$`), `${label} calldata length`);
+  }
 });
 
 test('a write with no configured address refuses rather than sending', async () => {
   const p = fakeProvider();
   await connect({ provider: p });
   if (config.gameAddress) return skip('a game address IS configured here');
-  const r = await claimTool(1);
-  assert.equal(r.ok, false);
+  const r = await buyTool(1, { valueWei: 5_000_000_000_000_000n });
   assert.equal(r.ok, false);
   assert.equal(r.code, 'not-configured');
 });
@@ -477,7 +527,7 @@ test('a write with no configured address refuses rather than sending', async () 
 test('a bad argument beats a missing wallet', async () => {
   // Validation happens first, so the message names the real problem rather
   // than blaming the wallet for a tier that could never be sent.
-  const r = await claimTool(9);
+  const r = await buyTool(9);
   assert.equal(r.ok, false);
   assert.equal(r.code, 'tier-out-of-range');
 });
@@ -487,7 +537,7 @@ test('a rejected signature is reported, not thrown', async () => {
   const p = fakeProvider({ fail: { eth_sendTransaction: err } });
   await connect({ provider: p });
   if (!config.gameAddress) return skip('no contract address to send to in this checkout');
-  const r = await claimTool(1);
+  const r = await buyTool(1, { valueWei: 5_000_000_000_000_000n });
   assert.equal(r.ok, false);
   assert.equal(r.code, 'rejected');
 });

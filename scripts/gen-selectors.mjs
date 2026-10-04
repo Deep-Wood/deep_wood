@@ -18,7 +18,10 @@ import sha3 from 'js-sha3';
 const { keccak256 } = sha3;
 
 const require = createRequire(import.meta.url);
-const ART = '/home/administrator/gem-hunter/out/DeepWood.sol/DeepWood.json';
+// DeepWoodV2, not DeepWood. Pointing this at the V1 artifact is how the client
+// ended up with a selector table full of functions the current contract does
+// not have -- and a wrong selector does not throw, it silently reads empty.
+const ART = '/home/administrator/gem-hunter/out/DeepWoodV2.sol/DeepWoodV2.json';
 const TARGET = new URL('../src/chain.js', import.meta.url).pathname;
 
 if (!existsSync(ART)) {

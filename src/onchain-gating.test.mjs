@@ -61,13 +61,14 @@ test('onchainActive() is true once connected to the right chain', async () => {
   assert.equal(onchain.mode(), 'onchain');
 });
 
-test('a claim that reverts grants NOTHING and reports reverted', async () => {
+test('a purchase that reverts grants NOTHING and reports reverted', async () => {
   const oc = await boot();
-  // The contract already holds one tool and this claim does not apply, so the
-  // count never moves — the exact shape of a reverted ToolAlreadyOwned.
-  oc.__setReader({ toolCount: async () => 1, gemsOf: async () => 0n });
+  // V2 holds exactly ONE tool, so the confirmation signal is `toolOf`'s TIER,
+  // not a growing count. It never moves here -- the exact shape of a reverted
+  // TierLocked or Underpaid.
+  oc.__setReader({ toolOf: async () => ({ tier: 1, durability: 20n, broken: false }) });
 
-  const r = await oc.claimToolOnchain(1);
+  const r = await oc.buyToolOnchain(2, 52_000_000_000_000_000n);
 
   assert.equal(r.ok, false, 'a broadcast the contract ignored is NOT a grant');
   assert.equal(r.code, 'reverted');
@@ -75,90 +76,194 @@ test('a claim that reverts grants NOTHING and reports reverted', async () => {
   assert.match(r.reason, /nothing granted/i);
 });
 
-test('a claim the contract applies is confirmed by the count moving', async () => {
+test('a purchase the contract applies is confirmed by the tier moving', async () => {
   const oc = await boot();
   let reads = 0;
   oc.__setReader({
-    // First poll still 1, then 2: the claim applied.
-    toolCount: async () => { reads++; return reads < 2 ? 1 : 2; },
-    gemsOf: async () => 0n,
+    // First poll still tier 1, then tier 2: the purchase applied.
+    toolOf: async () => { reads++; return reads < 2
+      ? { tier: 1, durability: 20n, broken: false }
+      : { tier: 2, durability: 25n, broken: false }; },
   });
 
-  const r = await oc.claimToolOnchain(2);
+  const r = await oc.buyToolOnchain(2, 52_000_000_000_000_000n);
 
   assert.equal(r.ok, true, 'a real state change is a success');
   assert.equal(r.confirmed, true);
-  assert.equal(Number(r.count), 2);
+  assert.equal(r.tier, 2);
   assert.ok(reads >= 2, 'it must poll the chain rather than trust the send');
+});
+
+test('buying the wrong tier is reported, not counted as success', async () => {
+  const oc = await boot();
+  // The tier MOVES (1 -> 2) so the poll predicate is satisfied and the test
+  // does not sit for the full poll timeout, but it lands on 2 rather than the 3
+  // that was paid for. Reporting ok here would be a lie: the player paid for
+  // tier 3.
+  let reads = 0;
+  oc.__setReader({
+    toolOf: async () => ({ tier: reads++ < 1 ? 1 : 2, durability: 25n, broken: false }),
+  });
+
+  const r = await oc.buyToolOnchain(3, 184_000_000_000_000_000n);
+  assert.equal(r.ok, false);
+  assert.equal(r.code, 'wrong-tier');
 });
 
 test('a rejected signature fails closed before any grant', async () => {
   const oc = await boot({ reject: true });
-  oc.__setReader({ toolCount: async () => 1, gemsOf: async () => 0n });
+  oc.__setReader({ toolOf: async () => ({ tier: 1, durability: 20n, broken: false }) });
 
-  const r = await oc.claimToolOnchain(1);
+  const r = await oc.buyToolOnchain(1, 5_000_000_000_000_000n);
   assert.equal(r.ok, false);
   assert.equal(r.code, 'rejected');
 });
 
-test('a reverted purchase credits nothing', async () => {
+test('a purchase with no price is refused rather than guessed', async () => {
   const oc = await boot();
-  // gemsOf never rises -> the purchase did not apply.
-  oc.__setReader({ toolCount: async () => 1, gemsOf: async () => 0n, priceOf: async () => 50000000000000n });
+  oc.__setReader({ toolOf: async () => ({ tier: 1, durability: 20n, broken: false }) });
 
-  const r = await oc.buyGemsOnchain(0, 1, 50000000000000n);
-  assert.equal(r.ok, false, 'a broadcast the contract ignored credits nothing');
-  assert.equal(r.code, 'reverted');
+  // The contract reverts Underpaid(cost, msg.value) on a zero value. Guessing
+  // the price here would open the wallet and only then report the failure.
+  const r = await oc.buyToolOnchain(2);
+  assert.equal(r.ok, false);
+  assert.equal(r.code, 'bad-arg');
 });
 
-test('a confirmed purchase is credited only after gemsOf rises', async () => {
+test('a repair of an unbroken tool is refused before gas is spent', async () => {
+  const oc = await boot();
+  oc.__setReader({ toolOf: async () => ({ tier: 1, durability: 12n, broken: false }) });
+
+  // The contract reverts NotBroken. Catching it here means the button should
+  // not have been enabled at all, and if it was, no gas is wasted finding out.
+  const r = await oc.repairToolOnchain();
+  assert.equal(r.ok, false);
+  assert.equal(r.code, 'not-broken');
+});
+
+test('a repair with no tool is refused before gas is spent', async () => {
+  const oc = await boot();
+  oc.__setReader({ toolOf: async () => ({ tier: 0, durability: 0n, broken: false }) });
+
+  const r = await oc.repairToolOnchain();
+  assert.equal(r.ok, false);
+  assert.equal(r.code, 'no-tool');
+});
+
+test('a repair that reverts burns nothing', async () => {
+  const oc = await boot();
+  // Stays broken: the gems were not spent and the tool was not restored.
+  oc.__setReader({ toolOf: async () => ({ tier: 1, durability: 0n, broken: true }) });
+
+  const r = await oc.repairToolOnchain();
+  assert.equal(r.ok, false);
+  assert.equal(r.code, 'reverted');
+  assert.match(r.reason, /gems not burned/i);
+});
+
+test('a repair the contract applies is confirmed by broken going false', async () => {
   const oc = await boot();
   let reads = 0;
   oc.__setReader({
-    toolCount: async () => 1,
-    gemsOf: async () => { reads++; return reads < 2 ? 0n : 1n; },
-    priceOf: async () => 50000000000000n,
+    toolOf: async () => { reads++; return reads < 2
+      ? { tier: 2, durability: 0n, broken: true }
+      : { tier: 2, durability: 25n, broken: false }; },
   });
 
-  const r = await oc.buyGemsOnchain(0, 1, 50000000000000n);
+  const r = await oc.repairToolOnchain();
   assert.equal(r.ok, true);
   assert.equal(r.confirmed, true);
-  assert.equal(r.spentWei, 50000000000000n, 'the exact chain price is sent, not a guess');
+  assert.equal(r.durability, 25n);
 });
 
-test('Rare+ is refused because the contract reverts RarityNotForSale', async () => {
+test('a skill jump is refused before the wallet opens', async () => {
   const oc = await boot();
-  oc.__setReader({ toolCount: async () => 0, gemsOf: async () => 0n, priceOf: async () => 1n });
+  oc.__setReader({ skillOf: async () => 0 });
 
-  for (const rarity of [2, 3, 4]) {
-    const r = await oc.buyGemsOnchain(rarity, 1, 1n);
-    assert.equal(r.ok, false, `rarity ${rarity} must be refused`);
-    assert.equal(r.code, 'not-for-sale');
-  }
-});
-
-test('a missing chain price is refused rather than guessed', async () => {
-  const oc = await boot();
-  oc.__setReader({ toolCount: async () => 0, gemsOf: async () => 0n, priceOf: async () => 1n });
-
-  const r = await oc.buyGemsOnchain(0, 1, undefined);
+  // The contract only accepts skill+1. Skipping a level is a revert, and the
+  // player should be told before signing rather than after.
+  const r = await oc.upgradeSkillOnchain(3, 0);
   assert.equal(r.ok, false);
-  assert.equal(r.code, 'bad-arg');
-  assert.match(r.reason, /priceWei is required/);
+  assert.equal(r.code, 'skill-not-next');
 });
 
-test('a non-positive count is refused', async () => {
+test('a skill purchase that reverts spends nothing', async () => {
   const oc = await boot();
-  oc.__setReader({ toolCount: async () => 0, gemsOf: async () => 0n, priceOf: async () => 1n });
+  oc.__setReader({ skillOf: async () => 0 });
 
-  for (const bad of [0, -1, 1.5]) {
-    const r = await oc.buyGemsOnchain(0, bad, 1n);
-    assert.equal(r.ok, false, `count ${bad} must be refused`);
-  }
+  const r = await oc.upgradeSkillOnchain(1, 0);
+  assert.equal(r.ok, false);
+  assert.equal(r.code, 'reverted');
+  assert.match(r.reason, /gems not spent/i);
 });
 
-test('only Common and Uncommon are for sale, and the game address is real', async () => {
-  await boot();
-  assert.deepEqual(onchain.FOR_SALE, [0, 1]);
-  assert.equal(onchain.mode() === 'onchain' && GAME.startsWith('0x'), true);
+test('a skill purchase the contract applies is confirmed by skill rising', async () => {
+  const oc = await boot();
+  let reads = 0;
+  oc.__setReader({ skillOf: async () => { reads++; return reads < 2 ? 0 : 1; } });
+
+  const r = await oc.upgradeSkillOnchain(1, 0);
+  assert.equal(r.ok, true);
+  assert.equal(r.confirmed, true);
+  assert.equal(r.skill, 1);
+});
+
+test('a redemption below the floor is refused before signing', async () => {
+  const oc = await boot();
+  oc.__setReader({
+    gemsOf: async () => 3n,
+    // 3 Quartz cannot clear 0.005 ETH.
+    redeemQuote: async () => [135_000_000_000_000n, false],
+    minRedeemWei: async () => 5_000_000_000_000_000n,
+  });
+
+  const r = await oc.redeemGemsOnchain(0, 3);
+  assert.equal(r.ok, false);
+  assert.equal(r.code, 'below-floor');
+});
+
+test('a redemption reports the CHAIN payout, never a locally computed one', async () => {
+  const oc = await boot();
+  const QUOTE = 900_000_000_000_000_000n;
+  let reads = 0;
+  oc.__setReader({
+    // Falls from 2000 to 1000, so the poll predicate is satisfied.
+    gemsOf: async () => (reads++ < 1 ? 2000n : 1000n),
+    redeemQuote: async () => [QUOTE, true],
+    minRedeemWei: async () => 5_000_000_000_000_000n,
+  });
+
+  const r = await oc.redeemGemsOnchain(0, 1000);
+  assert.equal(r.ok, true);
+  assert.equal(r.payoutWei, QUOTE, 'the payout must be the number the contract quoted');
+});
+
+test('a redemption for more gems than you hold is refused', async () => {
+  const oc = await boot();
+  oc.__setReader({ gemsOf: async () => 5n });
+
+  const r = await oc.redeemGemsOnchain(0, 10);
+  assert.equal(r.ok, false);
+  assert.equal(r.code, 'insufficient-gems');
+});
+
+test('a redemption that reverts leaves the gems alone', async () => {
+  const oc = await boot();
+  oc.__setReader({
+    gemsOf: async () => 2000n,      // never falls
+    redeemQuote: async () => [900_000_000_000_000_000n, true],
+    minRedeemWei: async () => 5_000_000_000_000_000n,
+  });
+
+  const r = await oc.redeemGemsOnchain(0, 1000);
+  assert.equal(r.ok, false);
+  assert.equal(r.code, 'reverted');
+});
+
+test('the V1 gate functions are gone', async () => {
+  // If these reappear, something is still calling the old contract.
+  const oc = await import('./onchain.js');
+  for (const gone of ['claimToolOnchain', 'buyGemsOnchain']) {
+    assert.equal(oc[gone], undefined, `${gone} is a V1 gate and must not exist`);
+  }
 });

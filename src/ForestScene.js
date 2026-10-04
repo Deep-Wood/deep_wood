@@ -70,8 +70,9 @@ import {
   initCommitment, commitSeason, verifySeason, seasonState, rollSeason,
 } from './commitment.js';
 import {
-  onchainActive, mode as chainMode, claimToolOnchain, buyGemsOnchain,
-  priceFor, FOR_SALE, RARITY_NAME_ONSALE,
+  onchainActive, mode as chainMode,
+  buyToolOnchain, repairToolOnchain, upgradeSkillOnchain, redeemGemsOnchain,
+  walletBalanceWeiOnchain, priceFor, ALL_RARITIES, RARITY_NAMES,
 } from './onchain.js';
 import sha3 from 'js-sha3';
 import {
@@ -209,6 +210,10 @@ export class ForestScene extends Phaser.Scene {
     // and sell need a balance to check against. This becomes a real
     // eth_getBalance when the redeployed contract is wired in.
     this.simBalance = 0n;
+    // Real balance, read on connect. null until the first successful read.
+    this.chainBalanceWei = null;
+    // Guards a double-click while a wallet signature is pending.
+    this.txBusy = false;
     // Season board. Off-chain: hunts are recorded here as they happen, and
     // the same totals would come off the chain once hunts settle.
     this.board = newSeasonRecord(1, Math.floor(Date.now() / 1000));
@@ -1598,7 +1603,36 @@ export class ForestScene extends Phaser.Scene {
    * already routes through here rather than reading a balance itself.
    */
   walletBalanceWei() {
+    // Synchronous accessor for the offline path. On chain the REAL balance is
+    // fetched asynchronously into `this.chainBalanceWei` on connect, and that
+    // is what a purchase is sized against -- never `simBalance`, which is a
+    // fiction that would size a real transaction against nothing.
+    if (onchainActive()) return this.chainBalanceWei ?? 0n;
     return this.simBalance ?? 0n;
+  }
+
+  /**
+   * Accept the real balance read by the connect flow.
+   *
+   * Called from index.html rather than from here, because the scene has no
+   * reference to the connect button. `null` means the read FAILED and must be
+   * stored as unknown -- overwriting with 0n would disable every action and
+   * read as a confident "you have nothing", which is a different and wrong
+   * statement.
+   */
+  setChainBalance(wei) {
+    this.chainBalanceWei = wei;
+    if (wei !== null) this.refreshBelt();
+  }
+
+  /** Refresh the on-chain balance. Safe to call often; failures leave it null. */
+  async refreshChainBalance() {
+    if (!onchainActive()) return;
+    const b = await walletBalanceWeiOnchain();
+    // A null read means UNKNOWN, not zero. Overwriting with 0n would disable
+    // every action and read as a confident "you have nothing".
+    this.chainBalanceWei = b;
+    if (b !== null) this.refreshBelt();
   }
 
   /**
@@ -1608,30 +1642,107 @@ export class ForestScene extends Phaser.Scene {
    * durability you had on Bronze is gone, which is the whole tension in
    * "repair with gems, or pay ETH and start fresh".
    */
-  doBuyTool(tier) {
+  async doBuyTool(tier) {
+    // These handlers now AWAIT a wallet signature. Before they were purely
+    // local and synchronous, so a double-click cost nothing. Now a second
+    // click during the signature window would open a second transaction --
+    // and buyTool is sequential, so the second would revert TierLocked after
+    // the player had already signed it.
+    if (this.txBusy) return;
+    this.txBusy = true;
+    try {
+      await this._doBuyTool(tier);
+    } finally {
+      this.txBusy = false;
+    }
+  }
+
+  async _doBuyTool(tier) {
     const p = this.econ;
-    const res = buyTool(p, tier, this.simBalance);
-    if (!res.ok) { this.beltMsg(res.reason, 'bad'); return; }
 
-    this.simBalance -= (res.cost ?? toolPrice(tier));
-    // Tool spend is the ROI denominator now that hunts are free (spec s12 item
-    // 8). Without this the player buys Wood and the board still reads 0 spent,
-    // so ROI divides by zero and Rank shows nothing.
-    recordToolSpend(this.board, this.wallet ?? '0xplayer', res.cost ?? toolPrice(tier));
+    // OFFLINE: the local economy is authoritative and nothing leaves the page.
+    if (!onchainActive()) {
+      const res = buyTool(p, tier, this.simBalance);
+      if (!res.ok) { this.beltMsg(res.reason, 'bad'); return; }
 
-    const verb = res.replaced ? 'Upgraded to' : 'Bought';
-    const extra = res.replaced ? ` (replaced ${res.replaced})` : '';
+      this.simBalance -= (res.cost ?? toolPrice(tier));
+      // Tool spend is the ROI denominator now that hunts are free (spec s12
+      // item 8). Without this the player buys Wood and the board still reads 0
+      // spent, so ROI divides by zero and Rank shows nothing.
+      recordToolSpend(this.board, this.wallet ?? '0xplayer', res.cost ?? toolPrice(tier));
+
+      const verb = res.replaced ? 'Upgraded to' : 'Bought';
+      const extra = res.replaced ? ` (replaced ${res.replaced})` : '';
+      this.beltMsg(
+        `${verb} ${toolName(tier)}${extra} \u2014 ${res.left}/${res.max} uses`,
+        'ok',
+      );
+      this.refreshBelt();
+      window.renderGems?.();
+      this.updateHud();
+      return;
+    }
+
+    // ON-CHAIN: never touch local state until the contract's own state proves
+    // it applied. On 46630 a reverted call still returns a receipt with
+    // status 0x1, so a hash proves nothing -- the gate in onchain.js polls
+    // `toolOf` until the tier actually moves, and only then do we believe it.
+    const cost = toolPrice(tier);
+    this.beltMsg('Confirm the purchase in your wallet\u2026', 'busy');
+    const r = await buyToolOnchain(tier, cost);
+
+    if (!r.ok) {
+      this.beltMsg(r.reason || 'purchase failed', 'bad');
+      return;
+    }
+
+    // Confirmed by the chain. Now mirror it locally so the UI updates without
+    // re-deriving durability the client cannot know.
+    const res = buyTool(p, tier, this.walletBalanceWei());
+    if (res.ok) {
+      recordToolSpend(this.board, this.wallet ?? '0xplayer', res.cost ?? cost);
+    }
     this.beltMsg(
-      `${verb} ${toolName(tier)}${extra} \u2014 ${res.left}/${res.max} uses`,
+      `${res.replaced ? 'Upgraded to' : 'Bought'} ${toolName(r.tier)} \u2014 ${r.durability}/${this.econ.max} uses`,
       'ok',
     );
+    await this.refreshChainBalance();
     this.refreshBelt();
     window.renderGems?.();
     this.updateHud();
   }
 
   /** Repair with gems. Burns them outright; no treasury claim (spec s10). */
-  doRepair() {
+  async doRepair() {
+    if (this.txBusy) return;
+    this.txBusy = true;
+    try {
+      await this._doRepair();
+    } finally {
+      this.txBusy = false;
+    }
+  }
+
+  async _doRepair() {
+    if (onchainActive()) {
+      this.beltMsg('Confirm the repair in your wallet\u2026', 'busy');
+      const r = await repairToolOnchain();
+      if (!r.ok) { this.beltMsg(r.reason || 'repair failed', 'bad'); return; }
+
+      // Only now does the local tool become whole, and only to the durability
+      // the chain reports -- the client's own number would be a guess.
+      const res = repairTool(this.econ);
+      if (!res.ok) { this.beltMsg(r.reason || 'repair failed', 'bad'); return; }
+      this.beltMsg(
+        `Repaired ${toolName(this.econ.tier)} \u2014 ${r.durability}/${this.econ.max} uses`,
+        'ok',
+      );
+      this.refreshBelt();
+      window.renderGems?.();
+      this.updateHud();
+      return;
+    }
+
     const res = repairTool(this.econ);
     if (!res.ok) { this.beltMsg(res.reason, 'bad'); return; }
     const p = this.econ;
@@ -1644,19 +1755,82 @@ export class ForestScene extends Phaser.Scene {
     this.updateHud();
   }
 
-  /** Sell every gem for ETH at 90% of face value, above the 0.005 floor. */
-  doSellGems() {
-    const p = this.econ;
-    const check = canRedeem(p);
-    if (!check.ok) { this.beltMsg(check.reason, 'bad'); return; }
-    const held = p.gems.reduce((a, b) => a + b, 0);
-    const res = redeemGems(p);
-    if (!res.ok) { this.beltMsg(res.reason, 'bad'); return; }
+  /**
+   * Sell every gem for ETH.
+   *
+   * The contract redeems ONE rarity per call, so an "sell all" across five
+   * rarities is up to five transactions. That is real friction and it is not
+   * hidden: each one is confirmed against `gemsOf` before the next starts,
+   * and the message says which rarity is being cashed out. Silently sending
+   * five transactions to "sell gems" would be worse than asking.
+   *
+   * The payout is ALWAYS the chain's own quote. Computing 90% of face value
+   * locally and showing it as guaranteed is exactly the kind of number that
+   * turns out to be wrong at the moment the player relies on it.
+   */
+  async doSellGems() {
+    if (this.txBusy) return;
+    this.txBusy = true;
+    try {
+      await this._doSellGems();
+    } finally {
+      this.txBusy = false;
+    }
+  }
 
-    this.simBalance += res.value;
-    this.beltMsg(`Sold ${fmtGem(held)} gems for ${fmtEth(res.value)}.`, 'ok');
+  async _doSellGems() {
+    const p = this.econ;
+
+    // Which rarities actually hold something. Zero rows are skipped so a
+    // player with one rarity does not sign four no-op transactions.
+    const held = ALL_RARITIES.filter((r) => (p.gems[r] ?? 0n) > 0n);
+    if (!held.length) { this.beltMsg('No gems to sell.', 'bad'); return; }
+
+    if (!onchainActive()) {
+      const check = canRedeem(p);
+      if (!check.ok) { this.beltMsg(check.reason, 'bad'); return; }
+      const total = p.gems.reduce((a, b) => a + b, 0n);
+      const res = redeemGems(p);
+      if (!res.ok) { this.beltMsg(res.reason, 'bad'); return; }
+      this.simBalance += res.value;
+      this.beltMsg(`Sold ${fmtGem(total)} gems for ${fmtEth(res.value)}.`, 'ok');
+      this.refreshBelt();
+      window.renderGems?.();
+      this.updateHud();
+      return;
+    }
+
+    // On chain: redeem rarities in ascending order, cheapest first, so if the
+    // player is signing several they have already banked the small ones.
+    let totalPayout = 0n;
+    let totalSold = 0n;
+    for (const rarity of held) {
+      const count = p.gems[rarity] ?? 0n;
+      if (count <= 0n) continue;
+      this.beltMsg(`Selling ${RARITY_NAMES[rarity]} (${count})\u2026`, 'busy');
+
+      const r = await redeemGemsOnchain(rarity, count);
+      if (!r.ok) {
+        // Stop at the first failure rather than pressing on: a below-floor
+        // rejection means the rest will likely fail too, and continuing would
+        // ask for more signatures after a refusal.
+        this.beltMsg(
+          `${RARITY_NAMES[rarity]}: ${r.reason || 'sale failed'}${totalSold ? ` (${fmtGem(totalSold)} already sold)` : ''}`,
+          'bad',
+        );
+        break;
+      }
+      totalPayout += r.payoutWei ?? 0n;
+      totalSold += count;
+      // Zero it locally only once the chain has confirmed THAT rarity.
+      p.gems[rarity] = 0n;
+    }
+
+    if (totalSold > 0n) {
+      await this.refreshChainBalance();
+      this.beltMsg(`Sold ${fmtGem(totalSold)} gems for ${fmtEth(totalPayout)}.`, 'ok');
+    }
     this.refreshBelt();
-    // The sale zeroes the whole balance, so every satchel tile drops to zero.
     window.renderGems?.();
     this.updateHud();
   }
