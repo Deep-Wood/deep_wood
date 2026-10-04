@@ -203,25 +203,22 @@ test('redemption clears the whole balance and pays 90% of face', () => {
   assert.deepEqual(p.gems, [0, 0, 0, 0, 0]);
 });
 
-test('lifetime finds survive a redemption', () => {
-  // The satchel total is a record, not a balance: selling must not erase the
-  // season tally.
+test('a redemption zeroes the balances it paid out', () => {
+  // The satchel tiles are the balances themselves. A sell pays the balance out
+  // and the tiles go back to zero -- there is no separate lifetime tally to
+  // preserve.
   const p = withTool(1);
   creditGems(p, [200, 0, 0, 0, 0]);
   redeemGems(p);
   assert.deepEqual(p.gems, [0, 0, 0, 0, 0]);
-  assert.deepEqual(p.found, [200, 0, 0, 0, 0]);
 });
 
-test('the satchel and the balance can never disagree', () => {
-  // The old card kept `common` in one place and `totals[]` in another, both fed
-  // from counts[0]. One counter now, so they cannot drift.
+test('the satchel and the balance are one counter', () => {
   const p = withTool(1);
   creditGems(p, [7, 3, 0, 0, 0]);
   assert.equal(p.gems.reduce((a, b) => a + b, 0), 10);
   p.gems[0] = 0;
   assert.equal(p.gems.reduce((a, b) => a + b, 0), 3);
-  assert.equal(p.found.reduce((a, b) => a + b, 0), 10);
 });
 
 // --- hunting -------------------------------------------------------------------
@@ -260,11 +257,10 @@ test('the full ladder is 20/25/30/35/40 uses', () => {
   assert.deepEqual(counts, [20, 25, 30, 35, 40]);
 });
 
-test('creditGems splits the balance from the lifetime record', () => {
+test('creditGems adds to the spendable balance only', () => {
   const p = newPlayer();
   creditGems(p, [1, 2, 3, 4, 5]);
   assert.deepEqual(p.gems, [1, 2, 3, 4, 5]);
-  assert.deepEqual(p.found, [1, 2, 3, 4, 5]);
 });
 
 test('repairNeeds matches the tier table', () => {

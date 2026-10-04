@@ -30,8 +30,8 @@ export function newPlayer() {
     max: 0,           // durability when fully repaired
     /** @type {number[]} gem balance per rarity. THIS is the satchel. */
     gems: [0, 0, 0, 0, 0],
-    /** Lifetime per-rarity totals found, for the season record. Never spent. */
-    found: [0, 0, 0, 0, 0],
+    /** Lifetime per-rarity totals found. Removed: the spendable balance is the
+     *  only gem state; lifetime went away with the found/held split. */
     burned: 0,        // lifetime gems burned on repairs (a COUNT, so a number)
     skill: 1,
     // Both wei totals MUST start as bigint. They started as `0` and `0n` mixed
@@ -205,7 +205,7 @@ export function redeemGems(p) {
 
 /** Credit a find: split the haul into spendable balance and lifetime totals. */
 export function creditGems(p, counts) {
-  counts.forEach((n, r) => { p.gems[r] += n; p.found[r] += n; });
+  counts.forEach((n, r) => { p.gems[r] += n; });
 }
 
 /** Spend one use. Returns {ok, broke} -- the caller charges durability only

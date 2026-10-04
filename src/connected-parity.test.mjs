@@ -30,6 +30,7 @@
 import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'module';
+import { durabilityOf as maxDurabilityOf } from './economy.js';
 
 const require = createRequire(import.meta.url);
 const puppeteer = require('puppeteer');
@@ -264,12 +265,13 @@ test('the wallet is actually connected in the harness', async () => {
 
 test('the card shows the chain tool state, not the local simulation', async () => {
   const d = await dom();
-  // Ground truth: tier 1, 20/20, not broken.
   assert.equal(truth.broken, false, 'precondition: chain reports not broken');
   assert.ok(!/BROKEN/i.test(d.tool || ''),
     `card claims the tool is broken; chain says tier ${truth.toolTier} ${truth.durability}/${truth.durability} broken=false. tool=${JSON.stringify(d.tool)}`);
-  assert.match(d.tool || '', new RegExp(`${truth.durability}/${truth.durability}`),
-    `card must show ${truth.durability}/${truth.durability} from the chain. got ${JSON.stringify(d.tool)}`);
+  // The count is chain durability over the tier's max -- "16/20", not "16/16",
+  // because the tier table, not the remaining uses, sets the denominator.
+  assert.match(d.tool || '', new RegExp(`${truth.durability}/${maxDurabilityOf(truth.toolTier)}`),
+    `card must show ${truth.durability}/${maxDurabilityOf(truth.toolTier)} from the chain. got ${JSON.stringify(d.tool)}`);
 });
 
 test('the mirror holds the chain tool, not zeros', async () => {

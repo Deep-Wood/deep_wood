@@ -1437,15 +1437,13 @@ export class ForestScene extends Phaser.Scene {
     // --- counts: the satchel balance is the only gem number on the card.
     // The old line read "COMMON n . BURNED n . FEES n" while the satchel beside
     // it showed the same gem as "Qtz n". One gem, two counters, and they
-    // The headline must not disagree with the satchel. "N gems" is the spendable
-    // balance -- exactly what the five tiles sum to -- and "M found" the lifetime
-    // tally, which keeps counting after a sale. Label both so a player who has
-    // sold does not read "10 gems  7 found" as a bug: they are different numbers
-    // on purpose.
-    const held = p.gems.reduce((a, b) => a + b, 0);
-    const found = p.found.reduce((a, b) => a + b, 0);
-    q('belt-counts').textContent = held > 0
-      ? `${fmtGem(held)} held · ${fmtGem(found)} found`
+    // The spendable balance per rarity is the only gem number. `found` (lifetime)
+    // is gone: the satchel tiles ARE the balances, they live on-chain once a
+    // wallet is connected, and repairs decrement them there. A headline that
+    // splits held from found invents a distinction the user reads as a bug.
+    const total = p.gems.reduce((a, b) => a + b, 0);
+    q('belt-counts').textContent = total > 0
+      ? `${fmtGem(total)} gems`
       : 'no gems yet';
 
     const m = chainMode();
@@ -1729,12 +1727,10 @@ export class ForestScene extends Phaser.Scene {
       if (!account) return;
       const held = await Promise.all(ALL_RARITIES.map((x) => r.gemsOf(account, x)));
       this.econ.gems = held.map((n) => Number(n ?? 0));
-      // Lifetime finds are never stored per-rarity on chain in a way the client
-      // can read, so they accumulate locally from this session's hunts.
-      for (let i = 0; i < held.length; i++) {
-        const n = Number(held[i] ?? 0);
-        if (n > (this.econ.found[i] ?? 0)) this.econ.found[i] = n;
-      }
+      // These five numbers ARE the satchel -- one per rarity, straight off the
+      // contract. There is no second tally (no lifetime 'found', no mirror that
+      // could drift): the tiles are read from this array and the array is read
+      // from the chain after every connect, hunt, buy, repair, or sell.
     } catch {
       // Leave the mirror alone: an unreadable balance is not an empty one.
     }
@@ -2842,16 +2838,12 @@ export class ForestScene extends Phaser.Scene {
 
     this.busy = false;
 
-    // Credit the haul. On chain the credit ALREADY happened -- settleHunt
-    // wrote the gems into the contract and refreshChainTool() just pulled the
-    // authoritative balances into the mirror. Crediting locally on top would
-    // double-count every find. `found` (the lifetime tally) has no on-chain
-    // read, so it is credited either way; it powers RANK/FINDS, not the sell
-    // button.
+    // The credit already happened on the contract when connected -- the
+    // refreshChainTool() above just pulled the authoritative balances into the
+    // mirror. Crediting locally on top of that would double-count every find.
+    // In preview mode there is no contract, so the local mirror IS the state.
     if (!onchainActive()) {
       creditGems(this.econ, result.counts);
-    } else {
-      result.counts.forEach((n, r) => { this.econ.found[r] = (this.econ.found[r] ?? 0) + Number(n); });
     }
     window.renderGems?.();
 
