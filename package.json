@@ -15,7 +15,8 @@
     "test:chain": "node src/chain.test.mjs",
     "anvil": "anvil --port 8545 --host 127.0.0.1",
     "postbuild": "node scripts/copy-launch.mjs",
-    "test:economy": "node --test src/economy.test.mjs src/player.test.mjs"
+    "test:economy": "node --test src/economy.test.mjs src/player.test.mjs",
+    "test:connected": "node --test src/connected-parity.test.mjs"
   },
   "keywords": [],
   "author": "",
