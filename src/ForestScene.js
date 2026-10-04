@@ -2208,13 +2208,31 @@ export class ForestScene extends Phaser.Scene {
       return;
     }
     const st = standing(this.board, me);
-    if (!st.ranked) {
-      rankEl.textContent = 'unranked';
-      roiEl.textContent = `${(Number(entry.leq) / Math.max(1, Number(entry.ethSpent)) * 100).toFixed(1)}%`;
-      return;
-    }
-    rankEl.textContent = `#${st.rank}`;
-    roiEl.textContent = `${(Number(entry.leq) / Math.max(1, Number(entry.ethSpent)) * 100).toFixed(1)}%`;
+    rankEl.textContent = st.ranked ? `#${st.rank}` : 'unranked';
+
+    // ROI as a player would actually read it: the ETH value of what they have
+    // found, over the ETH they have committed.
+    //
+    // This used to be `leq / Math.max(1, ethSpent) * 100`. Two defects:
+    //
+    //  1. No wei scaling. `leq` is a rarity SCORE and `ethSpent` is wei, so the
+    //     quotient was off by 1e18.
+    //  2. `Math.max(1, ethSpent)`. When the tool spend had not been recorded
+    //     (ethSpent 0) the divisor became 1, so the score WAS the percentage:
+    //     58 leq -- about fifteen Wood digs -- rendered as "5800%". A number
+    //     with no ratio behind it at all.
+    //
+    // leq is also the wrong numerator for a player-facing ROI. season.js says
+    // outright that RARITY_WEIGHT is a leaderboard ranking device and must not
+    // be conflated with FACE_VALUE, so a single Diamond is 4096 "points" but
+    // 4000x the money of a Quartz. Using it here reported rarity, not return.
+    const spent = Number(entry.ethSpent);
+    const foundWei = (entry.gems || []).reduce(
+      (a, n, i) => a + Number(n) * Number(FACE_VALUE[i] ?? 0), 0,
+    );
+    roiEl.textContent = spent > 0
+      ? `${(foundWei / spent * 100).toFixed(1)}%`
+      : '—';
   }
 
   refreshBelt() {
@@ -2747,8 +2765,16 @@ export class ForestScene extends Phaser.Scene {
   reveal(node) {
     // Snapshot the tier BEFORE the reveal, so a tool that breaks on this
     // hunt still rolls against the tier that swung the pick.
-    const tier = this.player.tier || 1;
-    const result = rollHunt(this.seed, this.wallet ?? '0xplayer', this.huntIndex, tier);
+    //
+    // `this.econ.tier`, NOT `this.player.tier`. `this.player` is the Phaser
+    // sprite, so its `tier` is undefined and this silently rolled EVERY hunt
+    // against tier 1 -- a Steel pick hunting on Wood's table, and Gold
+    // throwing outright.
+    const tier = this.econ.tier || 1;
+    const result = rollHunt(
+      this.seed, this.wallet ?? '0xplayer', this.huntIndex, tier,
+      this.econ.skill ?? 1,
+    );
     this.huntIndex += 1;
 
     // Credit the FULL haul, per rarity. The old line only did counts[0]

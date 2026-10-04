@@ -13,24 +13,45 @@
  * a browser at all.
  */
 import sha3 from 'js-sha3';
+import {
+  DROP_TABLE as ECONOMY_DROP_TABLE,
+  FACE_VALUE as ECONOMY_PRICE,
+} from './economy.js';
 const { keccak256 } = sha3;
 
 export const RARITY_NAME = ['Quartz', 'Amber', 'Sapphire', 'Ruby', 'Diamond'];
 
-export const DROP_TABLE = {
-  1: [9000, 1000, 0, 0, 0],
-  2: [7000, 2500, 500, 0, 0],
-  3: [5500, 3000, 1200, 300, 0],
-  4: [4000, 3000, 2000, 900, 100],
-};
+/**
+ * Drop tables live in economy.js. This file used to keep its OWN copy, and the
+ * two disagreed: this one gave Wood a 10% Amber chance, while economy.js (and
+ * the spec, and the contract) give Wood pure Quartz. So a Wood dig dropped
+ * Ambers that the economy does not price, and the surplus value went straight
+ * into the ROI numerator.
+ *
+ * A second copy of the economy is exactly the drift the header comment on this
+ * file warns about. One source, imported.
+ */
+export const DROP_TABLE = ECONOMY_DROP_TABLE;
 
-export const PRICE = [
-  50_000_000_000_000n,
-  400_000_000_000_000n,
-  3_000_000_000_000_000n,
-  25_000_000_000_000_000n,
-  200_000_000_000_000_000n,
-];
+/** Gold without Skill 4 has no Diamond at all (SPEC section 2). */
+const GOLD_NO_SKILL4 = [3000, 3000, 3000, 1000, 0];
+
+/**
+ * The table for a tier, accounting for the Skill 4 Diamond gate.
+ *
+ * This copy also had no tier-5 row, so buying Gold threw `bad toolTier 5` and
+ * the hunt could not resolve at all.
+ */
+export function tableFor(tier, skill = 1) {
+  if (tier === 5 && skill < 4) return GOLD_NO_SKILL4;
+  return ECONOMY_DROP_TABLE[tier];
+}
+
+/**
+ * Gem face values. Also duplicated here once, which is how a price could drift
+ * from the economy silently. One source now.
+ */
+export const PRICE = ECONOMY_PRICE;
 
 const hash = (buf) => new Uint8Array(keccak256.arrayBuffer(buf));
 
@@ -64,8 +85,10 @@ function concat(...parts) {
   return out;
 }
 
-export function rollHunt(seed, player, huntIndex, toolTier) {
-  const table = DROP_TABLE[toolTier];
+export function rollHunt(seed, player, huntIndex, toolTier, skill = 1) {
+  // tableFor(), not DROP_TABLE[toolTier]: the direct index threw on tier 5,
+  // which the local copy did not have a row for.
+  const table = tableFor(toolTier, skill);
   if (!table) throw new Error(`bad toolTier ${toolTier}`);
 
   // Concatenate without Buffer: keep a running list and join into one array.
