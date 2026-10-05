@@ -2692,11 +2692,19 @@ export class ForestScene extends Phaser.Scene {
       if (!this.queue) {
         // First hunt since connect or since the last sync: line the queue up
         // with the chain before gating on it, or a stale queue could refuse a
-        // legal dig.
-        this.queue = new HuntQueue(this._huntIndex ?? 0, this.econ.tier);
+        // legal dig. If _huntIndex is still unknown (refreshChainTool hasn't
+        // resolved), DON'T create the queue with base=0 -- reveal() will read
+        // the chain and build it with the RIGHT base. The gate only rejects
+        // when the queue exists and is full / the tool is out.
+        if (this._huntIndex !== undefined) {
+          this.queue = new HuntQueue(BigInt(this._huntIndex), this.econ.tier);
+        }
+        // else: fall through; reveal's path will await huntIndexOf before
+        // queueing, and the full-batch AND broken-tool checks below cannot
+        // fire for a queue that has not yet been created.
       }
       const now = this.time.now;
-      if (this.queue.size >= MAX_BATCH) {
+      if (this.queue && this.queue.size >= MAX_BATCH) {
         if (now - (this._gateAt ?? -1e9) > 2000) {
           this._gateAt = now;
           this.openBelt();
@@ -2714,7 +2722,7 @@ export class ForestScene extends Phaser.Scene {
           // to think the fix was "settle", when the fix is actually "repair
           // or upgrade". Only pulse settle when something real is queued.
           this.flash('Tool broken. Repair or upgrade first.');
-          if (this.queue.size > 0) window.pulseSettle?.();
+          if ((this.queue?.size ?? 0) > 0) window.pulseSettle?.();
         }
         return;
       }
