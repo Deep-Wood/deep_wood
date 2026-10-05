@@ -676,11 +676,12 @@ button.chip:disabled { opacity: .55; cursor: default; }
  * row used to cost. */
 #belt { row-gap: 2px; }
 
-/* Wallet disconnect dropup. One item, positioned above-right of the connect
- * button (the button's parent gets position:relative when the menu opens). */
+/* Wallet disconnect menu. One item, positioned BELOW the connect button (the
+ * card sits at the very top of the viewport, so an above-the-button dropup
+ * would render off-screen and look like the button was dead). */
 .wallet-menu {
   position: absolute;
-  bottom: calc(100% + 6px);
+  top: calc(100% + 6px);
   right: 0;
   min-width: 220px;
   background: var(--panel-solid, #0d1a10);
