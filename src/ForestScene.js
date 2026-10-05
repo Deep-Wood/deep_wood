@@ -3056,8 +3056,17 @@ export class ForestScene extends Phaser.Scene {
       // undistorted and still lands them all at a similar visual size.
       const genGem = `gen-gem-${s.rarity}`;
       if (!this.has(genGem)) return;
+      // Depth must sit above SCENERY, not at 10. Trees are depth = world-y and
+      // chunks put nodes at hundreds or thousands of pixels of world y, so a
+      // tree at y=600 drew OVER the reveal pop (depth 10) and made the gem +
+      // count invisible on any beacon tucked behind trunks. UX_DEPTH (50000
+      // + 2) is above every scenery depth in the game but still below the
+      // always-on-top HUD plane -- exactly where a floating reveal belongs,
+      // because it is UI feedback about a click, not a world object that
+      // should respect y-sorting.
+      const revealDepth = 60000;
       const gem = this.add.image(baseX + i * GEM_STEP, node.y, genGem)
-        .setDepth(10)
+        .setDepth(revealDepth)
         .setScale(0);
       // Pop in with a small stagger so a multi-gem haul unfurls rather than
       // appearing all at once.
@@ -3086,7 +3095,7 @@ export class ForestScene extends Phaser.Scene {
       if (s.count >= 1) {
         const label = this.add.text(baseX + i * GEM_STEP, node.y + 26, `x${s.count}`, {
           fontFamily: 'ui-monospace, monospace', fontSize: '13px', color: '#e8f6ff',
-        }).setOrigin(0.5).setDepth(11).setAlpha(0.9);
+        }).setOrigin(0.5).setDepth(revealDepth + 1).setAlpha(0.9);
         this.tweens.add({
           targets: label, y: node.y - 30, alpha: 0, duration: 900, delay: 200,
           ease: 'Sine.in', onComplete: () => label.destroy(),
