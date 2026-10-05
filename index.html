@@ -375,8 +375,11 @@
     const badge = document.createElement('span');
     badge.id = 'queue-badge';
     badge.className = 'queue-badge hidden';
+    // Sibling of #belt-mode, NOT a child: syncBeltDom() rewrites
+    // mode.textContent, which would destroy any child node and with it the
+    // badge the queue just wrote to. This exact failure already shipped once.
     const modeEl = document.getElementById('belt-mode');
-    if (modeEl) modeEl.appendChild(badge);
+    if (modeEl) modeEl.insertAdjacentElement('afterend', badge);
     window.renderQueue = (queued) => {
       if (queued > 0) {
         badge.textContent = `${queued} pending - settle to bank`;

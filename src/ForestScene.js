@@ -1461,6 +1461,11 @@ export class ForestScene extends Phaser.Scene {
 
     this.syncToolDom();
     this.syncActionDom();
+
+    // The badge lives OUTSIDE the mode span (it would be blown away by the
+    // textContent rewrite above), so refresh its copy here to stay in sync
+    // with any queue writes that landed while the belt was being rebuilt.
+    window.renderQueue?.(this.queue?.size ?? 0);
   }
 
   /** The held tool: name, durability, and the repair affordance.
@@ -2944,9 +2949,13 @@ export class ForestScene extends Phaser.Scene {
       };
       this.huntIndex += 1;
       // Durability was already taken in finishDig() on the local mirror, and
-      // the chain will charge the whole batch at settle; nothing else moves
-      // until the SETTLE button lands. nudges: refresh the queued badge.
+      // the chain will charge the whole batch at settle. Repaint both
+      // surfaces that speak about the queue: the badge (window.renderQueue)
+      // and the belt, whose SETTLE button must now show "settle N" and lose
+      // its disabled state. Without refreshBelt the button stayed greyed out
+      // and the dig looked like it never counted.
       window.renderQueue?.(this.queue.size);
+      this.refreshBelt();
     } else {
       result = rollHunt(
         this.seed, this.wallet ?? '0xplayer', this.huntIndex, tier,
