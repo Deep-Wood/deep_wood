@@ -384,8 +384,16 @@ export class ForestScene extends Phaser.Scene {
     this.nodes = [];
 
     // --- the hunter
-    // Position is set from a resolved frame, not from a bare texture key.
-    this.player = this.physics.add.sprite(0, 0, 'hunter', 0);
+    // Spawn at a random point near the world origin, not AT the origin. A
+    // fixed (0,0) meant every reload landed in the same tree arrangement --
+    // the "always starts at the same spot" the user reported. World gen is
+    // chunk-keyed and effectively unbounded, so any nearby spawn lands in a
+    // real generated chunk. 4k px is ~2 chunk diameters -- far enough to be
+    // distinct, close enough that the first chunk's load still carries.
+    const spawnJitter = CHUNK * 2;  // ~4096 px range
+    const spawnX = (((Math.random() * 2) - 1) * spawnJitter) | 0;
+    const spawnY = (((Math.random() * 2) - 1) * spawnJitter) | 0;
+    this.player = this.physics.add.sprite(spawnX, spawnY, 'hunter', 0);
 
     // The generated sheet is 16 logical px at 4x = 64px. The world tile is
     // 32px, so draw the character at 0.5 to keep it tile-sized.
@@ -923,7 +931,11 @@ export class ForestScene extends Phaser.Scene {
 
   setupCamera() {
     const cam = this.cameras.main;
-    // No camera bounds -- same reason as the physics bounds.
+    // No camera bounds -- the world is effectively unbounded. The guard
+    // against the player sprite disappearing under the top HUD card is done
+    // on the PLAYER side in update(): they are not allowed to walk high
+    // enough that the HUD would cover them, which is what the user meant by
+    // 'the player should never go beyond the header card border'.
     cam.startFollow(this.player, true, 0.12, 0.12);
     cam.setDeadzone(120, 90);
   }
@@ -2373,6 +2385,34 @@ export class ForestScene extends Phaser.Scene {
     // Stream the world around the player. Early-returns unless a chunk
     // boundary was crossed, so this is one comparison on a normal frame.
     this.refreshChunks();
+
+    // HUD guard: never let the player enter the screen band the top card
+    // owns. The card is part of the DOM, not the world, so the player sprite
+    // would otherwise be free to walk beneath it and vanish under the acrylic
+    // overlay -- the user called this out as 'should never go beyond the
+    // header card border'. Convert the HUD's pixel height into world units
+    // (they differ by the camera's zoom), then clamp the player's world Y to
+    // be at least that far below the camera's scroll.
+    //
+    // We only clamp WALKING motion (when the player is actively moving up,
+    // velocity.y < 0). Teleports -- the smoke test's setPosition() between a
+    // pair of distant trees -- are exempt. Without that exception the clamp
+    // silently pulled a teleported player back into the HUD band and the
+    // y-sort smoke failed behind-the-tree cases.
+    if (this.cameras && this.cameras.main) {
+      const cam = this.cameras.main;
+      const hud = document.getElementById('hud');
+      const hudPx = (hud?.offsetHeight || 150) + 12;   // a little clearance
+      const minY = cam.scrollY + (hudPx / cam.zoom);
+      const walking = this.player.body && this.player.body.velocity.y < -10;
+      if (walking && this.player.y < minY) {
+        this.player.y = minY;
+        // Stop the upward velocity so the sprite doesn't jitter against
+        // the ceiling. Otherwise the player can feel themselves push and get
+        // pushed back, which reads as a bug rather than a wall.
+        this.player.body.velocity.y = 0;
+      }
+    }
 
     // Pollen, birds, insects. One call, no allocation, dt clamped inside.
     this.ambience?.tick(delta / 1000);

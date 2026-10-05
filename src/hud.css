@@ -80,11 +80,17 @@ html, body {
 #hud > * { pointer-events: auto; }
 
 .card {
-  background: var(--panel);
+  /* Transparent acrylic: the user wants the game visible THROUGH the header
+   * card, so a near-opaque panel was replaced with a frosted-glass wash.
+   * backdrop-filter keeps the text legible over the forest without actually
+   * painting a solid slab; inset hairline shadows preserve the 3D lifting
+   * that made the old solid card look raised. */
+  background: rgba(13, 26, 16, .18);
   border: 1px solid var(--edge-dim);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(3px);
+  box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.06);
+  backdrop-filter: blur(6px) saturate(1.1);
+  -webkit-backdrop-filter: blur(6px) saturate(1.1);
 }
 
 .card-title {
@@ -293,9 +299,43 @@ html, body {
   box-shadow: var(--shadow);
 }
 .chip b { color: var(--gold); font-weight: 600; }
-button.chip { cursor: pointer; font-family: inherit; }
-button.chip:hover { background: rgba(63,138,82,.22); border-color: var(--edge); }
-button.chip:active { transform: translateY(1px); }
+/* Tappable chips: bigger and 3D, but the row MUST NOT grow the card -- so
+ * the buttons use slightly tighter horizontal padding and the 3D effect
+ * comes from a bottom shadow (the tactile 'ledge'), not from a taller chip.
+ * Padding 4px vertical / 9px horizontal raises font to a comfortable touch
+ * size while keeping the overall row at ~28px instead of ballooning. */
+button.chip {
+  cursor: pointer; font-family: inherit;
+  padding: 4px 10px;
+  font-size: 11px;
+  background: linear-gradient(to bottom, #1c3a24 0%, #0d1a10 100%);
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  /* Inner highlight for the top, drop shadow for the bottom -- classic 3D. */
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .18),
+    inset 0 -1px 0 rgba(0, 0, 0, .6),
+    0 2px 0 rgba(0, 0, 0, .55),
+    0 6px 12px rgba(0, 0, 0, .3);
+  transform: translateY(0);
+}
+button.chip:hover {
+  background: linear-gradient(to bottom, #274a30 0%, #14261a 100%);
+  border-color: var(--gold);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .22),
+    inset 0 -1px 0 rgba(0, 0, 0, .6),
+    0 3px 0 rgba(0, 0, 0, .55),
+    0 8px 14px rgba(0, 0, 0, .35);
+}
+button.chip:active {
+  transform: translateY(2px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .10),
+    inset 0 -1px 0 rgba(0, 0, 0, .5),
+    0 0 0 rgba(0, 0, 0, .55),
+    0 2px 4px rgba(0, 0, 0, .25);
+}
 button.chip:disabled { opacity: .55; cursor: default; }
 
 .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--edge); flex: none; }
