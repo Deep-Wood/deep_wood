@@ -368,6 +368,33 @@
     // a hunt, so selling gems left the tiles showing the pre-sale count.
     window.renderGems = renderGems;
 
+    // Pending-batch badge: how many hunts sit in the settle queue. Written by
+    // ForestScene after every dig and settle. Kept on the belt-mode line so it
+    // is visible at ALL times while queued (a reload drops the queue), not only
+    // when the settle button happens to be in view.
+    const badge = document.createElement('span');
+    badge.id = 'queue-badge';
+    badge.className = 'queue-badge hidden';
+    const modeEl = document.getElementById('belt-mode');
+    if (modeEl) modeEl.appendChild(badge);
+    window.renderQueue = (queued) => {
+      if (queued > 0) {
+        badge.textContent = `${queued} pending - settle to bank`;
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
+    };
+    // Pulse the settle button when the gate message fires, so the eye lands on
+    // the ONE action that unblocks hunting.
+    window.pulseSettle = () => {
+      const st = document.getElementById('belt-settle');
+      if (!st) return;
+      st.classList.remove('pulse');
+      void st.offsetWidth; // restart the CSS animation on a re-trigger
+      st.classList.add('pulse');
+    };
+
     // Kept as a no-op because two call sites in ForestScene.js still invoke it
     // when gems are spent, and they are load-bearing for the spend path.
     //
@@ -590,6 +617,20 @@
       });
     }).catch(() => {
       // No chain module in this build: the offline preview keeps working.
+    });
+
+    // UNSAVED-QUEUE GUARD: the settle queue lives in memory. Closing or
+    // reloading with hunts queued drops them permanently -- the gems were never
+    // on-chain. The browser's own leave-confirmation is the last line of
+    // defence; the badge and the settle button are the first.
+    window.addEventListener('beforeunload', (e) => {
+      const q = window.__scene?.queue;
+      if (q && q.size > 0) {
+        e.preventDefault();
+        e.returnValue = `You have ${q.size} unsettled hunt${q.size === 1 ? '' : 's'}. Leave now and they are lost.`;
+        return e.returnValue;
+      }
+      return undefined;
     });
 
     render();

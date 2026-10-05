@@ -26,6 +26,15 @@ const config = {
 
 const game = new Phaser.Game(config);
 
+// First-run tutorial. DOM-only, so it can go up before/independent of the
+// scene; a click on the card advances, skip dismisses the whole thing, and
+// localStorage remembers the dismissal. Shown once the canvas exists so the
+// forest is visible behind the dimmer.
+import { maybeShowTutorial } from './tutorial.js';
+game.events.once('ready', () => {
+  maybeShowTutorial();
+});
+
 window.addEventListener('resize', () => game.scale.refresh());
 
 // Expose the scene for the headless smoke test / probe. Read-only handles

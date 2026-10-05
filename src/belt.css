@@ -193,3 +193,99 @@
 @media (prefers-reduced-motion: reduce) {
   .belt-actions .act.busy { animation: none; }
 }
+
+/* ============================================================
+   V3 batch settlement UI
+   ============================================================ */
+
+/* The SETTLE button: same chip anatomy as buy/sell, but it is the ONLY
+ * gameplay button that may open the wallet, so it earns its own accent.
+ * Green when there is something to bank; muted otherwise. */
+.chip.btn.settle { color: var(--ok); border-color: var(--ok); font-weight: bold; }
+.chip.btn.settle:disabled { color: inherit; border-color: inherit; font-weight: normal; }
+
+/* The gate pulse: when the 20th dig (or a spent tool) blocks hunting, the
+ * settle button must pull the eye to the ONE action that unblocks it. Three
+ * beats, then it stops -- an infinite loop reads as an alarm. */
+.chip.btn.settle.pulse {
+  animation: settle-pulse 0.9s ease-in-out 3;
+  border-color: var(--warn);
+  color: var(--warn);
+}
+@keyframes settle-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.12); box-shadow: 0 0 12px var(--warn); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chip.btn.settle.pulse { animation: none; }
+}
+
+/* Pending-batch badge: rides the belt-mode line so it is visible at all times
+ * while a queue exists. Amber, not green -- these gems are not banked yet. */
+.queue-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--warn);
+  border: 1px solid var(--warn);
+  border-radius: 8px;
+  white-space: nowrap;
+}
+.queue-badge.hidden { display: none; }
+
+/* Tutorial overlay: a dimmer plus one centered card. The card advances on
+ * click; the dimmer does not, so a click meant for the game world is harmless. */
+.tutorial-dim {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 10, 6, 0.72);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.tutorial-card {
+  max-width: 420px;
+  width: 100%;
+  background: var(--panel-solid, #0d1a10);
+  border: 1px solid var(--gold, #d9a441);
+  border-radius: 10px;
+  padding: 20px 22px 14px;
+  cursor: pointer;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
+}
+.tutorial-card h2 {
+  margin: 0 0 8px;
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--gold, #d9a441);
+  letter-spacing: 0.04em;
+}
+.tutorial-card p {
+  margin: 0 0 14px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ink, #e8f0e0);
+}
+.tutorial-steps { display: flex; gap: 6px; margin-bottom: 10px; }
+.tutorial-steps .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+}
+.tutorial-steps .dot.on { background: var(--gold, #d9a441); }
+.tutorial-skip {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: rgba(232, 240, 224, 0.6);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+.tutorial-skip:hover { color: var(--ink, #e8f0e0); }

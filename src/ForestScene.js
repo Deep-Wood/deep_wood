@@ -32,6 +32,7 @@ const SAFE = (() => {
 /** Whether the per-chunk decoration layers load at all. */
 const DECORATE = SAFE !== 1 && SAFE !== 3;
 import { rollHunt, RARITY_NAME } from './engine.js';
+import { HuntQueue, MAX_BATCH } from './queue.js';
 import {
   CHUNK, chunkOf, describeChunk, nodeKey,
   residentChunks, staleChunks, LOAD_RADIUS,
@@ -1621,6 +1622,24 @@ export class ForestScene extends Phaser.Scene {
       this.decoratePending(r);
       el.appendChild(r);
     }
+
+    // --- SETTLE: the only gameplay control that opens the wallet. Connected
+    // only (preview has no contract-side queue), always rendered so the badge
+    // and the gate always point at a real control, disabled while empty.
+    if (onchainActive()) {
+      const st = document.createElement('button');
+      st.className = 'chip btn act settle';
+      st.id = 'belt-settle';
+      const queued = this.queue?.size ?? 0;
+      st.textContent = queued > 0 ? `settle ${queued}` : 'settle';
+      st.title = queued > 0
+        ? `bank ${queued} queued hunt${queued === 1 ? '' : 's'} on-chain (one signature)`
+        : 'nothing queued -- dig first';
+      st.disabled = queued === 0;
+      st.onclick = () => this.doSettle();
+      this.decoratePending(st);
+      el.appendChild(st);
+    }
   }
 
   /**
@@ -1693,6 +1712,32 @@ export class ForestScene extends Phaser.Scene {
     // comes from the economy mirror. Without it a healthy tool would read as
     // "20/0 uses".
     this.econ.max = tier > 0 ? durabilityOf(tier) : 0;
+
+    // V3 settle queue: keep it in lockstep with the chain's hunt index. If the
+    // index moved (a settle landed -- ours or another device's), the queue's
+    // base is stale and it must be rebased. rebase() is a no-op when nothing
+    // drifted and DROPS a loaded queue whose base moved, which is exactly the
+    // behaviour a stale queue needs (its contents can never match the chain's
+    // recomputation anyway -- the settle would revert ResultMismatch).
+    try {
+      const { getReader } = await import('./onchain.js');
+      const r = await getReader();
+      if (r) {
+        const { getState } = await import('./wallet.js');
+        const { account } = getState();
+        if (account) {
+          const idx = Number(await r.huntIndexOf(account));
+          this._huntIndex = idx;
+          if (this.queue) {
+            this.queue.rebase(idx, tier);
+            window.renderQueue?.(this.queue.size);
+          }
+        }
+      }
+    } catch {
+      // leave the queue alone: losing a queued batch to an RPC hiccup is worse
+      // than briefly showing a slightly stale count.
+    }
 
     // GEMS too, not just the tool. The belt renders the satchel from this local
     // mirror, and gemsOf() was only ever read to CONFIRM a sale -- never to
@@ -1914,6 +1959,49 @@ export class ForestScene extends Phaser.Scene {
     } finally {
       this.txBusy = false;
     }
+  }
+
+  async doSettle() {
+    if (this.txBusy) return;
+    await this._doSettle();
+  }
+  async _doSettle() {
+    if (!onchainActive()) {
+      // Preview mode settles nothing: there is no contract holding the digs,
+      // so there is no batch to push through.
+      this.flash('Preview mode \u2014 connect a wallet to bank real batches.');
+      return;
+    }
+    if (!this.queue || this.queue.empty) {
+      this.flash('Nothing queued to settle yet \u2014 dig first.');
+      return;
+    }
+    const n = this.queue.size;
+    this.beltMsg(`Confirm the settlement of ${n} hunt${n === 1 ? '' : 's'} in your wallet\u2026`, 'busy');
+    this.setTxPending('belt-settle', 'settling');
+    let r;
+    try {
+      const { settleBatchOnchain } = await import('./onchain.js');
+      r = await settleBatchOnchain(this.queue);
+    } finally {
+      this.clearTxPending();
+    }
+    if (!r.ok) {
+      this.beltMsg(r.reason || 'Settlement failed.', 'bad');
+      this.flash(r.reason || 'Could not settle the batch.');
+      // A stale queue is the likeliest cause: the chain moved (another
+      // device, a season flip). Re-sync so the next dig starts clean.
+      await this.refreshChainTool();
+      return;
+    }
+    // The contract banked the batch: adopt its balances, record the whole
+    // batch on the season board in one entry, drop the queue, and repaint
+    // so satchel + "n pending" badge and tool all show the post-settle truth.
+    window.renderQueue?.(0);
+    this.queue = new HuntQueue(this.queue.nextIndex, this.queue.tier);
+    await this.refreshChainTool();
+    this.beltMsg(`Banked ${n} hunt${n === 1 ? '' : 's'} \u2014 haul is on-chain.`, 'good');
+    this.flash(`Settled ${n} hunt${n === 1 ? '' : 's'} \u2014 the haul is banked.`);
   }
 
   async _doRepair() {
@@ -2578,6 +2666,40 @@ export class ForestScene extends Phaser.Scene {
       }
       return;
     }
+    // Settle-queue gate (V3): a dig is a queue push in connected mode, so the
+    // queue rules bind here, before any animation. Two stopping conditions and
+    // they want different copy: a FULL queue just needs a settle (tool is
+    // fine), a SPENT tool needs repair or replace first. Both always end at
+    // the same call to action -- settle -- so the button pulses.
+    //
+    // pulseSettle is a window global because this file has no DOM imports.
+    if (onchainActive()) {
+      if (!this.queue) {
+        // First hunt since connect or since the last sync: line the queue up
+        // with the chain before gating on it, or a stale queue could refuse a
+        // legal dig.
+        this.queue = new HuntQueue(this._huntIndex ?? 0, this.econ.tier);
+      }
+      const now = this.time.now;
+      if (this.queue.size >= MAX_BATCH) {
+        if (now - (this._gateAt ?? -1e9) > 2000) {
+          this._gateAt = now;
+          this.openBelt();
+          this.flash(`Batch full (${MAX_BATCH} hunts) \u2014 SETTLE them below, then keep hunting.`);
+          window.pulseSettle?.();
+        }
+        return;
+      }
+      if (this.econ.left <= 0) {
+        if (now - (this._gateAt ?? -1e9) > 2000) {
+          this._gateAt = now;
+          this.openBelt();
+          this.flash('Tool worn out \u2014 SETTLE your batch, then repair or upgrade to continue.');
+          window.pulseSettle?.();
+        }
+        return;
+      }
+    }
     this.busy = true;
     node.setData('used', true);
     // Record the dig before the animation, so the epoch bump is committed even
@@ -2693,15 +2815,12 @@ export class ForestScene extends Phaser.Scene {
       this.player.setScale(1);
       this.player.setRotation(0);
 
-      // The pick's durability is spent by the CHAIN in the connected game
-      // (settleHunt deducts it against the committed seed), and refreshChainTool()
-      // after settlement pulls the authoritative count back. Spending it locally
-      // too would double-charge every hunt. The consumeUse() path below is the
-      // PREVIEW simulation, where no contract is involved.
+      // The pick's durability is spent at SETTLE in the connected game (V3
+      // batches it), so the mirror wears it here instead and refreshChainTool()
+      // restores the authoritative count once the batch lands. In preview the
+      // mirror is the only state at all.
       let used = { broke: false };
-      if (!onchainActive()) {
-        used = consumeUse(this.econ);
-      }
+      used = consumeUse(this.econ);
       this.updateHud();
       // Repaint the DOM toolbelt row. `consumeUse` is the ONLY thing that
       // decrements `left`, and the belt readout the player actually sees is a
@@ -2787,50 +2906,47 @@ export class ForestScene extends Phaser.Scene {
 
     let result;
     if (onchainActive()) {
-      // The connected game settles ON THE CONTRACT. The numbers are the
-      // chain's own previewHunt, which settleHunt recomputes from the
-      // committed season seed and reverts ResultMismatch on any difference --
-      // so the credited find is exactly what the contract recorded. The local
-      // rollHunt below remains the PREVIEW path for players with no wallet.
+      // V3 settle-queue path. The dig used to open the wallet and settleHunt
+      // right here; per the design it now PUSHES onto the in-memory queue,
+      // and the SETTLE button is the only thing that ever talks to the wallet.
       //
-      // Nothing is credited until the contract's own state moves:
-      // settleHuntOnchain polls huntIndexOf(player) and only reports success
-      // when it increments, because on 46630 a reverted call still returns a
-      // status 0x1 receipt. A hunt that never landed grants nothing.
-      this.busy = true;
-      this.beltMsg?.('Settling hunt on chain — confirm in your wallet', 'busy');
-      this.setTxPending('belt-hunt', 'settling');
-      let settled;
-      try {
-        const { settleHuntOnchain } = await import('./onchain.js');
-        settled = await settleHuntOnchain(tier);
-      } finally {
-        this.clearTxPending();
+      // The numbers shown are the contract's own previewHuntAt(player, tier,
+      // queue.size), i.e. the roll for the hunt this dig WILL become once the
+      // batch settles. settleBatch recomputes from the committed season seed
+      // and reverts ResultMismatch on any difference, so what the player saw
+      // is exactly what the contract banks -- as long as the queue base has
+      // not drifted. If it did (another device settled in between), the SETTLE
+      // button refuses and re-syncs rather than spend gas on a revert.
+      if (!this.queue) {
+        // First dig since connect or last sync: line the queue up with the
+        // chain's own hunt index. refreshChainTool() maintains the same
+        // rebase on every poll; this just covers the race where a dig lands
+        // before the first poll resolves.
+        this.queue = new HuntQueue(this._huntIndex ?? 0, tier);
       }
-      if (!settled.ok) {
-        // Un-mark the dig site: nothing was settled, so the player has not
-        // been charged a hunt and the node must stay diggable. The durability
-        // was already spent in finishDig(); refreshChainTool() restores the
-        // chain's own remaining durability in that case.
+      const { previewHuntAtFor } = await import('./onchain.js');
+      const preview = await previewHuntAtFor(tier, this.queue.size);
+      if (!preview) {
+        // Preview failed (RPC hiccup or season boundary). Keep the node
+        // diggable; charging a hunt we could not see would be guessing.
         if (node?.setData) node.setData('used', false);
-        this.flash(settled.reason || 'Could not settle the hunt — the dig stays open.');
-        this.beltMsg?.(settled.reason || 'Settlement failed.', 'bad');
-        await this.refreshChainTool();
-        this.updateHud();
+        this.flash('Could not read the next roll from the chain — the dig stays open.');
         this.busy = false;
         return false;
       }
+      this.queue.push(preview.counts, preview.bestSingleWei);
       result = {
-        counts: settled.counts.map((n) => Number(n)),
-        bestSingleWei: settled.bestSingleWei,
-        total: settled.counts.reduce((a, b) => a + Number(b), 0),
-        valueWei: settled.bestSingleWei,
+        counts: preview.counts.map((n) => Number(n)),
+        bestSingleWei: preview.bestSingleWei,
+        total: preview.counts.reduce((a, b) => a + Number(b), 0),
+        valueWei: preview.bestSingleWei,
+        pending: true,
       };
       this.huntIndex += 1;
-      // Pull the chain's tool (durability was spent) and gem balances (the
-      // contract credited the haul) so the mirror is the chain's truth rather
-      // than a locally-computed guess.
-      await this.refreshChainTool();
+      // Durability was already taken in finishDig() on the local mirror, and
+      // the chain will charge the whole batch at settle; nothing else moves
+      // until the SETTLE button lands. nudges: refresh the queued badge.
+      window.renderQueue?.(this.queue.size);
     } else {
       result = rollHunt(
         this.seed, this.wallet ?? '0xplayer', this.huntIndex, tier,
@@ -2841,21 +2957,24 @@ export class ForestScene extends Phaser.Scene {
 
     this.busy = false;
 
-    // The credit already happened on the contract when connected -- the
-    // refreshChainTool() above just pulled the authoritative balances into the
-    // mirror. Crediting locally on top of that would double-count every find.
-    // In preview mode there is no contract, so the local mirror IS the state.
-    if (!onchainActive()) {
+    // The credit already happened on the contract when connected -- nothing to
+    // add to the mirror. (In V3 terms: the credit happens at SETTLE, and this
+    // dig is only queued, so `pending` results must credit NOTHING.) In preview
+    // mode there is no contract, so the local mirror IS the state.
+    if (!result.pending && !onchainActive()) {
       creditGems(this.econ, result.counts);
     }
     window.renderGems?.();
 
-    // Season board. Recorded with the tier that swung the pick, since that
-    // is the tier whose cost belongs in this player's ROI denominator.
-    recordHunt(
-      this.board, this.wallet ?? '0xplayer', result.counts, tier,
-      Math.floor(Date.now() / 1000)
-    );
+    // Season board. A queued hunt has not happened on-chain yet -- the batch
+    // may still be abandoned -- so it must not appear in the ledger until the
+    // settle lands. doSettle() records the whole batch at once.
+    if (!result.pending) {
+      recordHunt(
+        this.board, this.wallet ?? '0xplayer', result.counts, tier,
+        Math.floor(Date.now() / 1000)
+      );
+    }
 
     // find the most valuable gem in the haul -- that's the one that pops out
     let topRarity = 0;

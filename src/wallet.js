@@ -39,8 +39,8 @@
  *   const tx = await claimTool(1);
  */
 
-import { SIGS } from './chain.js';
-import { config } from './config.js';
+import { SIGS } from "./chain.js";
+import { config } from "./config.js";
 
 /** The chain the game is deployed on. Mirrors config.chainId; checked below. */
 export const GAME_CHAIN_ID = config.chainId;
@@ -59,7 +59,8 @@ const SEL_MEMO = new Map();
 export function sel(sig) {
   if (!SEL_MEMO.has(sig)) {
     const v = SIGS[sig];
-    if (!v) throw new WalletError('unknown-selector', `no selector for "${sig}"`);
+    if (!v)
+      throw new WalletError("unknown-selector", `no selector for "${sig}"`);
     SEL_MEMO.set(sig, v);
   }
   return SEL_MEMO.get(sig);
@@ -71,7 +72,7 @@ export function sel(sig) {
 export class WalletError extends Error {
   constructor(code, message) {
     super(message);
-    this.name = 'WalletError';
+    this.name = "WalletError";
     this.code = code;
   }
 }
@@ -84,33 +85,34 @@ const UINT256_MAX = (1n << 256n) - 1n;
 function encUint(n, bits, what) {
   let v;
   try {
-    v = typeof n === 'bigint' ? n : BigInt(n);
+    v = typeof n === "bigint" ? n : BigInt(n);
   } catch {
-    throw new WalletError('bad-arg', `${what} is not an integer: ${String(n)}`);
+    throw new WalletError("bad-arg", `${what} is not an integer: ${String(n)}`);
   }
   if (v < 0n || v > (1n << BigInt(bits)) - 1n) {
-    throw new WalletError('bad-arg', `${what} out of uint${bits} range: ${v}`);
+    throw new WalletError("bad-arg", `${what} out of uint${bits} range: ${v}`);
   }
-  return v.toString(16).padStart(64, '0');
+  return v.toString(16).padStart(64, "0");
 }
 
-export const encUint8 = (n) => encUint(n, 8, 'uint8');
-export const encUint256 = (n) => encUint(n, 256, 'uint256');
+export const encUint8 = (n) => encUint(n, 8, "uint8");
+export const encUint256 = (n) => encUint(n, 256, "uint256");
 
 /** ABI-encode an address (left-padded), with a shape check. */
 export function encAddress(a) {
-  if (typeof a !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(a)) {
-    throw new WalletError('bad-arg', `not an address: ${String(a)}`);
+  if (typeof a !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(a)) {
+    throw new WalletError("bad-arg", `not an address: ${String(a)}`);
   }
-  return a.toLowerCase().replace(/^0x/, '').padStart(64, '0');
+  return a.toLowerCase().replace(/^0x/, "").padStart(64, "0");
 }
 
 /** wei -> 0x hex quantity for an RPC field. */
-export const toQuantity = (v) => '0x' + BigInt(v).toString(16);
+export const toQuantity = (v) => "0x" + BigInt(v).toString(16);
 
 /** Parse an RPC quantity ('0xb63a...') to a Number. Throws on garbage. */
 export function fromQuantity(h) {
-  if (h === null || h === undefined) throw new WalletError('bad-chain', 'provider returned no chain id');
+  if (h === null || h === undefined)
+    throw new WalletError("bad-chain", "provider returned no chain id");
   return Number(BigInt(h));
 }
 
@@ -145,14 +147,17 @@ export const MAX_TIER_DEFAULT = 5;
 
 export function checkTier(tier, maxTier = MAX_TIER_DEFAULT) {
   const range = `1..${maxTier}`;
-  if (typeof tier !== 'number' || !Number.isInteger(tier)) {
+  if (typeof tier !== "number" || !Number.isInteger(tier)) {
     throw new WalletError(
-      'tier-out-of-range',
-      `buyTool: tier must be an integer ${range}, got ${typeof tier === 'string' ? `"${tier}"` : String(tier)}`,
+      "tier-out-of-range",
+      `buyTool: tier must be an integer ${range}, got ${typeof tier === "string" ? `"${tier}"` : String(tier)}`,
     );
   }
   if (tier < 1 || tier > maxTier) {
-    throw new WalletError('tier-out-of-range', `buyTool: tier must be ${range}, got ${tier}`);
+    throw new WalletError(
+      "tier-out-of-range",
+      `buyTool: tier must be ${range}, got ${tier}`,
+    );
   }
   return tier;
 }
@@ -163,10 +168,15 @@ export function checkTier(tier, maxTier = MAX_TIER_DEFAULT) {
  * not a discount.
  */
 export function checkSkill(level) {
-  if (typeof level !== 'number' || !Number.isInteger(level) || level < 1 || level > 4) {
+  if (
+    typeof level !== "number" ||
+    !Number.isInteger(level) ||
+    level < 1 ||
+    level > 4
+  ) {
     throw new WalletError(
-      'skill-out-of-range',
-      `upgradeSkill: level must be an integer 1..4, got ${typeof level === 'string' ? `"${level}"` : String(level)}`,
+      "skill-out-of-range",
+      `upgradeSkill: level must be an integer 1..4, got ${typeof level === "string" ? `"${level}"` : String(level)}`,
     );
   }
   return level;
@@ -180,20 +190,31 @@ export function checkSkill(level) {
  * rarity a player holds is theirs to cash out.
  */
 export function checkRedeem(rarity, count) {
-  if (typeof rarity !== 'number' || !Number.isInteger(rarity) || rarity < 0 || rarity > 4) {
+  if (
+    typeof rarity !== "number" ||
+    !Number.isInteger(rarity) ||
+    rarity < 0 ||
+    rarity > 4
+  ) {
     throw new WalletError(
-      'rarity-out-of-range',
-      `redeemGems: rarity must be an integer 0..4, got ${typeof rarity === 'string' ? `"${rarity}"` : String(rarity)}`,
+      "rarity-out-of-range",
+      `redeemGems: rarity must be an integer 0..4, got ${typeof rarity === "string" ? `"${rarity}"` : String(rarity)}`,
     );
   }
   let n;
   try {
     n = BigInt(count);
   } catch {
-    throw new WalletError('zero-amount', `redeemGems: count must be an integer, got ${String(count)}`);
+    throw new WalletError(
+      "zero-amount",
+      `redeemGems: count must be an integer, got ${String(count)}`,
+    );
   }
   if (n <= 0n) {
-    throw new WalletError('zero-amount', `redeemGems: count must be > 0, got ${String(count)}`);
+    throw new WalletError(
+      "zero-amount",
+      `redeemGems: count must be > 0, got ${String(count)}`,
+    );
   }
   return { rarity, count: n };
 }
@@ -220,7 +241,7 @@ export function checkRedeem(rarity, count) {
  */
 export function calldataBuyTool(tier) {
   const t = checkTier(tier);
-  return sel('buyTool(uint8)').slice(2) + encUint8(t);
+  return sel("buyTool(uint8)").slice(2) + encUint8(t);
 }
 
 /**
@@ -232,7 +253,7 @@ export function calldataBuyTool(tier) {
  * above zero, so the button must be disabled unless the tool is broken.
  */
 export function calldataRepairTool() {
-  return sel('repairTool()').slice(2);
+  return sel("repairTool()").slice(2);
 }
 
 /**
@@ -247,7 +268,7 @@ export function calldataRepairTool() {
  */
 export function calldataUpgradeSkill(level) {
   const n = checkSkill(level);
-  return sel('upgradeSkill(uint8)').slice(2) + encUint8(n);
+  return sel("upgradeSkill(uint8)").slice(2) + encUint8(n);
 }
 
 /**
@@ -262,7 +283,9 @@ export function calldataUpgradeSkill(level) {
  */
 export function calldataRedeemGems(rarity, count) {
   const { rarity: r, count: n } = checkRedeem(rarity, count);
-  return sel('redeemGems(uint8,uint256)').slice(2) + encUint8(r) + encUint256(n);
+  return (
+    sel("redeemGems(uint8,uint256)").slice(2) + encUint8(r) + encUint256(n)
+  );
 }
 
 /**
@@ -288,26 +311,109 @@ export function calldataRedeemGems(rarity, count) {
  */
 export function calldataSettleHunt(player, tier, counts, bestSingleWei) {
   if (!Array.isArray(counts) || counts.length !== 5) {
-    const e = new Error('counts must be an array of exactly 5 rarity counts');
-    e.code = 'bad-arg';
+    const e = new Error("counts must be an array of exactly 5 rarity counts");
+    e.code = "bad-arg";
     throw e;
   }
   const t = checkTier(tier);
-  let head = sel('settleHunt(address,uint8,uint256[5],uint256,bytes)').slice(2);
+  let head = sel("settleHunt(address,uint8,uint256[5],uint256,bytes)").slice(2);
   head += encAddress(player);
   head += encUint8(t);
   for (const c of counts) head += encUint256(c);
   head += encUint256(bestSingleWei);
   // Offset to the bytes payload. The head is 9 slots (player, tier, 5 counts,
   // best, this offset), so the tail -- the bytes length word -- starts at 0x120.
-  head += encUint(9n * 32n, 256, 'uint256');
-  head += encUint(0n, 256, 'uint256'); // its length -- empty, and ignored
+  head += encUint(9n * 32n, 256, "uint256");
+  head += encUint(0n, 256, "uint256"); // its length -- empty, and ignored
   return head;
+}
+
+/**
+ * `settleBatch(address,uint8,uint256[5][],uint256[])` -- V3 batch settle.
+ *
+ * Layout (all offsets relative to the START OF THE ARG BLOCK, i.e. after the
+ * 4-byte selector):
+ *   head:  player(32) tier(32) offsetA(32) offsetB(32)   -> 4 slots
+ *   tail A at 0x80:  length(32) then N pointers, each to a 6-word hunt
+ *                    (5 inlined counts + bestSingleWei)
+ *   tail B:          length(32) then N uint256 bests
+ *
+ * Each uint256[5] is FIXED-SIZE, so inside the outer array the five counts are
+ * inlined and NOT behind a pointer -- only the OUTER array is dynamic. Getting
+ * this wrong is silent: the tx reverts ResultMismatch at best, or worse the
+ * first hunt's counts are read as offsets and the whole thing decodes to
+ * nonsense. Hence the byte-exact test that round-trips this against the
+ * foundry harness.
+ *
+ * @param {string} player  the settling player's address (must be you)
+ * @param {number} tier    1..4
+ * @param {Array<(bigint|number)[]>} batch  N hunt results, each five counts
+ *                                          from previewHuntAt, in dig order
+ * @param {(bigint|number)[]} bests  N bestSingleWei values, same order
+ */
+export function calldataSettleBatch(player, tier, batch, bests) {
+  const t = checkTier(tier);
+  if (!Array.isArray(batch) || batch.length === 0) {
+    throw new WalletError(
+      "bad-arg",
+      "batch must be a non-empty array of hunts",
+    );
+  }
+  if (!Array.isArray(bests) || bests.length !== batch.length) {
+    throw new WalletError(
+      "bad-arg",
+      `bests must match batch length (${batch.length})`,
+    );
+  }
+  if (batch.length > 20) {
+    throw new WalletError(
+      "bad-arg",
+      `batch of ${batch.length} exceeds the contract cap (20)`,
+    );
+  }
+  for (const counts of batch) {
+    if (!Array.isArray(counts) || counts.length !== 5) {
+      throw new WalletError(
+        "bad-arg",
+        "each hunt must be an array of exactly 5 rarity counts",
+      );
+    }
+  }
+
+  const n = batch.length;
+  const headWords = 4; // player, tier, offsetA, offsetB
+  // Tail A starts right after the head. Solidity's canonical ABI encoding for
+  // a DYNAMIC array of STATIC element types (uint256[5]) lays the elements
+  // INLINE after the length word -- there is NO per-element pointer array.
+  // (The first version of this encoder emitted pointers, matching the rule
+  // for dynamic arrays of DYNAMIC types; the contract decoded pointers as
+  // gem counts and reverted ResultMismatch. Proven by byte-diffing against
+  // `cast calldata` and dry-running both encodings on anvil: cast's passed,
+  // the pointer layout reverted.)
+  const tailAOffset = headWords * 32;
+  const tailBOffset = tailAOffset + 32 + n * 5 * 32;
+
+  let out = sel("settleBatch(address,uint8,uint256[5][],uint256[])").slice(2);
+  out += encAddress(player);
+  out += encUint8(t);
+  out += encUint256(tailAOffset);
+  out += encUint256(tailBOffset);
+
+  // --- tail A: uint256[5][] -- length, then the elements inline ---
+  out += encUint256(n);
+  for (let i = 0; i < n; i++) {
+    for (const c of batch[i]) out += encUint256(c);
+  }
+
+  // --- tail B: uint256[] bests ---
+  out += encUint256(n);
+  for (const b of bests) out += encUint256(b);
+  return out;
 }
 
 /** The 4-byte selector of a bare-hex calldata blob. */
 export function decodeHeader(data) {
-  return '0x' + String(data).replace(/^0x/, '').slice(0, 8);
+  return "0x" + String(data).replace(/^0x/, "").slice(0, 8);
 }
 
 // --- provider + state ------------------------------------------------------
@@ -332,7 +438,7 @@ export function resetWallet() {
 export function getProvider(explicit) {
   if (explicit) return explicit;
   if (state.provider) return state.provider;
-  if (typeof window === 'undefined') return null;
+  if (typeof window === "undefined") return null;
   return window.ethereum ?? null;
 }
 
@@ -356,7 +462,7 @@ export function getState() {
   const rightChain = chainId === GAME_CHAIN_ID;
   const connected = Boolean(account) && rightChain;
   let reason = null;
-  if (!account) reason = 'not-connected';
+  if (!account) reason = "not-connected";
   else if (!rightChain) reason = `wrong-chain:${chainId}`;
   return { account, chainId, rightChain, connected, reason };
 }
@@ -385,7 +491,7 @@ function emit(event) {
     } catch (e) {
       // A listener that throws must not stop the others or wedge the
       // provider callbacks, so the failure is reported and swallowed.
-      console.error('wallet listener failed', e);
+      console.error("wallet listener failed", e);
     }
   }
 }
@@ -400,17 +506,18 @@ function emit(event) {
  */
 export function installListeners(provider) {
   const p = getProvider(provider);
-  if (!p || typeof p.on !== 'function') return false;
+  if (!p || typeof p.on !== "function") return false;
   if (state.wired && state.provider === p) return true;
   state.provider = p;
   state.wired = true;
-  p.on('accountsChanged', (accounts) => {
-    const next = Array.isArray(accounts) && accounts.length ? accounts[0] : null;
+  p.on("accountsChanged", (accounts) => {
+    const next =
+      Array.isArray(accounts) && accounts.length ? accounts[0] : null;
     const changed = next !== state.account;
     state.account = next;
-    if (changed) emit(next ? 'accounts' : 'disconnect');
+    if (changed) emit(next ? "accounts" : "disconnect");
   });
-  p.on('chainChanged', (hex) => {
+  p.on("chainChanged", (hex) => {
     let id = null;
     try {
       id = fromQuantity(hex);
@@ -419,21 +526,21 @@ export function installListeners(provider) {
     }
     const changed = id !== state.chainId;
     state.chainId = id;
-    if (changed) emit('chain');
+    if (changed) emit("chain");
   });
-  p.on('disconnect', () => {
+  p.on("disconnect", () => {
     state.account = null;
-    emit('disconnect');
+    emit("disconnect");
   });
   return true;
 }
 
 /** Map a provider rejection to a stable code. EIP-1193 code 4001 = user. */
 function errCode(e) {
-  if (e && e.code === 4001) return 'rejected';
-  if (e && e.code === 4902) return 'chain-unknown';
-  if (e && e.code === -32002) return 'request-pending';
-  return 'provider-error';
+  if (e && e.code === 4001) return "rejected";
+  if (e && e.code === 4902) return "chain-unknown";
+  if (e && e.code === -32002) return "request-pending";
+  return "provider-error";
 }
 
 // --- connect ---------------------------------------------------------------
@@ -453,37 +560,42 @@ function errCode(e) {
  */
 export async function connect({ provider, silent = false } = {}) {
   const p = getProvider(provider);
-  if (!p || typeof p.request !== 'function') {
+  if (!p || typeof p.request !== "function") {
     return {
       ok: false,
-      code: 'no-provider',
-      reason: 'no EIP-1193 wallet found (window.ethereum). Install one, or use a dApp browser.',
+      code: "no-provider",
+      reason:
+        "no EIP-1193 wallet found (window.ethereum). Install one, or use a dApp browser.",
     };
   }
   state.provider = p;
 
   try {
     const accounts = silent
-      ? await p.request({ method: 'eth_accounts' })
-      : await p.request({ method: 'eth_requestAccounts' });
+      ? await p.request({ method: "eth_accounts" })
+      : await p.request({ method: "eth_requestAccounts" });
     if (!Array.isArray(accounts) || accounts.length === 0) {
       state.account = null;
-      return { ok: false, code: 'no-accounts', reason: 'wallet returned no accounts' };
+      return {
+        ok: false,
+        code: "no-accounts",
+        reason: "wallet returned no accounts",
+      };
     }
-    const chainId = fromQuantity(await p.request({ method: 'eth_chainId' }));
+    const chainId = fromQuantity(await p.request({ method: "eth_chainId" }));
     state.account = accounts[0];
     state.chainId = chainId;
     installListeners(p);
 
     const rightChain = chainId === GAME_CHAIN_ID;
     const snap = getState();
-    emit(rightChain ? 'connected' : 'chain');
+    emit(rightChain ? "connected" : "chain");
     if (!rightChain) {
       // Hard error, same stance as live.js's chain-mismatch guard: the
       // account is real but nothing it signs may touch the game contract.
       return {
         ok: false,
-        code: 'wrong-chain',
+        code: "wrong-chain",
         reason: `wallet is on chain ${chainId}, game is on ${GAME_CHAIN_ID}`,
         account: accounts[0],
         chainId,
@@ -497,7 +609,10 @@ export async function connect({ provider, silent = false } = {}) {
     return {
       ok: false,
       code,
-      reason: code === 'rejected' ? 'connection rejected in the wallet' : String(e?.message || e),
+      reason:
+        code === "rejected"
+          ? "connection rejected in the wallet"
+          : String(e?.message || e),
     };
   }
 }
@@ -513,43 +628,59 @@ export async function connect({ provider, silent = false } = {}) {
  */
 export async function switchToGameChain({ provider } = {}) {
   const p = getProvider(provider);
-  if (!p || typeof p.request !== 'function') {
-    return { ok: false, code: 'no-provider', reason: 'no EIP-1193 wallet found (window.ethereum)' };
+  if (!p || typeof p.request !== "function") {
+    return {
+      ok: false,
+      code: "no-provider",
+      reason: "no EIP-1193 wallet found (window.ethereum)",
+    };
   }
   const target = toQuantity(GAME_CHAIN_ID);
   const params = {
     chainId: target,
-    chainName: 'Robinhood Chain Testnet',
-    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+    chainName: "Robinhood Chain Testnet",
+    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
     rpcUrls: [config.rpcUrl],
   };
 
   try {
-    await p.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: target }] });
+    await p.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: target }],
+    });
   } catch (e) {
-    if (errCode(e) !== 'chain-unknown') {
+    if (errCode(e) !== "chain-unknown") {
       const code = errCode(e);
       return {
         ok: false,
         code,
-        reason: code === 'rejected' ? 'chain switch rejected in the wallet' : String(e?.message || e),
+        reason:
+          code === "rejected"
+            ? "chain switch rejected in the wallet"
+            : String(e?.message || e),
       };
     }
     try {
-      await p.request({ method: 'wallet_addEthereumChain', params: [params] });
+      await p.request({ method: "wallet_addEthereumChain", params: [params] });
       // RETRY the switch. Adding a chain and switching to it are two separate
       // operations, and wallets differ: some auto-select a freshly added chain,
       // some leave the wallet where it was. Without this retry the et_chainId
       // check below reports 'wrong-chain' and the player is stuck staring at a
       // chain they just added. The doc comment promised this retry; the code
       // never did it.
-      await p.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: target }] });
+      await p.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: target }],
+      });
     } catch (e2) {
       const code = errCode(e2);
       return {
         ok: false,
         code,
-        reason: code === 'rejected' ? 'chain add rejected in the wallet' : String(e2?.message || e2),
+        reason:
+          code === "rejected"
+            ? "chain add rejected in the wallet"
+            : String(e2?.message || e2),
       };
     }
   }
@@ -557,21 +688,21 @@ export async function switchToGameChain({ provider } = {}) {
   // The provider is the authority on where the wallet ended up -- do not
   // assume the switch took, and do not assume our cached chain id is stale-free.
   try {
-    const chainId = fromQuantity(await p.request({ method: 'eth_chainId' }));
+    const chainId = fromQuantity(await p.request({ method: "eth_chainId" }));
     state.chainId = chainId;
     const rightChain = chainId === GAME_CHAIN_ID;
-    if (state.account) emit('chain');
+    if (state.account) emit("chain");
     if (!rightChain) {
       return {
         ok: false,
-        code: 'wrong-chain',
+        code: "wrong-chain",
         reason: `wallet reports chain ${chainId} after switching, expected ${GAME_CHAIN_ID}`,
         chainId,
       };
     }
     return { ok: true, chainId, ...getState() };
   } catch (e) {
-    return { ok: false, code: 'bad-chain', reason: String(e?.message || e) };
+    return { ok: false, code: "bad-chain", reason: String(e?.message || e) };
   }
 }
 
@@ -580,21 +711,29 @@ export async function switchToGameChain({ provider } = {}) {
 /** Common preconditions for a write. Returns null when ready. */
 function notReady() {
   const p = getProvider();
-  if (!p || typeof p.request !== 'function') {
-    return { ok: false, code: 'no-provider', reason: 'connect a wallet first' };
+  if (!p || typeof p.request !== "function") {
+    return { ok: false, code: "no-provider", reason: "connect a wallet first" };
   }
   if (!state.account) {
-    return { ok: false, code: 'not-connected', reason: 'connect a wallet first' };
+    return {
+      ok: false,
+      code: "not-connected",
+      reason: "connect a wallet first",
+    };
   }
   if (state.chainId !== GAME_CHAIN_ID) {
     return {
       ok: false,
-      code: 'wrong-chain',
+      code: "wrong-chain",
       reason: `wallet is on chain ${state.chainId}, game is on ${GAME_CHAIN_ID}`,
     };
   }
   if (!config.gameAddress) {
-    return { ok: false, code: 'not-configured', reason: 'GAME_ADDRESS not set - nothing to send to' };
+    return {
+      ok: false,
+      code: "not-configured",
+      reason: "GAME_ADDRESS not set - nothing to send to",
+    };
   }
   return null;
 }
@@ -603,17 +742,23 @@ function notReady() {
 async function send(data, { valueWei } = {}) {
   const blocked = notReady();
   if (blocked) return blocked;
-  const tx = { from: state.account, to: config.gameAddress, data: '0x' + data };
+  const tx = { from: state.account, to: config.gameAddress, data: "0x" + data };
   if (valueWei !== undefined) tx.value = toQuantity(valueWei);
   try {
-    const hash = await getProvider().request({ method: 'eth_sendTransaction', params: [tx] });
+    const hash = await getProvider().request({
+      method: "eth_sendTransaction",
+      params: [tx],
+    });
     return { ok: true, hash, from: state.account, to: config.gameAddress, tx };
   } catch (e) {
     const code = errCode(e);
     return {
       ok: false,
       code,
-      reason: code === 'rejected' ? 'transaction rejected in the wallet' : String(e?.message || e),
+      reason:
+        code === "rejected"
+          ? "transaction rejected in the wallet"
+          : String(e?.message || e),
     };
   }
 }
@@ -633,7 +778,7 @@ export async function buyTool(tier, { valueWei } = {}) {
   try {
     data = calldataBuyTool(tier);
   } catch (e) {
-    return { ok: false, code: e.code || 'bad-arg', reason: e.message };
+    return { ok: false, code: e.code || "bad-arg", reason: e.message };
   }
   // A missing value must be caught HERE, not on chain. The contract reverts
   // Underpaid(cost, msg.value), so sending zero would open the wallet, get the
@@ -643,18 +788,27 @@ export async function buyTool(tier, { valueWei } = {}) {
   if (valueWei === undefined || valueWei === null) {
     return {
       ok: false,
-      code: 'bad-arg',
-      reason: 'buyTool needs { valueWei } -- read toolCost(tier) from the chain, it is payable',
+      code: "bad-arg",
+      reason:
+        "buyTool needs { valueWei } -- read toolCost(tier) from the chain, it is payable",
     };
   }
   let value;
   try {
     value = BigInt(valueWei);
   } catch {
-    return { ok: false, code: 'bad-arg', reason: `valueWei is not an integer: ${String(valueWei)}` };
+    return {
+      ok: false,
+      code: "bad-arg",
+      reason: `valueWei is not an integer: ${String(valueWei)}`,
+    };
   }
   if (value < 0n) {
-    return { ok: false, code: 'bad-arg', reason: `valueWei must be >= 0, got ${value}` };
+    return {
+      ok: false,
+      code: "bad-arg",
+      reason: `valueWei must be >= 0, got ${value}`,
+    };
   }
   return send(data, { valueWei: value });
 }
@@ -665,7 +819,7 @@ export async function repairTool() {
   try {
     data = calldataRepairTool();
   } catch (e) {
-    return { ok: false, code: e.code || 'bad-arg', reason: e.message };
+    return { ok: false, code: e.code || "bad-arg", reason: e.message };
   }
   return send(data);
 }
@@ -676,7 +830,7 @@ export async function upgradeSkill(level) {
   try {
     data = calldataUpgradeSkill(level);
   } catch (e) {
-    return { ok: false, code: e.code || 'bad-arg', reason: e.message };
+    return { ok: false, code: e.code || "bad-arg", reason: e.message };
   }
   return send(data);
 }
@@ -687,7 +841,7 @@ export async function redeemGems(rarity, count) {
   try {
     data = calldataRedeemGems(rarity, count);
   } catch (e) {
-    return { ok: false, code: e.code || 'bad-arg', reason: e.message };
+    return { ok: false, code: e.code || "bad-arg", reason: e.message };
   }
   return send(data);
 }
@@ -709,7 +863,24 @@ export async function settleHunt({ player, tier, counts, bestSingleWei }) {
   try {
     data = calldataSettleHunt(player, tier, counts, bestSingleWei);
   } catch (e) {
-    return { ok: false, code: e.code || 'bad-arg', reason: e.message };
+    return { ok: false, code: e.code || "bad-arg", reason: e.message };
+  }
+  return send(data);
+}
+
+/**
+ * settleBatch -- the ONE write that settles a whole queued session. Called
+ * only from the SETTLE button; nothing else in the client may invoke it, so
+ * no gameplay action can ever pop a wallet prompt on its own.
+ *
+ * @param {{player:string, tier:number, batch:(bigint|number)[][], bests:(bigint|number)[]}} args
+ */
+export async function settleBatch({ player, tier, batch, bests }) {
+  let data;
+  try {
+    data = calldataSettleBatch(player, tier, batch, bests);
+  } catch (e) {
+    return { ok: false, code: e.code || "bad-arg", reason: e.message };
   }
   return send(data);
 }

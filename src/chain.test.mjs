@@ -12,7 +12,7 @@
  *
  * Runs in two modes:
  *   - always      : static checks against the V2 artifact
- *                      (out/DeepWoodV2.sol/DeepWoodV2.json -- this pointed at
+ *                      (out/DeepWoodV3.sol/DeepWoodV3.json -- this pointed at
  *                      V1 until the V2 cutover, so it was auditing a contract
  *                      the client no longer talks to)
  *   - with RPC    : full runtime read via DW_RPC + DW_CONTRACT
@@ -27,8 +27,8 @@ import * as season from './season.js';
 import { SIGS } from './chain.js';
 
 const require = createRequire(import.meta.url);
-const ART = '/home/administrator/gem-hunter/out/DeepWoodV2.sol/DeepWoodV2.json';
-const SOL = '/home/administrator/gem-hunter/src/DeepWoodV2.sol';
+const ART = '/home/administrator/gem-hunter/out/DeepWoodV3.sol/DeepWoodV3.json';
+const SOL = '/home/administrator/gem-hunter/src/DeepWoodV3.sol';
 
 let pass = 0;
 let fail = 0;

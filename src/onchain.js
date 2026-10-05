@@ -28,10 +28,10 @@ import {
   upgradeSkill as wUpgradeSkill,
   redeemGems as wRedeemGems,
   settleHunt as wSettleHunt,
-} from './wallet.js';
-import { rpcCall } from './rpc.js';
-import { connect as readConnect } from './chain.js';
-import { config } from './config.js';
+} from "./wallet.js";
+import { rpcCall } from "./rpc.js";
+import { connect as readConnect } from "./chain.js";
+import { config } from "./config.js";
 
 /** Rarities the contract sells. Rare+ are hunt-only and revert. */
 // V1 sold gems for Common/Uncommon only. V2 has no gem SHOP at all: gems are
@@ -40,7 +40,11 @@ import { config } from './config.js';
 // five-slot shape.
 export const ALL_RARITIES = [0, 1, 2, 3, 4];
 export const RARITY_NAMES = {
-  0: 'Quartz', 1: 'Amber', 2: 'Sapphire', 3: 'Ruby', 4: 'Diamond',
+  0: "Quartz",
+  1: "Amber",
+  2: "Sapphire",
+  3: "Ruby",
+  4: "Diamond",
 };
 
 const POLL_INTERVAL_MS = 1200;
@@ -111,7 +115,7 @@ export async function getReader() {
  * reading a balance themselves.
  */
 export async function walletBalanceWeiOnchain() {
-  const { getState } = await import('./wallet.js');
+  const { getState } = await import("./wallet.js");
   const { account } = getState();
   if (!config.rpcUrl || !account) return null;
   try {
@@ -119,7 +123,9 @@ export async function walletBalanceWeiOnchain() {
     // balance is a WRONG answer, not a failed one, so it must not be believed.
     // A balance is a 32-byte word, so anything shorter than 64 hex chars
     // (the 0x excluded) is implausible and worth retrying elsewhere.
-    const hex = await rpcCall('eth_getBalance', [account, 'latest'], { minHexChars: 64 });
+    const hex = await rpcCall("eth_getBalance", [account, "latest"], {
+      minHexChars: 64,
+    });
     if (!hex) return null;
     return BigInt(hex);
   } catch {
@@ -135,8 +141,8 @@ export function onchainActive() {
 
 /** How the UI should describe itself right now. */
 export function mode() {
-  if (!config.gameAddress) return 'offline';
-  return onchainActive() ? 'onchain' : 'preview';
+  if (!config.gameAddress) return "offline";
+  return onchainActive() ? "onchain" : "preview";
 }
 
 /**
@@ -156,18 +162,29 @@ export function mode() {
  */
 export async function buyToolOnchain(tier, costWei) {
   const r = await getReader();
-  if (!r) return fail('not-configured', 'GAME_ADDRESS not set - no contract to write to');
+  if (!r)
+    return fail(
+      "not-configured",
+      "GAME_ADDRESS not set - no contract to write to",
+    );
   if (costWei === undefined || costWei === null) {
     // Never guess a price. Reading it live is one call; inventing it sends the
     // player to sign a transaction the chain will reject with Underpaid.
-    return fail('bad-arg', 'buyToolOnchain needs { costWei } from toolCost(tier)');
+    return fail(
+      "bad-arg",
+      "buyToolOnchain needs { costWei } from toolCost(tier)",
+    );
   }
 
   const { account } = getState();
   const before = await r.toolOf(account);
 
   const sent = await wBuyTool(tier, { valueWei: costWei });
-  if (!sent.ok) return fail(sent.code || 'send-failed', sent.reason || 'transaction was not sent');
+  if (!sent.ok)
+    return fail(
+      sent.code || "send-failed",
+      sent.reason || "transaction was not sent",
+    );
 
   const after = await pollUntilChanged(
     () => r.toolOf(account),
@@ -178,10 +195,16 @@ export async function buyToolOnchain(tier, costWei) {
   if (!after.changed) {
     // The tx was broadcast but the contract never applied it: it reverted. A
     // duplicate buy, a skipped tier, or a wrong value all land here.
-    return fail('reverted', 'contract did not apply the purchase (it reverted) - nothing granted');
+    return fail(
+      "reverted",
+      "contract did not apply the purchase (it reverted) - nothing granted",
+    );
   }
   if (after.value.tier !== tier) {
-    return fail('wrong-tier', `bought tier ${tier} but the chain holds tier ${after.value.tier}`);
+    return fail(
+      "wrong-tier",
+      `bought tier ${tier} but the chain holds tier ${after.value.tier}`,
+    );
   }
 
   return {
@@ -207,7 +230,11 @@ export async function buyToolOnchain(tier, costWei) {
  */
 export async function repairToolOnchain() {
   const r = await getReader();
-  if (!r) return fail('not-configured', 'GAME_ADDRESS not set - no contract to write to');
+  if (!r)
+    return fail(
+      "not-configured",
+      "GAME_ADDRESS not set - no contract to write to",
+    );
 
   const { account } = getState();
   const before = await r.toolOf(account);
@@ -215,11 +242,16 @@ export async function repairToolOnchain() {
   // Refuse locally rather than paying gas to be told: the contract reverts
   // NotBroken when durability is above zero, and ToolNotOwned when there is no
   // tool at all. Both are states the button can see coming.
-  if (before.tier === 0) return fail('no-tool', 'you do not own a tool yet');
-  if (!before.broken) return fail('not-broken', 'the tool is not broken - no repair needed');
+  if (before.tier === 0) return fail("no-tool", "you do not own a tool yet");
+  if (!before.broken)
+    return fail("not-broken", "the tool is not broken - no repair needed");
 
   const sent = await wRepairTool();
-  if (!sent.ok) return fail(sent.code || 'send-failed', sent.reason || 'transaction was not sent');
+  if (!sent.ok)
+    return fail(
+      sent.code || "send-failed",
+      sent.reason || "transaction was not sent",
+    );
 
   const after = await pollUntilChanged(
     () => r.toolOf(account),
@@ -228,10 +260,18 @@ export async function repairToolOnchain() {
   );
 
   if (!after.changed) {
-    return fail('reverted', 'contract did not apply the repair (it reverted) - gems not burned');
+    return fail(
+      "reverted",
+      "contract did not apply the repair (it reverted) - gems not burned",
+    );
   }
 
-  return { ok: true, hash: sent.hash, confirmed: true, durability: after.value.durability };
+  return {
+    ok: true,
+    hash: sent.hash,
+    confirmed: true,
+    durability: after.value.durability,
+  };
 }
 
 /**
@@ -245,18 +285,29 @@ export async function repairToolOnchain() {
  */
 export async function upgradeSkillOnchain(level, currentSkill) {
   const r = await getReader();
-  if (!r) return fail('not-configured', 'GAME_ADDRESS not set - no contract to write to');
+  if (!r)
+    return fail(
+      "not-configured",
+      "GAME_ADDRESS not set - no contract to write to",
+    );
   if (currentSkill !== undefined && level !== currentSkill + 1) {
     // Caught before the wallet opens. The contract's own guard is
     // RarityLocked, but paying gas to be told you skipped a level is silly.
-    return fail('skill-not-next', `skill must go ${currentSkill + 1}, not ${level}`);
+    return fail(
+      "skill-not-next",
+      `skill must go ${currentSkill + 1}, not ${level}`,
+    );
   }
 
   const { account } = getState();
   const before = await r.skillOf(account);
 
   const sent = await wUpgradeSkill(level);
-  if (!sent.ok) return fail(sent.code || 'send-failed', sent.reason || 'transaction was not sent');
+  if (!sent.ok)
+    return fail(
+      sent.code || "send-failed",
+      sent.reason || "transaction was not sent",
+    );
 
   const after = await pollUntilChanged(
     () => r.skillOf(account),
@@ -265,10 +316,16 @@ export async function upgradeSkillOnchain(level, currentSkill) {
   );
 
   if (!after.changed) {
-    return fail('reverted', 'contract did not apply the skill (it reverted) - gems not spent');
+    return fail(
+      "reverted",
+      "contract did not apply the skill (it reverted) - gems not spent",
+    );
   }
   if (after.value !== level) {
-    return fail('wrong-level', `asked for skill ${level} but the chain reads ${after.value}`);
+    return fail(
+      "wrong-level",
+      `asked for skill ${level} but the chain reads ${after.value}`,
+    );
   }
 
   return { ok: true, hash: sent.hash, confirmed: true, skill: after.value };
@@ -288,29 +345,40 @@ export async function upgradeSkillOnchain(level, currentSkill) {
  */
 export async function redeemGemsOnchain(rarity, count) {
   const r = await getReader();
-  if (!r) return fail('not-configured', 'GAME_ADDRESS not set - no contract to write to');
+  if (!r)
+    return fail(
+      "not-configured",
+      "GAME_ADDRESS not set - no contract to write to",
+    );
   if (!Number.isInteger(count) || count <= 0) {
-    return fail('bad-arg', `count must be a positive integer, got ${count}`);
+    return fail("bad-arg", `count must be a positive integer, got ${count}`);
   }
 
   const { account } = getState();
   const before = await r.gemsOf(account, rarity);
 
   if (before < BigInt(count)) {
-    return fail('insufficient-gems', `you hold ${before}, cannot redeem ${count}`);
+    return fail(
+      "insufficient-gems",
+      `you hold ${before}, cannot redeem ${count}`,
+    );
   }
 
   // Quote first: the floor is a real rejection, not a formality.
   const [payout, aboveFloor] = await r.redeemQuote(rarity, count);
   if (!aboveFloor) {
     return fail(
-      'below-floor',
-      `that redeems for ${payout} wei, below the ${r.minRedeemWei?.() ?? 'minimum'} minimum`,
+      "below-floor",
+      `that redeems for ${payout} wei, below the ${r.minRedeemWei?.() ?? "minimum"} minimum`,
     );
   }
 
   const sent = await wRedeemGems(rarity, count);
-  if (!sent.ok) return fail(sent.code || 'send-failed', sent.reason || 'transaction was not sent');
+  if (!sent.ok)
+    return fail(
+      sent.code || "send-failed",
+      sent.reason || "transaction was not sent",
+    );
 
   const after = await pollUntilChanged(
     () => r.gemsOf(account, rarity),
@@ -319,7 +387,10 @@ export async function redeemGemsOnchain(rarity, count) {
   );
 
   if (!after.changed) {
-    return fail('reverted', 'contract did not apply the redemption (it reverted) - gems not spent');
+    return fail(
+      "reverted",
+      "contract did not apply the redemption (it reverted) - gems not spent",
+    );
   }
 
   return {
@@ -350,7 +421,11 @@ export async function redeemGemsOnchain(rarity, count) {
  */
 export async function settleHuntOnchain(tier) {
   const r = await getReader();
-  if (!r) return fail('not-configured', 'GAME_ADDRESS not set - no contract to write to');
+  if (!r)
+    return fail(
+      "not-configured",
+      "GAME_ADDRESS not set - no contract to write to",
+    );
 
   const { account } = getState();
 
@@ -360,17 +435,20 @@ export async function settleHuntOnchain(tier) {
   try {
     season = await r.current();
   } catch {
-    return fail('read-failed', 'could not read the current season');
+    return fail("read-failed", "could not read the current season");
   }
   if (!season.seedCommitted) {
-    return fail('no-seed', 'this season has no committed seed yet, so hunts cannot be settled');
+    return fail(
+      "no-seed",
+      "this season has no committed seed yet, so hunts cannot be settled",
+    );
   }
 
   let preview;
   try {
     preview = await r.previewHunt(account, tier);
   } catch (e) {
-    return fail('read-failed', `could not preview the hunt: ${e.message}`);
+    return fail("read-failed", `could not preview the hunt: ${e.message}`);
   }
 
   const before = await r.huntIndexOf(account);
@@ -380,7 +458,11 @@ export async function settleHuntOnchain(tier) {
     counts: preview.counts,
     bestSingleWei: preview.bestSingleWei,
   });
-  if (!sent.ok) return fail(sent.code || 'send-failed', sent.reason || 'transaction was not sent');
+  if (!sent.ok)
+    return fail(
+      sent.code || "send-failed",
+      sent.reason || "transaction was not sent",
+    );
 
   const after = await pollUntilChanged(
     () => r.huntIndexOf(account),
@@ -390,7 +472,10 @@ export async function settleHuntOnchain(tier) {
   if (!after.changed) {
     // Same shape as the other writes: a receipt here proves nothing. On 46630 a
     // reverted call still yields status 0x1.
-    return fail('reverted', 'contract did not apply the settlement (it reverted) - find not credited');
+    return fail(
+      "reverted",
+      "contract did not apply the settlement (it reverted) - find not credited",
+    );
   }
 
   return {
@@ -421,6 +506,101 @@ export async function previewHuntFor(tier) {
   } catch {
     return null;
   }
+}
+
+/**
+ * The chain's authorized result for the hunt `offset` digs from now -- the
+ * roll settleBatch will recompute and accept for hunt index
+ * huntIndexOf(player)+offset. Free (eth_call): the whole batch is pre-rolled
+ * before the player has signed anything.
+ *
+ * null when unreadable; the caller shows nothing rather than a local guess,
+ * because a locally rolled find is exactly what the contract rejects.
+ */
+export async function previewHuntAtFor(tier, offset) {
+  const r = await getReader();
+  if (!r) return null;
+  const { account } = getState();
+  if (!account) return null;
+  try {
+    return await r.previewHuntAt(account, tier, offset);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Settle the whole queued session in ONE transaction. Invoked only by the
+ * SETTLE button -- never by gameplay.
+ *
+ * Same confirm discipline as settleHuntOnchain: huntIndexOf(player) must
+ * advance by exactly `n`, because on 46630 a receipt proves nothing. A
+ * short move means the batch reverted and NOTHING was credited -- the queue
+ * stays intact and the player can retry.
+ *
+ * @param {import('./queue.js').HuntQueue} queue
+ * @returns {Promise<{ok:boolean, settled?:number, hash?:string,
+ *                    code?:string, reason?:string}>}
+ */
+export async function settleBatchOnchain(queue) {
+  const r = await getReader();
+  if (!r)
+    return fail(
+      "not-configured",
+      "GAME_ADDRESS not set - no contract to write to",
+    );
+  if (queue.empty) return fail("empty", "nothing to settle");
+
+  const { account } = getState();
+  const { batch, bests } = queue.toCalldata();
+
+  // Refuse to open the wallet for a queue the contract is certain to reject:
+  // a moved hunt index means a settle happened underneath us, and a tier
+  // change means the queued rolls were computed against another tool.
+  let before;
+  try {
+    before = await r.huntIndexOf(account);
+  } catch {
+    return fail("read-failed", "could not read the hunt index");
+  }
+  if (queue.stale(before)) {
+    return fail(
+      "stale",
+      "the hunt index moved - another session settled first. Clear and re-dig.",
+    );
+  }
+
+  const { settleBatch: wSettleBatch } = await import("./wallet.js");
+  const sent = await wSettleBatch({
+    player: account,
+    tier: queue.tier,
+    batch,
+    bests,
+  });
+  if (!sent.ok)
+    return fail(
+      sent.code || "send-failed",
+      sent.reason || "transaction was not sent",
+    );
+
+  const after = await pollUntilChanged(
+    () => r.huntIndexOf(account),
+    before,
+    (b, a) => a >= b + BigInt(queue.size),
+  );
+  if (!after.changed) {
+    return fail(
+      "reverted",
+      "contract did not apply the batch (it reverted) - queue kept, retry or clear",
+    );
+  }
+
+  return {
+    ok: true,
+    hash: sent.hash,
+    confirmed: true,
+    settled: queue.size,
+  };
 }
 
 /** Read the on-chain price for a sellable rarity. null if unavailable. */

@@ -428,7 +428,7 @@ const prog = await page.evaluate(async () => {
     await new Promise((r) => setTimeout(r, 500));
     digs++;
   }
-  log('after_hunting', { digs, left: e.left, gems: e.gems.slice(), found: e.found.slice() });
+  log('after_hunting', { digs, left: e.left, gems: e.gems.slice() });
   log('broken_cannot_hunt', s._canHuntNow());
   log('repair_btn', btn('belt-repair')?.textContent.trim());
   // Clear the balance FIRST. Hunting accumulates gems, so by the time the tool
@@ -475,7 +475,7 @@ const prog = await page.evaluate(async () => {
   // BigInt has no .toFixed(). Divide to a Number first -- this is a display
   // value in a log line, not an accounting figure.
   log('after_sell', {
-    gems: e.gems.slice(), found: e.found.slice(),
+    gems: e.gems.slice(),
     balance: Number(s.simBalance) / 1e18,
   });
 
@@ -633,7 +633,6 @@ check('  and 0.005 ETH left the wallet', Math.abs(afterBuy.spent - 0.005) < 1e-1
   `${afterBuy.spent} ETH`);
 
 check('hunting credits gems', afterHunt.gems.some((n) => n > 0), `gems ${afterHunt.gems}`);
-check('  and the lifetime tally matches', afterHunt.found.some((n) => n > 0));
 check('a broken tool cannot hunt', val('broken_cannot_hunt') === false);
 // Label reads "fix 9Qtz" (short so three buttons fit one line); the title
 // carries "repair Wood for 9 Quartz".
@@ -669,8 +668,6 @@ check('selling above the floor is allowed', val('sell_above_floor_disabled') ===
 check('  the label shows the payout', /sell gems|^sell 0\.009/.test(val('sell_above_floor_label')),
   val('sell_above_floor_label'));
 check('  and it empties the balance', afterSell.gems.every((n) => n === 0), `gems ${afterSell.gems}`);
-check('  WITHOUT erasing the lifetime tally', afterSell.found.some((n) => n > 0),
-  `found ${afterSell.found}`);
 
 check('world y-sorts around the player', sorted.ok,
   sorted.ok ? 'player draws in front of trees below and behind trees above' : JSON.stringify(sorted));

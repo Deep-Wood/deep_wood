@@ -45,12 +45,14 @@ export const SIGS = {
   'huntIndexOf(address)': '0xac3ab04f',
   'lifetimeScore(address)': '0x4e018248',
   'markGraduated()': '0x79e7acda',
+  'MAX_BATCH()': '0x950bff9f',
   'MAX_BURN_FEE_BPS()': '0x7a03b624',
   'MAX_GRADUATION_GRACE()': '0x36ed74dd',
   'MAX_HUNT_COOLDOWN()': '0xb58b510c',
   'MAX_SEASON_LENGTH()': '0x6577ff81',
   'MAX_TIER()': '0xaf3a19c7',
   'maxFindableRarity(address,uint8)': '0xa40bc926',
+  'migrateFromV2(address,uint8,uint64,uint256[5])': '0x3b1e1d0b',
   'minRedeemWei()': '0x011a4078',
   'onRoiBoard(address)': '0x5ab50c1a',
   'openSeason()': '0xe638f2d3',
@@ -63,6 +65,7 @@ export const SIGS = {
   'preroundTotal()': '0x115255c7',
   'preseasonPaused()': '0x06fa1f82',
   'previewHunt(address,uint8)': '0x3ab14c7c',
+  'previewHuntAt(address,uint8,uint256)': '0x6bab987f',
   'PRICE_SCALE()': '0xc33f59d3',
   'priceOf(uint8)': '0x912397c3',
   'rarityUnlocked(address,uint8)': '0xa4d75ca7',
@@ -82,6 +85,7 @@ export const SIGS = {
   'seasonSeed()': '0x87a7d7e7',
   'setConfig(uint256,uint64,uint64,uint256,uint64,uint8,uint8)': '0x54c0d486',
   'setPaused(bool)': '0x16c38b3c',
+  'settleBatch(address,uint8,uint256[5][],uint256[])': '0x46fed0ad',
   'settleHunt(address,uint8,uint256[5],uint256,bytes)': '0x2ded79da',
   'setToken(address)': '0x144fa6d7',
   'setTokenRail(bool)': '0x57ffbeff',
@@ -177,6 +181,11 @@ function arg8(n) {
 /** Decode `address` args (left-padded). */
 function argAddr(a) {
   return a.toLowerCase().replace(/^0x/, '').padStart(64, '0');
+}
+
+/** Encode a `uint256` arg (offsets, amounts) as a 64-byte word. */
+function argUint(n) {
+  return BigInt(n).toString(16).padStart(64, '0');
 }
 
 /** Decode a single `address` return (right-aligned in the last 20 bytes). */
@@ -399,6 +408,22 @@ export async function connect({ rpcUrl, address, player, fallbackRpcUrls = [] })
       const w = (i) => BigInt('0x' + h.slice(i * 64, (i + 1) * 64));
       return { counts: [w(0), w(1), w(2), w(3), w(4)], bestSingleWei: w(5) };
     },
+
+    // V3: the roll for the hunt `offset` digs FROM NOW. Free (eth_call), so
+    // the whole upcoming batch can be pre-rolled before any settle happens.
+    // Same six-word shape as previewHunt.
+    previewHuntAt: async (p = player, tier = 1, offset = 0) => {
+      const h = (
+        await rpc.call(
+          to,
+          sel('previewHuntAt(address,uint8,uint256)') + argAddr(p) + arg8(tier) + argUint(offset)
+        )
+      ).replace(/^0x/, '');
+      const w = (i) => BigInt('0x' + h.slice(i * 64, (i + 1) * 64));
+      return { counts: [w(0), w(1), w(2), w(3), w(4)], bestSingleWei: w(5) };
+    },
+
+    maxBatch: async () => dUint(await rpc.call(to, sel('MAX_BATCH()'))),
 
     // --- per-player ---
     // The settlement confirmation signal: settleHunt increments this, so
