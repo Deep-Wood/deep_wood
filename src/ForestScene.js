@@ -2961,10 +2961,10 @@ export class ForestScene extends Phaser.Scene {
       // button refuses and re-syncs rather than spend gas on a revert.
       if (!this.queue) {
         // First dig since connect or last sync: line the queue up with the
-        // chain's own hunt index. We used to fall back to `_huntIndex ?? 0`,
-        // which silently assumed base=0 while the WALLET was already at 13
-        // on the chain -- then settleBatch's pre-check correctly rejected the
-        // queue ("the hunt index moved"). Read it now if we don't yet know it.
+        // chain's own hunt index. If we don't know it yet, ASK the chain
+        // right now. If that read fails, REFUSE the dig -- a queue with the
+        // wrong base is worse than no queue (it gets rejected at settle and
+        // the user burns two digs on a batch that can never commit).
         if (this._huntIndex === undefined) {
           try {
             const { getReader } = await import('./onchain.js');
@@ -2974,9 +2974,17 @@ export class ForestScene extends Phaser.Scene {
               const { account } = getState();
               if (account) this._huntIndex = Number(await r2.huntIndexOf(account));
             }
-          } catch { /* leave unknown; settle will refuse via stale() */ }
+          } catch { /* fall through */ }
         }
-        this.queue = new HuntQueue(BigInt(this._huntIndex ?? 0), tier);
+        if (this._huntIndex === undefined) {
+          // Could not read the chain index at ALL. Better to surface that
+          // than to start a batch that settleBatch will refuse.
+          if (node?.setData) node.setData('used', false);
+          this.flash('Could not read the chain hunt index -- check your connection and re-dig.');
+          this.busy = false;
+          return false;
+        }
+        this.queue = new HuntQueue(BigInt(this._huntIndex), tier);
       }
       const { previewHuntAtFor } = await import('./onchain.js');
       const preview = await previewHuntAtFor(tier, this.queue.size);
