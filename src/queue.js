@@ -37,10 +37,10 @@ export const MAX_BATCH = 20;
  * plus `base`, the chain hunt index the first entry corresponds to.
  */
 export class HuntQueue {
-  constructor() {
+  constructor(huntIndex = 0n, tier = 0) {
     this.entries = [];
-    this.base = 0n;
-    this.tier = 0;
+    this.base = BigInt(huntIndex);
+    this.tier = tier;
   }
 
   /** Chain hunt index the next queued hunt will settle at. */
