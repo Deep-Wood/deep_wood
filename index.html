@@ -570,7 +570,7 @@
       walletMenu = document.createElement('div');
       walletMenu.className = 'wallet-menu';
       walletMenu.innerHTML =
-        '<div class="wm-account">' + (getState().account || '') + '</div>' +
+        '<div class="wm-account">' + short(getState().account || '') + '</div>' +
         '<button class="wm-item" type="button">Disconnect</button>';
       btn.parentElement.style.position = 'relative';
       btn.parentElement.appendChild(walletMenu);
