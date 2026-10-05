@@ -2953,10 +2953,22 @@ export class ForestScene extends Phaser.Scene {
       // button refuses and re-syncs rather than spend gas on a revert.
       if (!this.queue) {
         // First dig since connect or last sync: line the queue up with the
-        // chain's own hunt index. refreshChainTool() maintains the same
-        // rebase on every poll; this just covers the race where a dig lands
-        // before the first poll resolves.
-        this.queue = new HuntQueue(this._huntIndex ?? 0, tier);
+        // chain's own hunt index. We used to fall back to `_huntIndex ?? 0`,
+        // which silently assumed base=0 while the WALLET was already at 13
+        // on the chain -- then settleBatch's pre-check correctly rejected the
+        // queue ("the hunt index moved"). Read it now if we don't yet know it.
+        if (this._huntIndex === undefined) {
+          try {
+            const { getReader } = await import('./onchain.js');
+            const r2 = await getReader();
+            const { getState } = await import('./wallet.js');
+            if (r2) {
+              const { account } = getState();
+              if (account) this._huntIndex = Number(await r2.huntIndexOf(account));
+            }
+          } catch { /* leave unknown; settle will refuse via stale() */ }
+        }
+        this.queue = new HuntQueue(BigInt(this._huntIndex ?? 0), tier);
       }
       const { previewHuntAtFor } = await import('./onchain.js');
       const preview = await previewHuntAtFor(tier, this.queue.size);
