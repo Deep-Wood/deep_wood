@@ -3079,8 +3079,11 @@ export class ForestScene extends Phaser.Scene {
           });
         },
       });
-      // A count badge when one rarity contributes several stones.
-      if (s.count > 1) {
+      // Always label the pop, even when the haul is a single stone. The dig
+      // otherwise looks like it produced nothing on a `count === 1` roll,
+      // which reads as a rendering fault to the player ("the first beacon
+      // didn't show how many gems"). The fan-of-many case still gets 'xN'.
+      if (s.count >= 1) {
         const label = this.add.text(baseX + i * GEM_STEP, node.y + 26, `x${s.count}`, {
           fontFamily: 'ui-monospace, monospace', fontSize: '13px', color: '#e8f6ff',
         }).setOrigin(0.5).setDepth(11).setAlpha(0.9);
