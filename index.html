@@ -120,7 +120,7 @@
        src/hud.css for the measured overlaps this replaces. -->
   <div id="hud">
     <section id="season" class="card">
-      <div class="season-head">
+      <div class="season-head" style="position:relative">
         <!-- Player portrait: a vibe viber (vibevibe.fun PFP collection). It is
              the PLAYER AVATAR in the card, not the walker -- the collection is
              1080x1080 head-and-shoulders PFPs, which have no direction and no
@@ -447,7 +447,7 @@
     // only place window.ethereum is touched. No private key exists anywhere in
     // the client -- every write is handed to the wallet, which prompts the
     // user. See src/wallet.js.
-    import { connect, switchToGameChain, getState, onWallet, GAME_CHAIN_ID } from '/src/wallet.js';
+    import { connect, disconnect, switchToGameChain, getState, onWallet, GAME_CHAIN_ID } from '/src/wallet.js';
 
     const btn = document.getElementById('connect');
     const foot = document.getElementById('hint');
@@ -557,7 +557,59 @@
       }
     }
 
-    btn.addEventListener('click', doConnect);
+    btn.addEventListener('click', () => {
+      const s = getState();
+      if (s.connected && btn.dataset.open !== '1') {
+        // Already connected: a click should not silently re-connect (the
+        // address is already there); it should offer the way OUT. Show a
+        // one-item menu. Outside click or Escape dismisses it.
+        openWalletMenu();
+        return;
+      }
+      doConnect();
+    });
+
+    // The disconnect menu: a single-item dropup rendered beside the connect
+    // button. One item only because the ONLY sensible action from here is
+    // "disconnect". It clears our local state and asks the wallet to drop the
+    // eth_accounts permission so the next eth_requestAccounts prompts again.
+    let walletMenu = null;
+    function closeWalletMenu() {
+      walletMenu?.remove();
+      walletMenu = null;
+      delete btn.dataset.open;
+      document.removeEventListener('click', outsideClose, true);
+      document.removeEventListener('keydown', escClose, true);
+    }
+    function outsideClose(e) {
+      if (walletMenu && !walletMenu.contains(e.target) && e.target !== btn) closeWalletMenu();
+    }
+    function escClose(e) { if (e.key === 'Escape') closeWalletMenu(); }
+
+    function openWalletMenu() {
+      closeWalletMenu();
+      walletMenu = document.createElement('div');
+      walletMenu.className = 'wallet-menu';
+      walletMenu.innerHTML =
+        '<div class="wm-account">' + (getState().account || '') + '</div>' +
+        '<button class="wm-item" type="button">Disconnect</button>';
+      btn.parentElement.style.position = 'relative';
+      btn.parentElement.appendChild(walletMenu);
+      btn.dataset.open = '1';
+      document.addEventListener('click', outsideClose, true);
+      document.addEventListener('keydown', escClose, true);
+
+      walletMenu.querySelector('.wm-item').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        closeWalletMenu();
+        btn.disabled = true;
+        const r = await disconnect();
+        btn.disabled = false;
+        if (!r.ok) setPending('Disconnect failed: ' + (r.reason || 'unknown'));
+        else if (r.revoked === false) setPending('Disconnected. The wallet may still remember this site -- clear it there too if you want a fresh prompt.');
+        render();
+      });
+    }
 
     // Provider events (accountsChanged / chainChanged / disconnect) keep the
     // button honest without a reload.

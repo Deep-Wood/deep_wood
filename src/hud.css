@@ -675,3 +675,43 @@ button.chip:disabled { opacity: .55; cursor: default; }
  * either breakpoint -- 3px more than before, not the ~25px the separate repair
  * row used to cost. */
 #belt { row-gap: 2px; }
+
+/* Wallet disconnect dropup. One item, positioned above-right of the connect
+ * button (the button's parent gets position:relative when the menu opens). */
+.wallet-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  min-width: 220px;
+  background: var(--panel-solid, #0d1a10);
+  border: 1px solid var(--gold, #d9a441);
+  border-radius: 6px;
+  padding: 6px;
+  z-index: 900;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
+}
+.wallet-menu .wm-account {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: rgba(232, 240, 224, 0.55);
+  padding: 4px 6px 8px;
+  word-break: break-all;
+}
+.wallet-menu .wm-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 6px 8px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--ink, #e8f0e0);
+  cursor: pointer;
+}
+.wallet-menu .wm-item:hover {
+  background: rgba(180, 134, 58, 0.15);
+  border-color: var(--warn, #b4863a);
+  color: var(--warn, #b4863a);
+}

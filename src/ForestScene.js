@@ -2007,6 +2007,11 @@ export class ForestScene extends Phaser.Scene {
     await this.refreshChainTool();
     this.beltMsg(`Banked ${n} hunt${n === 1 ? '' : 's'} \u2014 haul is on-chain.`, 'good');
     this.flash(`Settled ${n} hunt${n === 1 ? '' : 's'} \u2014 the haul is banked.`);
+    // refreshChainTool covers tool durability and the chain satchel, but the
+    // gem TILE counts (window.renderGems) only repaint when someone changes
+    // them. Call it here so the satchel updates as soon as the batch lands
+    // rather than waiting for the next dig.
+    window.renderGems?.();
   }
 
   async _doRepair() {

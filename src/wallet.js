@@ -483,6 +483,39 @@ export function onWallet(fn) {
   return () => state.listeners.delete(fn);
 }
 
+/**
+ * Disconnect the wallet from the page's perspective.
+ *
+ * "Disconnect" on a wallet is a misnomer -- the page cannot make Rabby (or any
+ * EIP-1193 provider) forget the account; only the wallet can do that. What we
+ * CAN do is what the user expects from a Disconnect button: clear our copy of
+ * the account, stop listening for it, and surrender the approved
+ * `eth_accounts` permission so the next `eth_requestAccounts` actually shows
+ * the connect prompt instead of silently re-attaching the same account.
+ *
+ * `wallet_revokePermissions` is supported by Rabby, MetaMask (from flask /
+ * recent stable), and most EIP-2255 wallets. On one that does not support it
+ * the local reset still happens -- the page behaves as if disconnected and a
+ * real rejection is shown next time the wallet tries to re-attach.
+ */
+export async function disconnect() {
+  const p = getProvider();
+  resetWallet();
+  emit("disconnect");
+  if (!p?.request) return { ok: false, reason: "no provider" };
+  try {
+    await p.request({
+      method: "wallet_revokePermissions",
+      params: [{ eth_accounts: {} }],
+    });
+    return { ok: true };
+  } catch (err) {
+    // -32601 = method not found (provider predates EIP-2255). Local state is
+    // already cleared -- surface that as success with a caveat.
+    return { ok: true, revoked: false, reason: err?.message?.slice(0, 120) };
+  }
+}
+
 function emit(event) {
   const snap = { ...getState(), event };
   for (const fn of state.listeners) {
