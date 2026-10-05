@@ -386,15 +386,14 @@
         badge.classList.add('hidden');
       }
     };
-    // The badge sits over the touch HUD's BOARD button at the top-right on
-    // mobile. Without a stop here, a tap meant for the badge was ALSO seen by
-    // Phaser's pointer pipeline under it and opened the leaderboard -- an
-    // "old test board" that looked like data corruption mid-settle. The DOM
-    // receives the pointer first, so swallowing it here keeps the canvas
-    // oblivious.
-    badge.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); document.getElementById('belt-settle')?.focus(); }, true);
-    badge.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); }, true);
-    badge.addEventListener('pointerup', (e) => { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); }, true);
+    // The badge is INFORMATIONAL, not actionable: the SETTLE button banks the
+    // queue; tapping the badge used to fall through the HUD and hit the Phaser
+    // BOARD zone underneath (the season leaderboard popped open, to everyone's
+    // confusion). pointer-events:none means the tap hits nothing -- the canvas
+    // below still owns the pixel, but the touch-HUD board zone in that corner
+    // requires Phaser's tree, not a DOM-ancestor hit, so a DOM-transparent
+    // badge never routes there. Simple, no captures, no stops.
+    badge.style.pointerEvents = 'none';
     // Pulse the settle button when the gate message fires, so the eye lands on
     // the ONE action that unblocks hunting.
     window.pulseSettle = () => {
