@@ -1784,6 +1784,10 @@ export class ForestScene extends Phaser.Scene {
       // contract. There is no second tally (no lifetime 'found', no mirror that
       // could drift): the tiles are read from this array and the array is read
       // from the chain after every connect, hunt, buy, repair, or sell.
+      // Repaint the satchel tiles too, not just the belt-counts line --
+      // window.renderGems reads this same array but only repaints when someone
+      // calls it, and refreshChainGems used to be a headless write.
+      window.renderGems?.();
     } catch {
       // Leave the mirror alone: an unreadable balance is not an empty one.
     }
