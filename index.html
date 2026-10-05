@@ -386,24 +386,43 @@
         badge.classList.add('hidden');
       }
     };
-    // The badge is INFORMATIONAL -- the SETTLE button banks the queue.
-    // pointer-events:none means a tap on the badge falls to the parent chip,
-    // and the shared #hud touchstart shield below keeps Phaser from seeing it.
-    badge.style.pointerEvents = 'none';
-    // Phaser's TouchManager attaches a WINDOW-level listener
-    // (inputWindowEvents, default true) and dispatches any touch whose target
-    // is not the canvas -- INCLUDING touches captured by HUD DOM. The badge
-    // shares a screen corner with the canvas BOARD zone; without a prevent,
-    // tapping 'N pending - settle to bank' opened the leaderboard underneath.
-    // preventDefault on touch events against the #hud card is the ONLY gate
-    // TouchManager honours -- stopPropagation on the badge fires too late
-    // because window capture runs first. Click handlers on real HUD buttons
-    // still fire because we don't stopPropagation.
+    // Phaser's TouchManager attaches a WINDOW-level listener (default config)
+    // and dispatches canvas input for any touch whose target isn't the canvas
+    // itself -- so taps on the DOM HUD top bar (including the queue badge at
+    // the corner where Phaser's BOARD zone lives) would ALSO fire the zone
+    // underneath. The gate Phaser honours is event.defaultPrevented, which
+    // raises a new problem: preventDefault on touchstart SUPPRESSES the
+    // synthetic click for the SETTLE button, and the player can't bank.
+    //
+    // Solve it with a guard instead: don't preventDefault the event at all --
+    // mark Phaser's listener as fired already and stopImmediatePropagation
+    // from a capture-phase listener attached to the #hud. Capture on #hud
+    // runs BEFORE window bubble, so Phaser's top-level handler never runs for
+    // HUD-targeted taps, but click still propagates for real buttons.
     const hud = document.getElementById('hud');
     if (hud) {
-      hud.addEventListener('touchstart', (e) => e.preventDefault(), false);
-      hud.addEventListener('touchend',   (e) => e.preventDefault(), false);
-      hud.addEventListener('touchmove',  (e) => e.preventDefault(), false);
+      const shield = (e) => {
+        // Only shield taps that origin INSIDE the HUD. Taps on the canvas
+        // (which contains the real HUNT pad and d-pad) have a canvas target
+        // and shouldn't come through here anyway -- but belt-and-suspenders:
+        // if some wrapper puts the canvas inside #hud, bail out so we don't
+        // mute the game.
+        const onCanvas = e.target && (e.target.tagName === 'CANVAS');
+        if (onCanvas) return;
+        // Standard synthetic-event suppression: preventDefault + stop both
+        // propagation directions so Phaser's window listener never fires.
+        // Phaser only checks event.defaultPrevented / does not see the event
+        // at all because its handler is on window and we stopPropagation
+        // before bubble reaches window.
+        e.stopPropagation();          // stop bubble to window (blocks Phaser)
+        // NOTE: do NOT preventDefault. Doing so kills the synthetic click on
+        // the SETTLE button -- which is how the badge-settle regression snuck
+        // in. Click must still fire on the button and bubble normally to any
+        // click handler attached to it.
+      };
+      hud.addEventListener('touchstart', shield, false);
+      hud.addEventListener('touchend',   shield, false);
+      hud.addEventListener('touchmove',  shield, false);
     }
     // Pulse the settle button when the gate message fires, so the eye lands on
     // the ONE action that unblocks hunting.
