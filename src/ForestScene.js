@@ -2386,6 +2386,21 @@ export class ForestScene extends Phaser.Scene {
     // boundary was crossed, so this is one comparison on a normal frame.
     this.refreshChunks();
 
+    // Parallax-free ground sync: the ground is a screen-pinned TileSprite
+    // (scrollFactor 0), so it never moves with the camera on its own -- the
+    // tiles have to be nudged by the camera's scroll each frame or every
+    // tree, rock and grass tuft appears to SLIDE across a frozen ground as
+    // the player walks. tilePosition is in texture pixels; scroll and zoom
+    // are in world/screen pixels, so account for both.
+    if (this.bg) {
+      this.bg.tilePositionX = -this.cameras.main.scrollX * this.cameras.main.zoom;
+      this.bg.tilePositionY = -this.cameras.main.scrollY * this.cameras.main.zoom;
+    }
+    if (this.macro) {
+      this.macro.tilePositionX = -this.cameras.main.scrollX * this.cameras.main.zoom * 2.4;
+      this.macro.tilePositionY = -this.cameras.main.scrollY * this.cameras.main.zoom * 2.4;
+    }
+
     // HUD guard: never let the player enter the screen band the top card
     // owns. The card is part of the DOM, not the world, so the player sprite
     // would otherwise be free to walk beneath it and vanish under the acrylic
