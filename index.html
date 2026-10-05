@@ -386,14 +386,25 @@
         badge.classList.add('hidden');
       }
     };
-    // The badge is INFORMATIONAL, not actionable: the SETTLE button banks the
-    // queue; tapping the badge used to fall through the HUD and hit the Phaser
-    // BOARD zone underneath (the season leaderboard popped open, to everyone's
-    // confusion). pointer-events:none means the tap hits nothing -- the canvas
-    // below still owns the pixel, but the touch-HUD board zone in that corner
-    // requires Phaser's tree, not a DOM-ancestor hit, so a DOM-transparent
-    // badge never routes there. Simple, no captures, no stops.
+    // The badge is INFORMATIONAL -- the SETTLE button banks the queue.
+    // pointer-events:none means a tap on the badge falls to the parent chip,
+    // and the shared #hud touchstart shield below keeps Phaser from seeing it.
     badge.style.pointerEvents = 'none';
+    // Phaser's TouchManager attaches a WINDOW-level listener
+    // (inputWindowEvents, default true) and dispatches any touch whose target
+    // is not the canvas -- INCLUDING touches captured by HUD DOM. The badge
+    // shares a screen corner with the canvas BOARD zone; without a prevent,
+    // tapping 'N pending - settle to bank' opened the leaderboard underneath.
+    // preventDefault on touch events against the #hud card is the ONLY gate
+    // TouchManager honours -- stopPropagation on the badge fires too late
+    // because window capture runs first. Click handlers on real HUD buttons
+    // still fire because we don't stopPropagation.
+    const hud = document.getElementById('hud');
+    if (hud) {
+      hud.addEventListener('touchstart', (e) => e.preventDefault(), false);
+      hud.addEventListener('touchend',   (e) => e.preventDefault(), false);
+      hud.addEventListener('touchmove',  (e) => e.preventDefault(), false);
+    }
     // Pulse the settle button when the gate message fires, so the eye lands on
     // the ONE action that unblocks hunting.
     window.pulseSettle = () => {
