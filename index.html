@@ -148,9 +148,7 @@
         <div class="stat"><span class="k">Rank</span><span class="v hi" id="rank">&mdash;</span></div>
         <div class="stat"><span class="k">ROI</span><span class="v" id="roi">&mdash;</span></div>
         <div class="stat"><span class="k">Finds</span><span class="v" id="finds">&mdash;</span></div>
-        <div class="stat"><span class="k">Ends</span><span class="v" id="ends">&mdash;</span></div>
       </div>
-      <div class="bar"><i id="seasonbar"></i></div>
 
       <!-- Chain and wallet live in the same card. They were a second floating
            panel, which made the top of the screen two stacked boxes for what is
@@ -413,25 +411,6 @@
     // This used to also drive a circular ring in the card head. The ring was
     // deleted because it duplicated what ENDS and the bar already said, in a
     // third visual language, for 26px of a card that had been cut for height.
-    // The countdown logic is unchanged -- only the ring element was removed, and
-    // the `fill` branch is now simply absent.
-    (function countdown() {
-      const ends = document.getElementById('ends');
-      const bar = document.getElementById('seasonbar');
-      // Season I ends 13d 04h after the epoch the page ships with. Read from
-      // the DOM if present so this is not a second source of truth.
-      const TOTAL = 13 * 86400 + 4 * 3600;
-      const tick = () => {
-        const left = Math.max(0, TOTAL - Math.floor((Date.now() - START) / 1000));
-        const d = Math.floor(left / 86400), h = Math.floor((left % 86400) / 3600);
-        ends.textContent = d > 0 ? `${d}d ${String(h).padStart(2, '0')}h` : `${h}h`;
-        const frac = left / TOTAL;
-        if (bar) bar.style.width = (frac * 100).toFixed(2) + '%';
-      };
-      tick();
-      setInterval(tick, 1000);
-    })();
-
     window.addEventListener('deepwood:find', (e) => {
       const r = e.detail;
       r.counts.forEach((c, i) => { totals[i] += c; });

@@ -2644,7 +2644,7 @@ export class ForestScene extends Phaser.Scene {
     if (this.econ.left > 0) {
       return this.hasTouchPad ? 'pick ready - sync issue' : 'pick ready - sync issue';
     }
-    return this.hasTouchPad ? 'tool broken - repair below' : 'tool broken - repair below';
+    return 'Tool broken. Repair or upgrade first.';
   }
 
   /**
@@ -2681,10 +2681,10 @@ export class ForestScene extends Phaser.Scene {
       return;
     }
     // Settle-queue gate (V3): a dig is a queue push in connected mode, so the
-    // queue rules bind here, before any animation. Two stopping conditions and
-    // they want different copy: a FULL queue just needs a settle (tool is
-    // fine), a SPENT tool needs repair or replace first. Both always end at
-    // the same call to action -- settle -- so the button pulses.
+    // queue rules bind here, before any animation. Two stopping conditions:
+    // a FULL queue only needs a settle (tool is fine), a SPENT tool needs
+    // repair or upgrade first. The settle pulse is reserved for the cases
+    // where settling is actually the right move.
     //
     // pulseSettle is a window global because this file has no DOM imports.
     if (onchainActive()) {
@@ -2708,8 +2708,12 @@ export class ForestScene extends Phaser.Scene {
         if (now - (this._gateAt ?? -1e9) > 2000) {
           this._gateAt = now;
           this.openBelt();
-          this.flash('Tool worn out \u2014 SETTLE your batch, then repair or upgrade to continue.');
-          window.pulseSettle?.();
+          // A broken tool is NOT a settle problem unless there is ALSO an
+          // unsettled batch. Pulsing the settle button here taught the player
+          // to think the fix was "settle", when the fix is actually "repair
+          // or upgrade". Only pulse settle when something real is queued.
+          this.flash('Tool broken. Repair or upgrade first.');
+          if (this.queue.size > 0) window.pulseSettle?.();
         }
         return;
       }

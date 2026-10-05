@@ -85,7 +85,7 @@ test('the blocked reason names the actual block', () => {
   const body = code(scene.slice(scene.indexOf('_blockedReason() {'), scene.indexOf('_canHuntNow() {')));
   assert.match(body, /tier === 0/, 'no tool is its own message');
   assert.match(body, /left > 0/, 'healthy-but-blocked must not claim broken');
-  assert.match(body, /'tool broken - repair below'/, 'a real break still says so');
+  assert.match(body, /'Tool broken\. Repair or upgrade first\.'/, 'a real break still says so');
 });
 
 test('the prompt no longer hardcodes the broken message', () => {
