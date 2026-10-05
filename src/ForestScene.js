@@ -1693,6 +1693,7 @@ export class ForestScene extends Phaser.Scene {
    */
   async refreshChainTool() {
     if (!onchainActive()) return;
+    this._wasConnected = true;   // even if the read below fails, the wallet is attached
     let tool;
     try {
       const { getReader } = await import('./onchain.js');
@@ -2717,6 +2718,21 @@ export class ForestScene extends Phaser.Scene {
         }
         return;
       }
+    } else if (this._wasConnected && this.econ.tier > 0) {
+      // The wallet was connected (we have a chain tool on hand), then it was
+      // dropped. WITHOUT the connected branch the dig would fall through to
+      // the local preview and pretend to count -- a silent ledger that never
+      // lands on-chain. Refuse the dig and say exactly what to do next.
+      //
+      // `_wasConnected` is set on every onchain refresh. A player who never
+      // connected at all still gets the pure-preview path, because for them
+      // the local mirror IS the game.
+      const now = this.time.now;
+      if (now - (this._gateAt ?? -1e9) > 2000) {
+        this._gateAt = now;
+        this.flash('Wallet disconnected \u2014 reconnect with the button above to keep hunting.');
+      }
+      return;
     }
     this.busy = true;
     node.setData('used', true);

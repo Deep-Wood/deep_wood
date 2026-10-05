@@ -215,7 +215,19 @@ button.chip:active { transform: translateY(1px); }
 #boot.done { opacity: 0; visibility: hidden; pointer-events: none; }
 
 #boot .emblem {
+  /* The art is 1280x698 landscape, but this rule used to pin `width` only and
+     let the paired width/height HTML attributes keep the box at that ratio
+     while the CSS width sentence read as 'make it 320 wide, height auto'.
+     Result on a portrait phone: a 320-wide by 174-tall box squashed inside a
+     `border-radius: 50%` frame -- a stretched pill, not a circular emblem.
+
+     Lock a SQUARE box and let `object-fit: cover` center-crop the art into
+     that box. The artwork has its subject (the aurora-trunk) in the middle,
+     so cropping the left/right is safe. */
   width: min(320px, 62vw);
+  aspect-ratio: 1 / 1;
+  height: auto;
+  object-fit: cover;
   border-radius: 50%;
   /* the crystal is the only light in the mark, so it is the only glow here too */
   filter: drop-shadow(0 0 26px rgba(63, 240, 176, .22));
