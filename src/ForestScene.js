@@ -2393,12 +2393,15 @@ export class ForestScene extends Phaser.Scene {
     // the player walks. tilePosition is in texture pixels; scroll and zoom
     // are in world/screen pixels, so account for both.
     if (this.bg) {
-      this.bg.tilePositionX = -this.cameras.main.scrollX * this.cameras.main.zoom;
-      this.bg.tilePositionY = -this.cameras.main.scrollY * this.cameras.main.zoom;
+      this.bg.tilePositionX = this.cameras.main.scrollX * this.cameras.main.zoom;
+      this.bg.tilePositionY = this.cameras.main.scrollY * this.cameras.main.zoom;
     }
     if (this.macro) {
-      this.macro.tilePositionX = -this.cameras.main.scrollX * this.cameras.main.zoom * 2.4;
-      this.macro.tilePositionY = -this.cameras.main.scrollY * this.cameras.main.zoom * 2.4;
+      // macro is drawn at tileScale 2.4 -- one texture px covers 2.4 screen
+      // px -- so dividing by 2.4 moves its pattern at the SAME screen rate
+      // as the ground. Same rate, no parallax: everything pinned.
+      this.macro.tilePositionX = (this.cameras.main.scrollX * this.cameras.main.zoom) / 2.4;
+      this.macro.tilePositionY = (this.cameras.main.scrollY * this.cameras.main.zoom) / 2.4;
     }
 
     // HUD guard: never let the player enter the screen band the top card

@@ -182,7 +182,7 @@ button.chip {
   cursor: pointer;
   padding: 5px 12px;
   font-size: 11px;
-  background: linear-gradient(180deg, rgba(63, 46, 30, .95), rgba(15, 30, 24, .96));
+  background: linear-gradient(180deg, #3f2e1e, #0f1e18);
   border: 1px solid rgba(0, 0, 0, .6);
   border-radius: 999px;
   box-shadow:
@@ -194,7 +194,7 @@ button.chip {
 }
 button.chip:hover {
   border-color: var(--bronze-lit);
-  background: linear-gradient(180deg, rgba(84, 62, 40, .95), rgba(21, 40, 32, .96));
+  background: linear-gradient(180deg, #543e28, #152820);
   box-shadow: inset 0 0 0 1px var(--edge), inset 0 1px 0 rgba(255, 255, 255, .18),
     0 3px 0 rgba(0, 0, 0, .5), 0 8px 14px rgba(0, 0, 0, .42), var(--glow);
 }
@@ -233,7 +233,7 @@ button.chip.act {
   /* The 3D: gradient body, top gloss, bottom shade, and a hard bottom
    * 'ledge' that the button visually SITS on. Pressing flattens the
    * ledge (translateY) so it feels like the button goes INTO the wood. */
-  background: linear-gradient(180deg, rgba(84, 62, 40, .95), rgba(15, 30, 24, .96)) !important;
+  background: linear-gradient(180deg, #543e28, #0f1e18) !important;
   border: 1px solid rgba(0, 0, 0, .6) !important;
   box-shadow:
     inset 0 0 0 1px rgba(122, 98, 54, .55),
@@ -245,7 +245,7 @@ button.chip.act {
 #belt-actions button.chip:hover,
 button.chip.btn:hover,
 button.chip.act:hover {
-  background: linear-gradient(180deg, rgba(105, 78, 50, .95), rgba(21, 40, 32, .96)) !important;
+  background: linear-gradient(180deg, #695032, #152820) !important;
   border-color: var(--bronze-lit) !important;
 }
 #belt-actions button.chip:active,
@@ -269,7 +269,7 @@ button.chip#connect {
   padding: 8px 12px !important;
   min-height: 34px !important;
   border-radius: 999px !important;
-  background: linear-gradient(180deg, rgba(84, 62, 40, .95), rgba(15, 30, 24, .96)) !important;
+  background: linear-gradient(180deg, #543e28, #0f1e18) !important;
 }
 
 .dot.ok   { background: var(--edge);   box-shadow: 0 0 6px var(--edge); }
