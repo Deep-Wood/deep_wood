@@ -1536,7 +1536,7 @@ export class ForestScene extends Phaser.Scene {
     const p = this.econ;
     const balance = this.walletBalanceWei();
 
-    // --- buy tool / upgrade tool
+    // --- buy tool / upgrade tool (single button, dropdown for payment method)
     const nt = nextTier(p);
     const buy = document.createElement('button');
     buy.className = 'chip btn act';
@@ -1547,79 +1547,96 @@ export class ForestScene extends Phaser.Scene {
     } else {
       const cost = toolPrice(nt);
       const chk = canBuyTool(p, nt, balance);
-      // Short label: all three action buttons share ONE row now, so a phone
-      // with a broken tool gives each about 65px. "upgrade tool Bronze
-      // 0.052 ETH" ellipsised to "upgrade tool Bronze 0." on a 390px screen --
-      // hiding the very price the button exists to quote. The tier and price
-      // are what the row has to show; the verb and the word "tool" are already
-      // established by the tool name above. Full wording stays in the title.
-      // All three buttons share one row; on a 390px phone with a broken tool
-      // that is ~300px for three buttons. Trailing zeros are pure waste here --
-      // 0.052 and 0.1935 both read the same as 0.0520 and 0.1935 -- so the
-      // label drops them, and the exact wei figure stays in the title.
       const trimEth = (w) => String(Number(w) / 1e18).replace(/0+$/, '').replace(/\.$/, '');
       const shortLabel = `${buyOrUpgradeLabel(p)} ${toolName(nt)} ${fmtEth(cost)}`;
-      // With a broken tool there are three buttons on one row, and a narrow
-      // phone cannot fit three prices legibly no matter how the type is
-      // shrunk. So below the breakpoint the ETH figures move to the title and
-      // the buttons keep the verb and the tier -- which is still enough to
-      // choose between them, and the price is one hover/second away.
-      // Equal-width buttons: with three of them (a broken tool) even a desktop
-      // row only fits ~70px each, which is not enough for "upg Bronze 0.052".
-      // So the price shows whenever there is room for it -- two buttons, or a
-      // wide row -- and moves to the title when there are three. Either way the
-      // price is always available; it is never simply hidden.
-      // Measured against the ACTIONS ROW, not the viewport: the belt sits in a
-      // grid column that is content-sized, so on desktop it can be narrower
-      // than the window even with 1000px to spare. window.innerWidth said
-      // "plenty of room" while the buttons were truncating.
       const rowW = (el.getBoundingClientRect().width) || window.innerWidth;
       const threeUp = p.left === 0 || rowW < 260;
-      // "upgrade"/"buy" both fit; at 56px (three buttons, content-sized belt
-      // column) the word "Bronze" alone is what overflows, so the tier keeps its
-      // first letter plus a full stop rather than being cut mid-word.
       const nm = toolName(nt);
       const tier = nm;
-      const verb = buyOrUpgradeLabel(p) === 'upgrade' ? 'upg' : 'buy';
+      const verb = buyOrUpgradeLabel(p).startsWith('upgrade') ? 'upgrade' : 'buy';
       buy.textContent = threeUp
         ? `${verb} ${tier}`
         : `${verb} ${tier} ${trimEth(cost)}`;
       buy.title = `${shortLabel}` + (chk.ok ? '' : '\n' + chk.reason);
       buy.disabled = !chk.ok;
-      // The disabled button explains nothing on its own -- canBuyTool already
-      // computed why -- so the reason is surfaced here as a title. The old
-      // CLAIM button was disabled with no reason at all, which was the one
-      // control in the card that could fail silently.
       if (!chk.ok) buy.title = chk.reason;
-      buy.onclick = () => this.doBuyTool(nt);
+
+      // Dropdown: one button, two payment options.
+      // "pay eth" always available; "pay DeepWood 10% off" only when the token
+      // rail is configured (tokenAddress + poolManager + poolId all set).
+      const hasTokenRail = !!(this.tokenAddress && this.poolManager && this.poolId);
+      if (hasTokenRail && nt <= 5) {
+        buy.classList.add('has-dropdown');
+        buy.setAttribute('aria-haspopup', 'true');
+        buy.setAttribute('aria-expanded', 'false');
+
+        const dd = document.createElement('div');
+        dd.className = 'buy-dropdown';
+        dd.id = 'buy-dropdown';
+
+        const optEth = document.createElement('button');
+        optEth.className = 'buy-dd-item';
+        optEth.type = 'button';
+        optEth.textContent = 'pay eth';
+        optEth.title = `pay ${fmtEth(cost)}`;
+        optEth.onclick = (e) => { e.stopPropagation(); closeBuyDropdown(); this.doBuyTool(nt); };
+
+        const optToken = document.createElement('button');
+        optToken.className = 'buy-dd-item';
+        optToken.type = 'button';
+        const tokenCost = this.estimateTokenCost(nt);
+        const shortToken = tokenCost > 0
+          ? (Number(tokenCost) / 1e18).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+          : '???';
+        optToken.textContent = 'pay DeepWood 10% off';
+        optToken.title = `pay ~${shortToken} $DEEPWOOD (10% discount)`;
+        optToken.onclick = (e) => { e.stopPropagation(); closeBuyDropdown(); this.doBuyToolWithToken(nt); };
+
+        dd.appendChild(optEth);
+        dd.appendChild(optToken);
+
+        // Position the dropdown below the button. The button is inside
+        // #belt-actions (position:relative), so offsetParent is that container.
+        // Using offsetTop/offsetLeft avoids a getBoundingClientRect() call that
+        // would be wrong if the page has scrolled between layout and click.
+        dd.style.position = 'absolute';
+        dd.style.top = (buy.offsetTop + buy.offsetHeight + 4) + 'px';
+        dd.style.left = buy.offsetLeft + 'px';
+        dd.style.minWidth = buy.offsetWidth + 'px';
+
+        el.appendChild(dd);
+
+        buy.onclick = (e) => {
+          e.stopPropagation();
+          const isOpen = dd.classList.contains('open');
+          closeBuyDropdown();
+          if (!isOpen) {
+            dd.classList.add('open');
+            buy.setAttribute('aria-expanded', 'true');
+          }
+        };
+
+        // Close on outside click or escape.
+        const outsideClose = (e) => {
+          if (!dd.contains(e.target) && e.target !== buy) closeBuyDropdown();
+        };
+        const escClose = (e) => { if (e.key === 'Escape') closeBuyDropdown(); };
+        document.addEventListener('click', outsideClose, true);
+        document.addEventListener('keydown', escClose, true);
+
+        function closeBuyDropdown() {
+          dd.classList.remove('open');
+          buy.setAttribute('aria-expanded', 'false');
+          document.removeEventListener('click', outsideClose, true);
+          document.removeEventListener('keydown', escClose, true);
+        }
+      } else {
+        // No token rail: single action, no dropdown.
+        buy.onclick = () => this.doBuyTool(nt);
+      }
     }
     this.decoratePending(buy);
     el.appendChild(buy);
-
-    // --- buy tool with $DEEPWOOD (10% discount)
-    if (nt <= 5 && this.tokenAddress && this.poolManager && this.poolId) {
-      const tokenBuy = document.createElement('button');
-      tokenBuy.className = 'chip btn act token-buy';
-      tokenBuy.id = 'belt-buy-token';
-      const tokenCost = this.estimateTokenCost(nt);
-      const shortToken = tokenCost > 0
-        ? (Number(tokenCost) / 1e18).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-        : '???';
-      const rowW3 = (el.getBoundingClientRect().width) || window.innerWidth;
-      // In the two-column rail each button gets ~half the rail (~100px on a
-      // desktop, ~70px on a phone). "buy 1 $DEEPWOOD" is 16 characters and
-      // ellipsised in every one of those cells, so the rail drops the tier
-      // number -- it is already stated by the tool line directly above, and the
-      // full wording including the token count stays in the title.
-      const threeUp2 = p.left === 0 || rowW3 < 260;
-      tokenBuy.textContent = threeUp2
-        ? 'buy $DEEPWOOD'
-        : `buy ${nt} ${shortToken} $DEEPWOOD`;
-      tokenBuy.title = `buy ${toolName(nt)} with $DEEPWOOD at 10% discount (~${shortToken} tokens)`;
-      tokenBuy.onclick = () => this.doBuyToolWithToken(nt);
-      this.decoratePending(tokenBuy);
-      el.appendChild(tokenBuy);
-    }
 
     // --- sell gems
     const sell = document.createElement('button');

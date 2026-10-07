@@ -133,6 +133,7 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--s2);
   width: 100%;
+  position: relative;
 }
 .belt-actions .act {
   /* Fill the grid cell. min-width:0 so a long label ellipsises instead of
@@ -292,4 +293,43 @@
  * ------------------------------------------------------------------------ */
 @media (max-width: 430px) {
   .belt-actions { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* --- buy tool dropdown ---------------------------------------------------
+ * One button, two payment options. The dropdown is positioned absolutely
+ * below the trigger button, inside #belt-actions (which is position:relative).
+ * Hidden by default; .open class shows it.
+ * ------------------------------------------------------------------------ */
+.buy-dropdown {
+  display: none;
+  position: absolute;
+  z-index: 950;
+  background: var(--panel-solid, #0d1a10);
+  border: 1px solid var(--gold, #d9a441);
+  border-radius: 6px;
+  padding: 4px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
+  min-width: 100%;
+}
+.buy-dropdown.open {
+  display: block;
+}
+.buy-dd-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 6px 8px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--ink, #e8f0e0);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.buy-dd-item:hover {
+  background: rgba(180, 134, 58, 0.15);
+  border-color: var(--warn, #b4863a);
+  color: var(--warn, #b4863a);
 }
