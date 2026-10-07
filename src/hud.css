@@ -39,6 +39,11 @@
 
   --radius: 10px;
   --shadow: 0 2px 0 rgba(0,0,0,.45), 0 8px 24px rgba(0,0,0,.35);
+  /* One width for both side rails, so left and right are the same size and
+     their items line up. Every tile and button stretches to it (see
+     #season/#belt align-items), which is what makes the columns read as
+     STRUCTURE rather than boxes dropped wherever they fit. */
+  --rail: clamp(150px, 19vw, 236px);
 }
 
 * { box-sizing: border-box; }
@@ -86,9 +91,13 @@ html, body {
 
 /* Panel widths. Capped so a long tool label cannot stretch the right panel
    across the forest, and floored so the satchel's five tiles stay legible. */
-#season { grid-column: 1; grid-row: 1; width: clamp(180px, 26vw, 300px); }
+/* Both rails share ONE width so the layout is structurally symmetric -- the
+   reference's two columns are the same size and line up top and bottom. Left
+   content sizes itself and the right rail matches, which is what stops the two
+   sides drifting into different widths. */
+#season { grid-column: 1; grid-row: 1; width: var(--rail); }
 #status { grid-column: 2; grid-row: 1; justify-self: center; }
-#belt   { grid-column: 3; grid-row: 1; width: clamp(200px, 30vw, 360px); }
+#belt   { grid-column: 3; grid-row: 1; width: var(--rail); }
 
 /* Icon buttons ride the outer top corners, level with the panels. Circular,
    like the reference art's back/confirm controls, rather than pill chips. */
@@ -152,10 +161,10 @@ html, body {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  /* Content-sized tiles, left-aligned. Stretching all three to the same width
-     made them read as rows of one segmented card again -- the whole point is
-     that each is a discrete object floating on the scene. */
-  align-items: flex-start;
+  /* STRETCH, not flex-start. The reference's rail items all share one width and
+     line up down the column; content-sizing each one left the left rail ragged
+     (224px title, 183px stats, 187px satchel). Every item now fills the rail. */
+  align-items: stretch;
   gap: var(--s2);
 }
 
@@ -371,7 +380,8 @@ button.chip { position: relative; }
 #belt {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  /* Right rail mirrors the left: full-width rows, aligned to the right edge. */
+  align-items: stretch;
   gap: var(--s2);
   /* No chrome: #belt is a transparent layout wrapper. The tiles inside it
      carry the surfaces. */
@@ -381,14 +391,12 @@ button.chip { position: relative; }
   font-size: 10px;
   line-height: 1.3;
   color: var(--text-dim);
+  text-align: right;
 }
-#belt-counts { grid-column: 1; grid-row: 1; }
-#belt-mode   { grid-column: 2; grid-row: 1; justify-self: end; }
-#belt-tools  { grid-column: 1; grid-row: 2; }
-#belt-claim-slot { grid-column: 2; grid-row: 2; justify-self: end; }
+#belt-counts { }
 /* The message is the belt's only feedback channel, so when it has text it gets
  * a line of its own rather than squeezing the row it lands in. */
-.belt-msg:not(:empty) { grid-column: 1 / -1; grid-row: 3; }
+.belt-msg:not(:empty) { }
 /* An empty message must not hold a row open. `display: none` rather than
  * `:empty { display: none }` alone, because the span often holds whitespace
  * left over from the last message it showed, and `:empty` does not match a
@@ -396,7 +404,7 @@ button.chip { position: relative; }
  * gap for nothing, on every dig and every boot. */
 .belt-msg:empty, .belt-msg { display: none; }
 .belt-msg.has-text { display: block; }
-.belt-shop  { grid-column: 1 / -1; grid-row: 4; }
+.belt-shop  { }
 /* The action row spans the whole belt.
  *
  * #belt is `minmax(0,1fr) auto`, and .belt-actions was auto-placed -- which put
@@ -561,9 +569,9 @@ button.chip { position: relative; }
   #status { grid-column: 1; grid-row: 3; justify-self: start; }
   .tile { padding: 6px 10px; }
   #belt-counts { font-size: 10px; }
-  .chip.btn { font-size: 9px; padding: 1px 5px; }
+  .chip.btn { font-size: 9px; padding: 1px 4px; }
   .belt-tool { font-size: 10px; }
-  .chip { font-size: 9px; padding: 1px 6px; }
+  .chip { font-size: 9px; padding: 1px 4px; }
   /* The mode line ("PREVIEW - simulation only") restates the chain chip. On a
      phone that is a whole line spent saying nothing. */
   #belt-mode { display: none; }

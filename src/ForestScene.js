@@ -1606,9 +1606,14 @@ export class ForestScene extends Phaser.Scene {
         ? (Number(tokenCost) / 1e18).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
         : '???';
       const rowW3 = (el.getBoundingClientRect().width) || window.innerWidth;
+      // In the two-column rail each button gets ~half the rail (~100px on a
+      // desktop, ~70px on a phone). "buy 1 $DEEPWOOD" is 16 characters and
+      // ellipsised in every one of those cells, so the rail drops the tier
+      // number -- it is already stated by the tool line directly above, and the
+      // full wording including the token count stays in the title.
       const threeUp2 = p.left === 0 || rowW3 < 260;
       tokenBuy.textContent = threeUp2
-        ? `buy ${nt} $DEEPWOOD`
+        ? 'buy $DEEPWOOD'
         : `buy ${nt} ${shortToken} $DEEPWOOD`;
       tokenBuy.title = `buy ${toolName(nt)} with $DEEPWOOD at 10% discount (~${shortToken} tokens)`;
       tokenBuy.onclick = () => this.doBuyToolWithToken(nt);

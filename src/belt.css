@@ -125,32 +125,20 @@
  * so equal-basis gave three buttons 56px each and the widest label truncated --
  * in a column with 440px of unused space right next to it. */
 .belt-actions {
-  display: flex;
-  /* WRAP, not nowrap. With four buttons (buy / buy with $DEEPWOOD / sell /
-     settle) a 227px phone panel cannot fit them on one line at any legible
-     size, and `nowrap` clipped the tail of every label -- the buttons read
-     "buy Bro...", "buy 2 $...", "sell ge...". Wrapping costs a row and keeps
-     every label whole. */
-  flex-wrap: wrap;
+  /* An even grid, not a ragged flex row. The reference's bottom rail is a row
+     of EQUAL tiles; content-sized buttons left the row ragged and made each
+     button a different width ("buy Wood" 74px next to "buy 1 $DEEPWOOD" 120px).
+     Two equal columns fill the rail and every button lines up. */
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--s2);
   width: 100%;
-  /* Actions size to their own labels instead of splitting the row into equal
-     thirds. `flex: 1 1 0` gave two buttons 181px each on a 390px phone -- half
-     the card for the words "buy Wood" -- so the buttons read as two long empty
-     slabs rather than controls. Content-sized buttons sit next to each other
-     and leave the rest of the row as deliberate empty space. */
-  justify-content: flex-start;
 }
 .belt-actions .act {
-  /* flex-grow: 0 so the label decides the width; min-width: 0 so a long label
-     can still ellipsise rather than forcing the card wider. */
-  flex: 0 1 auto;
+  /* Fill the grid cell. min-width:0 so a long label ellipsises instead of
+     forcing the rail wider. */
   min-width: 0;
-  /* A floor so a two-word label is a button, not a hairline. Content sizing on
-     a 9px font gives "buy Wood" ~60px, which reads as an accident. */
-  min-width: 64px;
-  padding-left: 10px;
-  padding-right: 10px;
+  width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
