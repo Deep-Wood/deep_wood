@@ -85,7 +85,6 @@ html, body {
    * backdrop-filter keeps the text legible over the forest without actually
    * painting a solid slab; inset hairline shadows preserve the 3D lifting
    * that made the old solid card look raised. */
-  background: rgba(13, 26, 16, .18);
   border: 1px solid var(--edge-dim);
   border-radius: var(--radius);
   box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.06);

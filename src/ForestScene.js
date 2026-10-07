@@ -64,7 +64,7 @@ import {
 } from './economy.js';
 import { DROP_TABLE, PRICE } from './engine.js';
 import {
-  newSeasonRecord, recordHunt, rank as rankSeason, topN, standing,
+  newSeasonRecord, recordHunt, topN, standing,
   seasonClock, roiPct, eth as seasonEth, fmt, onRoiBoard, shortOfFloor, recordToolSpend,
   TOP_N,
 } from './season.js';
@@ -1330,24 +1330,10 @@ export class ForestScene extends Phaser.Scene {
         rankNote = `${lb.playerCount} player(s) settled on-chain`;
       }
     } catch {
-      rows = null;   // fall through to the local mirror
+      rows = null;   // chain read failed -- show empty state
     }
-    if (!rows || !rows.length) {
-      rows = null;
-    }
-    if (!rows) {
-      // LOCAL mirror: the same SPEC section 9 ranking but only for this session.
-      // The panel must SAY it is local, because reading as on-chain would be a
-      // lie -- the exact failure the season title had before phase() was read.
-      const local = rankSeason(this.board);
-      rows = local.map((r) => ({
-        address: r.address, rank: r.rank, roi: r.roi,
-        bestWei: r.bestWei, leq: r.leq, hunts: r.hunts,
-        onBoard: onRoiBoard(r),
-      }));
-      rankNote = 'local -- this session only';
-      phaseLabel = null;
-    }
+    // No local fallback: chain-only. If the chain read fails or returns no
+    // rows, the panel shows the empty state below.
 
     if (gen !== undefined && gen !== this.lbGen) return;  // discarded by a newer close/open
 
@@ -1408,7 +1394,7 @@ export class ForestScene extends Phaser.Scene {
           <span>#</span><span>PLAYER</span><span>ROI</span><span>BEST</span>
         </div>
         <div class="lb-rows">
-          ${top10.length ? top10.map(rowHtml).join('') : '<div class="lb-empty">no hunts settled on-chain yet</div>'}
+          ${top10.length ? top10.map(rowHtml).join('') : '<div class="lb-empty">no players on-chain yet</div>'}
         </div>
         ${statsFoot}
       </div>`;

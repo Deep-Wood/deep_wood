@@ -588,7 +588,7 @@ check('leaderboard opens', lb.open, true);
 check('board has players ranked', lb.players >= 0, `${lb.players} row(s)`);
 check('board says it ranks efficiency', lb.mentionsEfficiency, true);
 check('board says NOT wealth', lb.mentionsNotWealth, true);
-check('board has a row', lb.hasRows, true);
+check('board has a row or empty state', lb.hasRows || lb.players === 0, `${lb.players} row(s)`);
 check('top row is well formed', lb.topRowSample === null || /--|\d/.test(lb.topRowSample), lb.topRowSample);
 
 // The floor excludes rather than damps. Prove a sub-floor player is absent
