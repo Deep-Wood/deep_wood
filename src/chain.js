@@ -24,7 +24,20 @@ const SEL = new Map();
 export const SIGS = {
   'BPS_DENOMINATOR()': '0xe1a45218',
   'buyTool(uint8)': '0xfe3c3b38',
+  'buyToolWithToken(uint8,uint256,uint256,uint256)': '0xe030f7c7',
+  'emergencyWithdraw(address,uint256,address)': '0x551512de',
+  'migrateFromV3(address)': '0xeee645f2',
+  'completeMigration()': '0x4886f62c',
+  'buyNonce(address)': '0xe40afab2',
+  'getEthPerToken()': '0xcb27d6b6',
+  'getTokensPerEth()': '0x6893f63f',
+  'readSqrtPriceX96()': '0x3145fcd6',
+  'migrationCompleted()': '0x31677980',
+  'POOL_MANAGER()': '0x62308e85',
+  'POOL_ID()': '0xe0d7d0e9',
+  'V3_CONTRACT()': '0xa5dd65b6',
   'closeSeason()': '0xbbc67395',
+  'TREASURY()': '0x2d2c5565',
   'commitSeason(bytes32)': '0x4937e907',
   'commitSeed(bytes32)': '0x3ffc6f9c',
   'config()': '0x79502c55',
@@ -100,13 +113,69 @@ export const SIGS = {
   'toolOf(address)': '0x8593d0ed',
   'totalHuntsOf(address)': '0x65269398',
   'transferOwnership(address)': '0xf2fde38b',
-  'TREASURY()': '0x2d2c5565',
   'upgradeSkill(uint8)': '0xaa716e88',
 };
 
 function selector(sig) {
   if (!SEL.has(sig)) SEL.set(sig, sig);
   return sig;
+}
+
+
+/** Ordered-list endpoint runner: every read tries the primary, then fallbacks, first good answer wins. */
+async function rpcFirst(rpcUrl, fallbacks, method, params, ok) {
+  for (const url of [rpcUrl, ...fallbacks].filter(Boolean)) {
+    try {
+      const j = await rawRpc(url, method, params);
+      if (j.error) throw new Error(j.error.message || String(j.error));
+      if (ok && !ok(j.result)) continue;
+      return j.result;
+    } catch {
+      // next endpoint
+    }
+  }
+  throw new Error(`${method}: every RPC endpoint failed or disagreed`);
+}
+
+/**
+ * eth_getLogs across a range, chunked to stay under the provider's cap.
+ * The chain here is ~130M blocks and the endpoints allow at most a few
+ * million per request, so a single fromBlock:0 scan errors out and (with a
+ * swallowing caller) would report an empty history. Chunks are cached in
+ * module state keyed by (address, topic0) so a second panel open only scans
+ * the blocks mined since the first.
+ */
+const __logCache = new Map(); // key -> { block, logs }
+export async function ethGetLogsChunked(rpcUrl, fallbackRpcUrls, filter, {
+  chunkSize = 2_000_000,
+  fromHex = '0x0',
+} = {}) {
+  const latestHex = (await rawRpc(rpcUrl, 'eth_blockNumber', [])).result;
+  const latest = Number(BigInt(latestHex));
+  const from = Number(BigInt(fromHex));
+  const key = JSON.stringify([filter.address ?? '', ...(filter.topics ?? [])]);
+  const cached = __logCache.get(key) ?? { block: from - 1, logs: [] };
+  const all = cached.logs.slice();
+  for (let start = Math.max(from, cached.block + 1); start <= latest; start += chunkSize) {
+    const end = Math.min(start + chunkSize - 1, latest);
+    const f = { ...filter, fromBlock: '0x' + start.toString(16), toBlock: '0x' + end.toString(16) };
+    const logs = await ethGetLogs(rpcUrl, fallbackRpcUrls, f);
+    if (logs.length) all.push(...logs);
+    cached.block = end;
+  }
+  __logCache.set(key, cached);
+  return all;
+}
+
+/**
+ * eth_getLogs for ONE chunk, trying each endpoint until one returns an array.
+ * A short or error result from one provider must not be believed -- the
+ * primary on this chain has answered with a truncated code blob before, and a
+ * confident-wrong answer is worse than a failure.
+ */
+export async function ethGetLogs(rpcUrl, fallbackRpcUrls = [], filter) {
+  return rpcFirst(rpcUrl, fallbackRpcUrls, 'eth_getLogs', [filter],
+    (r) => Array.isArray(r));
 }
 
 /** keccak256 -> first 4 bytes, as 0x hex. */
@@ -135,7 +204,7 @@ class Rpc {
 }
 
 /** Single JSON-RPC POST with an explicit error surface. */
-async function rawRpc(rpcUrl, method, params) {
+export async function rawRpc(rpcUrl, method, params) {
   const res = await fetch(rpcUrl, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -179,12 +248,12 @@ function arg8(n) {
 }
 
 /** Decode `address` args (left-padded). */
-function argAddr(a) {
+export function argAddr(a) {
   return a.toLowerCase().replace(/^0x/, '').padStart(64, '0');
 }
 
 /** Encode a `uint256` arg (offsets, amounts) as a 64-byte word. */
-function argUint(n) {
+export function argUint(n) {
   return BigInt(n).toString(16).padStart(64, '0');
 }
 
@@ -195,7 +264,7 @@ function dAddr(hex) {
 }
 
 /** Decode `bool` return. */
-function dBool(hex) {
+export function dBool(hex) {
   return BigInt('0x' + hex.replace(/^0x/, '').slice(-64)) !== 0n;
 }
 
@@ -325,6 +394,11 @@ export async function connect({ rpcUrl, address, player, fallbackRpcUrls = [] })
     address,
     player: player ?? null,
     abi: ECONOMY_ABI,
+    /** Low-level JSON-RPC call. The leaderboard needs seasonScore(), which is
+     *  not part of the named reads, so the transport is exposed rather than
+     *  wrapping every future getter one at a time. Read-only -- there is no
+     *  transaction path here. */
+    rpc,
 
     /**
      * Confirm something is deployed here and answering, trying each endpoint.
@@ -378,6 +452,9 @@ export async function connect({ rpcUrl, address, player, fallbackRpcUrls = [] })
     preseasonPaused: async () => dBool(await rpc.call(to, sel('preseasonPaused()'))),
     seasonOpen: async () => dBool(await rpc.call(to, sel('seasonOpen()'))),
     seasonSeed: async () => rpc.call(to, sel('seasonSeed()')),
+
+    /** seasonScore: the ROI numerator the contract keeps per-player. */
+    seasonScore: async (p = player) => dUint(await rpc.call(to, sel('seasonScore(address)') + argAddr(p))),
 
     // Owner-controlled season gate. Absent from the OLD keeper contract, which
     // is why this tolerates a revert: a contract without the function returns
@@ -597,4 +674,79 @@ export function auditEconomy(onChain, mirror) {
     eq('maxSlots', onChain.config.maxSlots, mirror.MAX_TIER);
   }
   return { drift, retuned };
+}
+
+// =====================================================================
+// V4: Price oracle and token buy
+// =====================================================================
+
+/**
+ * Read sqrtPriceX96 from the Uniswap V4 pool via PoolManager extsload.
+ * Pool state is at storage slot 6, keyed by keccak256(poolId, slot).
+ */
+export async function readSqrtPriceX96(rpcUrl, fallbackRpcUrls, poolManager, poolId) {
+  // Compute state slot: keccak256(abi.encodePacked(poolId, bytes32(uint256(6))))
+  const slotData = poolId + '0000000000000000000000000000000000000000000000000000000000000006';
+  const stateSlot = await rawRpc(rpcUrl, 'web3_sha3', [slotData]);
+  if (stateSlot.error) throw new Error(stateSlot.error.message);
+  
+  // Read storage at that slot
+  const data = await rpcFirst(rpcUrl, fallbackRpcUrls, 'eth_getStorageAt', [poolManager, stateSlot.result, 'latest']);
+  if (!data.result) throw new Error('eth_getStorageAt failed');
+  
+  // Decode: low 160 bits = sqrtPriceX96
+  const raw = BigInt(data.result);
+  const sqrtPriceX96 = raw & ((1n << 160n) - 1n);
+  return sqrtPriceX96;
+}
+
+/**
+ * Get ETH per DEEPWOOD token price from the pool.
+ * Returns wei per token (18 decimals).
+ */
+export async function getEthPerToken(rpcUrl, fallbackRpcUrls, poolManager, poolId) {
+  const sqrtPriceX96 = await readSqrtPriceX96(rpcUrl, fallbackRpcUrls, poolManager, poolId);
+  if (sqrtPriceX96 === 0n) throw new Error('sqrtPriceX96 is zero');
+  const Q96 = 2n ** 96n;
+  // sqrtPriceX96 = sqrt(token/eth) * 2^96
+  // eth/token = (2^96 / sqrtPriceX96)^2
+  const ethPerToken = (Q96 * Q96) / (sqrtPriceX96 * sqrtPriceX96);
+  return ethPerToken;
+}
+
+/**
+ * Get DEEPWOOD tokens per ETH from the pool.
+ * Returns tokens per ETH (18 decimals).
+ */
+export async function getTokensPerEth(rpcUrl, fallbackRpcUrls, poolManager, poolId) {
+  const ethPerToken = await getEthPerToken(rpcUrl, fallbackRpcUrls, poolManager, poolId);
+  if (ethPerToken === 0n) throw new Error('ethPerToken is zero');
+  return (10n ** 18n * 10n ** 18n) / ethPerToken;
+}
+
+/**
+ * Get the player's current buy nonce.
+ */
+export async function getBuyNonce(rpcUrl, fallbackRpcUrls, gameAddress, player) {
+  const result = await rpcFirst(rpcUrl, fallbackRpcUrls, 'eth_call', [
+    { to: gameAddress, data: '0xe40afab2' + player.slice(2).padStart(64, '0') },
+    'latest'
+  ]);
+  return BigInt(result.result);
+}
+
+/**
+ * Buy tool with $DEEPWOOD token at 10% discount.
+ * Returns a transaction to be signed by the wallet.
+ */
+export function buyToolWithTokenTx(tier, maxTokenCost, quoteExpiresAt, nonce) {
+  // buyToolWithToken(uint8,uint256,uint256,uint256)
+  const selector = '0xe030f7c7';
+  const params = [
+    tier.toString(16).padStart(64, '0'),
+    maxTokenCost.toString(16).padStart(64, '0'),
+    quoteExpiresAt.toString(16).padStart(64, '0'),
+    nonce.toString(16).padStart(64, '0')
+  ].join('');
+  return selector + params;
 }

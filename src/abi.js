@@ -72,18 +72,30 @@ export const ECONOMY_ABI = [
   'function toolLimit(address) view returns (uint256)',
   'function toolOf(address) view returns (uint8,uint64,bool)',
   'function totalHuntsOf(address) view returns (uint64)',
+  'function buyNonce(address) view returns (uint256)',
+  'function getEthPerToken() view returns (uint256)',
+  'function getTokensPerEth() view returns (uint256)',
+  'function readSqrtPriceX96() view returns (uint160)',
+  'function migrationCompleted() view returns (bool)',
+  'function POOL_MANAGER() view returns (address)',
+  'function POOL_ID() view returns (bytes32)',
+  'function V3_CONTRACT() view returns (address)',
 ];
 
 /** Everything a player or the owner sends. */
 export const ACTION_ABI = [
   'function buyTool(uint8) payable returns ()',
+  'function buyToolWithToken(uint8,uint256,uint256,uint256) nonpayable returns ()',
   'function closeSeason() nonpayable returns ()',
   'function commitSeason(bytes32) nonpayable returns ()',
   'function commitSeed(bytes32) nonpayable returns ()',
+  'function emergencyWithdraw(address,uint256,address) nonpayable returns ()',
   'function endRun() nonpayable returns ()',
   'function finalizeSeason() nonpayable returns ()',
   'function fundToken(uint256) nonpayable returns ()',
   'function markGraduated() nonpayable returns ()',
+  'function migrateFromV3(address) nonpayable returns ()',
+  'function completeMigration() nonpayable returns ()',
   'function openSeason() nonpayable returns ()',
   'function pausePre() nonpayable returns ()',
   'function redeemGems(uint8,uint256) nonpayable returns ()',
@@ -93,7 +105,7 @@ export const ACTION_ABI = [
   'function setPaused(bool) nonpayable returns ()',
   'function setToken(address) nonpayable returns ()',
   'function setTokenRail(bool) nonpayable returns ()',
-  'function settleHunt(address,uint8,uint256[5],uint256,bytes) nonpayable returns ()',
+  'function settleHunt(address,uint8,uint256[5][],uint256[]) nonpayable returns ()',
   'function startSeasonOne() nonpayable returns ()',
   'function transferOwnership(address) nonpayable returns ()',
   'function upgradeSkill(uint8) nonpayable returns ()',
@@ -137,7 +149,10 @@ export const EVENTS_ABI = [
   'TokenRailChanged( bool)',
   'TokenSet(indexed  address)',
   'ToolBought(indexed  address, uint8, uint256, uint256)',
+  'ToolBoughtWithToken(indexed  address, uint8, uint256, uint256, uint256)',
   'ToolRepaired(indexed  address, uint8, uint256)',
+  'EmergencyWithdraw(indexed  address, uint256, indexed  address)',
+  'MigratedFromV3(indexed  address)',
 ];
 
 /** Errors worth decoding into a readable message. Generated, so a new custom

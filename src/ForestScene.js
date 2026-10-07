@@ -11,6 +11,7 @@ import { buildAllTextures, PAL, rng } from './art.js';
 import { createAmbience } from './ambience.js';
 import { panelFrame } from './layout.js';
 import { retireWalletFoot } from './hud-idle.js';
+import { config } from './config.js';
 
 // Bisect switch for the ambience layers. The 2bf3694 deploy added ~730 display
 // objects (205 canopy, 376 undergrowth, 152 shadows) and the character stopped
@@ -67,6 +68,7 @@ import {
   seasonClock, roiPct, eth as seasonEth, fmt, onRoiBoard, shortOfFloor, recordToolSpend,
   TOP_N,
 } from './season.js';
+import { fetchChainLeaderboard } from './leaderboard.js';
 import {
   initCommitment, commitSeason, verifySeason, seasonState, rollSeason,
 } from './commitment.js';
@@ -249,6 +251,14 @@ export class ForestScene extends Phaser.Scene {
     initCommitment(sha3.keccak256);
     this.commitRoot = null;
     this.huntsPerPlayer = 200; // planned ceiling, which is what the root covers
+
+    // V4: token buy + price oracle config
+    this.rpcUrl = config.rpcUrl;
+    this.fallbackRpcUrls = config.fallbackRpcUrls;
+    this.gameAddress = config.gameAddress || null;
+    this.tokenAddress = config.tokenAddress || null;
+    this.poolManager = config.poolManager || null;
+    this.poolId = config.poolId || null;
   }
 
   /**
@@ -1276,146 +1286,152 @@ export class ForestScene extends Phaser.Scene {
    * design's whole claim -- a whale playing identically to a small player
    * posts an identical number.
    *
-   * Opens with L. Rivals are simulated locally; the real board would be
-   * assembled from settled chain data.
+   * Chain-backed: the players and the numbers come from BatchSettled/Migration
+   * events and the contract's own reads (playerStats, seasonScore, roi,
+   * onRoiBoard). Rank/best/leq ordering is SPEC section 9 exactly. A failed
+   * chain read falls back to the local session board rather than claiming an
+   * empty preseason -- the empty-board case is a real possible state and an
+   * honest one.
+   *
+   * Opens with L, and with the LEADERBOARD button in the header card (same
+   * function, either input).
    */
-  openLeaderboard() {
+  async openLeaderboard(gen) {
     if (this.leaderboardOpen) return;
     this.leaderboardOpen = true;
+    if (gen === undefined) gen = (this.lbGen = (this.lbGen ?? 0) + 1);
     this.releaseTouch();
 
     const W = this.scale.width, H = this.scale.height;
-    // Was a hardcoded 430x396 centred -- on a 390px phone that is WIDER than the
-    // screen, so this panel started at x = -56 and ran off the left edge.
     const f = panelFrame(W, H, 430, 396);
     const { pw, ph, px: cx, py: cy, sheet } = f;
-
-    const c = this.add.container(0, 0).setScrollFactor(0).setDepth(UI_DEPTH);
-    if (sheet) {
-      this.lbBackdrop = addPanelBackdrop(
-        this, UI_DEPTH - 1, cx, cy, pw, ph, () => this.closeLeaderboard(),
-      );
-    }
     this.lbFrame = { pw, ph, px: cx, py: cy, sheet };
-    c.add(this.add.rectangle(cx + 4, cy + 5, pw, ph, 0x000000, 0.5).setOrigin(0));
-    c.add(this.add.rectangle(cx, cy, pw, ph, 0x0b1710, 1).setOrigin(0)
-      .setStrokeStyle(2, 0x3f8a52));
-    c.add(this.add.rectangle(cx + 1, cy + 1, pw - 2, 28, 0x16281a, 1).setOrigin(0));
 
-    const now = Math.floor(Date.now() / 1000);
+    const me = String(this.wallet ?? '0xplayer').toLowerCase();
 
-    c.add(this.add.text(cx + 14, cy + 8, 'SEASON I  -  VERDANT HOLLOW', {
-      fontFamily: 'monospace', fontSize: '14px', color: '#e8f0e0',
-    }));
-    c.add(this.add.text(cx + 14, cy + 34, `ends in ${seasonClock(this.board, now)}`, {
-      fontFamily: 'monospace', fontSize: '12px', color: '#d9a441',
-    }));
-
-    // Explain the metric, because an unexplained ROI number means nothing.
-    c.add(this.add.text(cx + 14, cy + 52,
-      'ranked by EFFICIENCY: rarity-weight per ETH spent', {
-      fontFamily: 'monospace', fontSize: '11px', color: '#9fbc9f',
-    }));
-    c.add(this.add.text(cx + 14, cy + 66,
-      'not by wealth - a whale playing like you scores the same', {
-      fontFamily: 'monospace', fontSize: '11px', color: '#7a8a7a',
-    }));
-
-    // column header
-    const hdr = `${'#'.padEnd(4)}${'PLAYER'.padEnd(12)}${'ROI'.padStart(11)}${'BEST'.padStart(12)}`;
-    c.add(this.add.text(cx + 14, cy + 88, hdr, {
-      fontFamily: 'monospace', fontSize: '11px', color: '#7a8a7a',
-    }));
-
-    const me = this.wallet ?? '0xplayer';
-    const rows = rankSeason(this.board);
-    const list = rows.slice(0, TOP_N);
-    const iAmHere = list.some((r) => r.address === String(me).toLowerCase());
-    if (!iAmHere && rows.length) list.push(rows.find((r) => r.address === String(me).toLowerCase()));
-
-    let y = cy + 104;
-    for (const r of list) {
-      if (!r) continue;
-      const isMe = r.address === String(me).toLowerCase();
-      c.add(this.add.text(cx + 14, y,
-        `${String(r.rank).padEnd(4)}${(isMe ? 'YOU' : r.address.slice(0, 10)).padEnd(12)}` +
-        `${roiPct(r).padStart(11)}${seasonEth(r.bestWei).padStart(12)}`, {
-        fontFamily: 'monospace', fontSize: '12px',
-        color: isMe ? '#fff8d0' : r.rank <= 3 ? '#3f8a52' : '#cfe0cf',
-      }));
-      y += 16;
-    }
-
-    if (!rows.length) {
-      c.add(this.add.text(cx + 14, cy + 110, 'no hunts recorded this season', {
-        fontFamily: 'monospace', fontSize: '12px', color: '#7a8a7a',
-      }));
-    }
-
-    // my standing, stated plainly
-    const st = standing(this.board, me);
-    if (!st.ranked) {
-      const mine = this.board.players.get(String(me).toLowerCase());
-      if (mine && !onRoiBoard(mine)) {
-        // The floor excludes sub-floor players rather than damping their
-        // score -- a 0.0001 ETH spender scored 819,200x that way, which
-        // handed the top of the board to exactly the strategy the floor
-        // exists to stop. So say what is needed instead.
-        const short = shortOfFloor(mine);
-        c.add(this.add.text(cx + 14, cy + ph - 74,
-          'not on the board yet - 0.005 ETH splay floor', {
-          fontFamily: 'monospace', fontSize: '12px', color: '#d9a441',
-        }));
-        c.add(this.add.text(cx + 14, cy + 14 + ph - 74 + 14,
-          `${seasonEth(mine.ethSpent)} spent, need ${fmtEth(short)} more`, {
-          fontFamily: 'monospace', fontSize: '11px', color: '#7a8a7a',
-        }));
+    // Data: chain first, local mirror as fallback. Both paths hand the same
+    // shape to the painter below, so the layout never forks.
+    let rows = null, rankNote = null, phaseLabel = null;
+    try {
+      const { getReader } = await import('./onchain.js');
+      const r = await getReader();
+      if (r) {
+        const { fetchChainLeaderboard } = await import('./leaderboard.js');
+        const lb = await fetchChainLeaderboard({
+          rpcUrl: r.rpcUrl,
+          fallbackRpcUrls: r.fallbackRpcUrls ?? [],
+          gameAddress: r.address,
+        });
+        rows = lb.rows;
+        phaseLabel = lb.phase === 0 ? 'Preseason'
+          : lb.phase === 1 ? `Season ${lb.current?.id ?? 1}`
+          : lb.phase === 2 ? 'Season closed'
+          : null;
+        rankNote = `${lb.playerCount} player(s) settled on-chain`;
       }
+    } catch {
+      rows = null;   // fall through to the local mirror
     }
-    if (st.ranked) {
-      c.add(this.add.text(cx + 14, cy + ph - 44,
-        `you are #${st.rank} of ${st.of}` +
-        (st.inTopTen ? '  -  in the prize places' : ''), {
-        fontFamily: 'monospace', fontSize: '12px', color: '#fff8d0',
+    if (!rows || !rows.length) {
+      rows = null;
+    }
+    if (!rows) {
+      // LOCAL mirror: the same SPEC section 9 ranking but only for this session.
+      // The panel must SAY it is local, because reading as on-chain would be a
+      // lie -- the exact failure the season title had before phase() was read.
+      const local = rankSeason(this.board);
+      rows = local.map((r) => ({
+        address: r.address, rank: r.rank, roi: r.roi,
+        bestWei: r.bestWei, leq: r.leq, hunts: r.hunts,
+        onBoard: onRoiBoard(r),
       }));
-      if (st.needsToPass) {
-        c.add(this.add.text(cx + 14, cy + ph - 28,
-          `next rank needs more weight per ETH than ${st.needsToPass.slice(0, 10)}`, {
-          fontFamily: 'monospace', fontSize: '11px', color: '#7a8a7a',
-        }));
-      }
+      rankNote = 'local -- this session only';
+      phaseLabel = null;
     }
 
-    // Commit-then-act footer. The root is shown so a player can recompute
-    // it from the seed and confirm the season was not rewritten.
-    const v = this.verifyCommitment();
-    const root = this.commitRoot ? this.commitRoot.slice(0, 18) + '...' : 'none';
-    c.add(this.add.text(cx + 14, cy + ph - 30,
-      `committed root  ${root}  (${this.commitLeafCount} leaves)`, {
-      fontFamily: 'monospace', fontSize: '11px',
-      color: v.ok ? '#3f8a52' : '#d83a5a',
-    }));
-    c.add(this.add.text(cx + 14, cy + ph - 14,
-      v.ok ? 'root verified against the season seed' : 'VERIFICATION FAILED', {
-      fontFamily: 'monospace', fontSize: '11px',
-      color: v.ok ? '#7a8a7a' : '#d83a5a',
-    }));
+    if (gen !== undefined && gen !== this.lbGen) return;  // discarded by a newer close/open
 
-    this.lbClose = this.add.text(cx + pw - 30, cy + 8, 'X', {
-      fontFamily: 'monospace', fontSize: '14px', color: '#9fbc9f',
-    }).setInteractive({ useHandCursor: true });
-    c.add(this.lbClose);
-    this.lbClose.on('pointerdown', () => this.closeLeaderboard());
+    // -- DOM panel. The header card has z-index 9 and the Phaser canvas paints
+    //    UNDER it, which is why the old leaderboard sat behind the HUD. A DOM
+    //    layer with z-index above the HUD fixes this structurally, not by
+    //    hoping Phaser's depth comparison reaches the window. --
+    const el = document.createElement('div');
+    el.className = 'lb-overlay';
+    el.style.cssText =
+      'position:fixed;inset:0;z-index:1000;display:flex;align-items:center justify-content:center;' +
+      'background:rgba(0,0,0,.55);';
+    const frame = sheet
+      ? 'left:0;right:0;top:auto;bottom:0;width:100%;max-width:none;border-radius:0;margin-bottom:0;'
+      : `left:${cx}px;top:${cy}px;width:${pw}px;max-height:${ph}px;`;
 
-    this.lbPanel = c;
+    const top10 = rows.slice(0, TOP_N);
+    const iAmHere = top10.some((r) => r.address === me && r.onBoard);
+    // If the player is ranked but outside the top 10, they still see where they
+    // sit -- the same behaviour the local board had.
+    const mineRow = !iAmHere ? rows.find((r) => r.address === me) : null;
+    if (mineRow) top10.push(mineRow);
+
+    const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+    const short = (a) => a === '0xplayer' ? 'you (not connected)' : `${a.slice(0, 6)}…${a.slice(-4)}`;
+    const roiTxt = (r) => r.onBoard ? r.roi.toLocaleString('en-US') + 'x' : '--';
+    const bestTxt = (r) => seasonEth(r.bestWei) + ' ETH';
+    const shortAddr = (a) => a === '0xplayer' ? 'YOU' : `${a.slice(0, 6)}…${a.slice(-4)}`;
+    const rowHtml = (r) => {
+      const isMe = r.address === me;
+      return `<div class="lb-row${isMe ? ' me' : ''}${r.onBoard ? '' : ' off'}">${''}` +
+        `<span class="lb-rank">${r.onBoard ? r.rank : '--'}</span>${''}` +
+        `<span class="lb-addr">${esc(shortAddr(r.address))}</span>${''}` +
+        `<span class="lb-roi">${roiTxt(r)}</span>${''}` +
+        `<span class="lb-best">${bestTxt(r)}</span>${''}` +
+        `</div>`;
+    };
+
+    const myRow = rows.find((r) => r.address === me);
+    const statsFoot = myRow
+      ? (myRow.onBoard
+          ? `<div class="lb-stats">you are #${myRow.rank} of ${rows.filter((x) => x.onBoard).length}${' '}${''
+          }${myRow.rank <= TOP_N ? ' · in the prize places' : ''}</div>`
+          : `<div class="lb-stats off">not on the board yet -- below the splay floor, ${''}${''
+          }spend ${seasonEth(myRow.ethSpent)} / 0.005 ETH to rank</div>`)
+      : '';
+
+    el.innerHTML = `
+      <div class="lb-panel" style="${frame}">
+        <div class="lb-head">
+          <span class="lb-title">${phaseLabel ?? 'Season'} · VERDANT HOLLOW</span>
+          <button class="lb-close" type="button">✕</button>
+        </div>
+        <div class="lb-sub">
+          ranked by EFFICIENCY: rarity-weight per ETH spent · not by wealth · ${esc(rankNote ?? '')}
+        </div>
+        <div class="lb-cols">
+          <span>#</span><span>PLAYER</span><span>ROI</span><span>BEST</span>
+        </div>
+        <div class="lb-rows">
+          ${top10.length ? top10.map(rowHtml).join('') : '<div class="lb-empty">no hunts settled on-chain yet</div>'}
+        </div>
+        ${statsFoot}
+      </div>`;
+    document.body.appendChild(el);
+    this.lbEl = el;
+
+    const close = () => this.closeLeaderboard();
+    el.querySelector('.lb-close').addEventListener('pointerdown', close);
+    el.addEventListener('pointerdown', (ev) => { if (ev.target === el) close(); });
   }
 
   closeLeaderboard() {
-    if (!this.lbPanel) return;
-    this.lbPanel.destroy(true);
-    this.lbPanel = null;
-    this.lbBackdrop?.destroy();
-    this.lbBackdrop = null;
+    // Bump the generation so an in-flight open discards its late result.
+    this.lbGen = (this.lbGen ?? 0) + 1;
+    // DOM panel, not a Phaser container -- it was created against document.body
+    // in openLeaderboard, so remove it from the DOM rather than destroying a
+    // scene container. The old canvas-backed version never actually rendered
+    // above the DOM HUD (z-index 9), which is why it was DOM now.
+    if (this.lbEl) {
+      this.lbEl.remove();
+      this.lbEl = null;
+    }
+    if (this.lbBackdrop) { this.lbBackdrop.destroy(); this.lbBackdrop = null; }
     this.lbFrame = null;
     if (this.lbOutside) this.input.off('pointerdown', this.lbOutside);
     this.lbOutside = null;
@@ -1426,7 +1442,13 @@ export class ForestScene extends Phaser.Scene {
     if (this.leaderboardOpen) this.closeLeaderboard();
     else {
       this.closeBelt();
-      this.openLeaderboard();
+      // openLeaderboard() is async: the chain scan can take several seconds,
+      // and the player can tap L again (or the close control) while it is
+      // still in flight. A generation guard means a close that lands before
+      // the fetch finishes discards the late result instead of leaving a
+      // stale overlay on screen after the flag is already false.
+      const gen = (this.lbGen = (this.lbGen ?? 0) + 1);
+      void this.openLeaderboard(gen);
     }
   }
 
@@ -1602,6 +1624,26 @@ export class ForestScene extends Phaser.Scene {
     this.decoratePending(buy);
     el.appendChild(buy);
 
+    // --- buy tool with $DEEPWOOD (10% discount)
+    if (nt <= 5 && this.tokenAddress && this.poolManager && this.poolId) {
+      const tokenBuy = document.createElement('button');
+      tokenBuy.className = 'chip btn act token-buy';
+      tokenBuy.id = 'belt-buy-token';
+      const tokenCost = this.estimateTokenCost(nt);
+      const shortToken = tokenCost > 0
+        ? (Number(tokenCost) / 1e18).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+        : '???';
+      const rowW3 = (el.getBoundingClientRect().width) || window.innerWidth;
+      const threeUp2 = p.left === 0 || rowW3 < 260;
+      tokenBuy.textContent = threeUp2
+        ? `buy ${nt} $DEEPWOOD`
+        : `buy ${nt} ${shortToken} $DEEPWOOD`;
+      tokenBuy.title = `buy ${toolName(nt)} with $DEEPWOOD at 10% discount (~${shortToken} tokens)`;
+      tokenBuy.onclick = () => this.doBuyToolWithToken(nt);
+      this.decoratePending(tokenBuy);
+      el.appendChild(tokenBuy);
+    }
+
     // --- sell gems
     const sell = document.createElement('button');
     sell.className = 'chip btn act';
@@ -1614,8 +1656,9 @@ export class ForestScene extends Phaser.Scene {
     const shortVal = held > 0 ? String(Number(val) / 1e18).replace(/0+$/, '').replace(/\.$/, '') : 'sell gems';
     const rowW2 = (el.getBoundingClientRect().width) || window.innerWidth;
     const tight = p.left === 0 || rowW2 < 260;
+    const payoutLabel = this.tokenAddress ? '$DEEPWOOD' : 'ETH';
     sell.textContent = held > 0 ? (tight ? 'sell gems' : `sell ${shortVal}`) : 'sell gems';
-    sell.title = held > 0 ? `sell ${held} gems for ${fmtEth(val)}` : 'no gems to sell';
+    sell.title = held > 0 ? `sell ${held} gems for ${shortVal} ${payoutLabel}` : 'no gems to sell';
     const rchk = canRedeem(p);
     sell.disabled = !rchk.ok;
     if (!rchk.ok) sell.title = rchk.reason;
@@ -1823,6 +1866,170 @@ export class ForestScene extends Phaser.Scene {
    * durability you had on Bronze is gone, which is the whole tension in
    * "repair with gems, or pay ETH and start fresh".
    */
+  /**
+   * Estimate the token cost for buying a tool tier, using the on-chain price.
+   * Returns wei (18 decimals) or 0 if price is unavailable.
+   */
+  async estimateTokenCost(tier) {
+    try {
+      const { getEthPerToken } = await import('./chain.js');
+      const ethPerToken = await getEthPerToken(
+        this.rpcUrl,
+        this.fallbackRpcUrls,
+        this.poolManager,
+        this.poolId
+      );
+      const cost = toolPrice(tier);
+      // tokenCost = cost * 0.9 / ethPerToken
+      const tokenCost = (cost * 9000n) / (ethPerToken * 10000n / 10000n);
+      return tokenCost;
+    } catch {
+      return 0n;
+    }
+  }
+
+  /**
+   * Buy tool with $DEEPWOOD token at 10% discount.
+   * Flow: get quote → user accepts → sign tx → wait for confirmation.
+   */
+  async doBuyToolWithToken(tier) {
+    if (this.txBusy) return;
+    this.txBusy = true;
+    try {
+      await this._doBuyToolWithToken(tier);
+    } finally {
+      this.txBusy = false;
+    }
+  }
+
+  async _doBuyToolWithToken(tier) {
+    const p = this.econ;
+
+    // OFFLINE: local simulation only
+    if (!onchainActive()) {
+      this.beltMsg('Token buy requires wallet connection', 'bad');
+      return;
+    }
+
+    // Get on-chain price
+    this.beltMsg('Reading pool price…', 'busy');
+    const { getEthPerToken, getBuyNonce } = await import('./chain.js');
+    const ethPerToken = await getEthPerToken(
+      this.rpcUrl,
+      this.fallbackRpcUrls,
+      this.poolManager,
+      this.poolId
+    );
+    const cost = toolPrice(tier);
+    const tokenCost = (cost * 9000n) / (ethPerToken * 10000n / 10000n);
+    const nonce = await getBuyNonce(
+      this.rpcUrl,
+      this.fallbackRpcUrls,
+      this.gameAddress,
+      this.wallet
+    );
+    const quoteExpiresAt = Math.floor(Date.now() / 1000) + 30;
+
+    // Show quote to user
+    const shortToken = (Number(tokenCost) / 1e18).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    const accepted = await this.showQuoteDialog(tier, shortToken, 30);
+    if (!accepted) {
+      this.beltMsg('Quote cancelled', 'bad');
+      return;
+    }
+
+    // Check if quote expired
+    if (Date.now() / 1000 > quoteExpiresAt) {
+      this.beltMsg('Quote expired - try again', 'bad');
+      return;
+    }
+
+    // Send transaction
+    this.beltMsg('Confirm in wallet…', 'busy');
+    this.setTxPending('belt-buy-token', 'buying');
+    const { buyToolWithTokenTx } = await import('./chain.js');
+    const { getState } = await import('./wallet.js');
+    const { account } = getState();
+    const before = await this.getReader()?.toolOf(account);
+
+    let r;
+    try {
+      const txData = buyToolWithTokenTx(tier, tokenCost, quoteExpiresAt, nonce);
+      r = await this.sendTx(txData);
+    } finally {
+      this.clearTxPending();
+    }
+
+    if (!r?.ok) {
+      this.beltMsg(r?.reason || 'purchase failed', 'bad');
+      return;
+    }
+
+    // Wait for confirmation
+    const after = await this.pollUntilChanged(
+      () => this.getReader()?.toolOf(account),
+      before,
+      (b, a) => a.tier > b.tier
+    );
+
+    if (!after.changed) {
+      this.beltMsg('contract did not apply the purchase (it reverted)', 'bad');
+      return;
+    }
+
+    // Update local state
+    p.tier = tier;
+    p.left = Number(after.value.durability ?? 0);
+    p.max = durabilityOf(tier);
+    recordToolSpend(this.board, this.wallet ?? '0xplayer', cost);
+    this.beltMsg(`Bought ${toolName(tier)} with $DEEPWOOD — ${p.left}/${p.max} uses`, 'ok');
+    this.refreshBelt();
+    window.renderGems?.();
+    this.updateHud();
+  }
+
+  /**
+   * Show a quote dialog and wait for user acceptance.
+   * Returns true if accepted, false if cancelled.
+   */
+  async showQuoteDialog(tier, tokenCost, expiresIn) {
+    return new Promise((resolve) => {
+      const el = document.createElement('div');
+      el.className = 'quote-dialog';
+      el.innerHTML = `
+        <div class="quote-card">
+          <h3>Buy ${toolName(tier)} with $DEEPWOOD</h3>
+          <p>Token cost: <strong>${tokenCost} $DEEPWOOD</strong></p>
+          <p>Discount: <strong>10% off</strong></p>
+          <p>Quote expires in: <strong>${expiresIn}s</strong></p>
+          <div class="quote-actions">
+            <button class="chip btn act" id="quote-accept">Accept</button>
+            <button class="chip btn" id="quote-cancel">Cancel</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(el);
+
+      const acceptBtn = el.querySelector('#quote-accept');
+      const cancelBtn = el.querySelector('#quote-cancel');
+      const timer = setTimeout(() => {
+        el.remove();
+        resolve(false);
+      }, expiresIn * 1000);
+
+      acceptBtn.onclick = () => {
+        clearTimeout(timer);
+        el.remove();
+        resolve(true);
+      };
+      cancelBtn.onclick = () => {
+        clearTimeout(timer);
+        el.remove();
+        resolve(false);
+      };
+    });
+  }
+
   async doBuyTool(tier) {
     // These handlers now AWAIT a wallet signature. Before they were purely
     // local and synchronous, so a double-click cost nothing. Now a second

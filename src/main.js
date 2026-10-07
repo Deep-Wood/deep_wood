@@ -49,6 +49,10 @@ game.events.once('ready', () => {
   if (!s) return;
   const publish = () => {
     window.__scene = s;
+    // LEADERBOARD button in the header card opens the same panel as the L key.
+    // Wired here, where the scene is guaranteed to exist.
+    document.getElementById('leaderboard-btn')
+      ?.addEventListener('click', () => s.toggleLeaderboard());
     // A wallet sync that ran while the scene was unpublished skipped it, so
     // re-run it now that the chain's tool/gems/balance can be applied.
     window.__syncBalance?.();

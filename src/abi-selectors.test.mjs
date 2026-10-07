@@ -21,7 +21,7 @@ import {
 } from './wallet.js';
 
 const ART = JSON.parse(
-  readFileSync('/home/administrator/gem-hunter/out/DeepWoodV3.sol/DeepWoodV3.json', 'utf8'),
+  readFileSync('/home/administrator/gem-hunter/out/DeepWoodV4.sol/DeepWoodV4.json', 'utf8'),
 );
 const DISPATCH = ART.methodIdentifiers;
 

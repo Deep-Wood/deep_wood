@@ -23,3 +23,4 @@ src/assets/
 # numbers in front of anyone who reads the tree. Kept local so it survives
 # across sessions; gitignored so it cannot leak by accident.
 ECONOMY-SPEC.md
+.env

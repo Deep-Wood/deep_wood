@@ -27,8 +27,8 @@ import * as season from './season.js';
 import { SIGS } from './chain.js';
 
 const require = createRequire(import.meta.url);
-const ART = '/home/administrator/gem-hunter/out/DeepWoodV3.sol/DeepWoodV3.json';
-const SOL = '/home/administrator/gem-hunter/src/DeepWoodV3.sol';
+const ART = '/home/administrator/gem-hunter/out/DeepWoodV4.sol/DeepWoodV4.json';
+const SOL = '/home/administrator/gem-hunter/src/DeepWoodV4.sol';
 
 let pass = 0;
 let fail = 0;

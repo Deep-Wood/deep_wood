@@ -51,9 +51,11 @@ export const config = {
     .split(',')
     .map((u) => u.trim())
     .filter((u) => u && u !== DEFAULTS.rpcUrl),
-  gameAddress: (env.VITE_GAME_ADDRESS || '').trim(),
+  gameAddress: (env.VITE_GAME_ADDRESS || '0x47E704585Be1E690246cAbaa40A9Be9295dF942c').trim(),
   chainId: Number(env.VITE_CHAIN_ID || DEFAULTS.chainId),
   tokenAddress: (env.VITE_TOKEN_ADDRESS || '').trim(),
+  poolManager: (env.VITE_POOL_MANAGER || '0x8366a39cc670b4001a1121b8f6a443a643e40951').trim(),
+  poolId: (env.VITE_POOL_ID || '0x03a370182b086617172ce27a70b612d30ae635113f06f7088254586914abfdab').trim(),
 };
 
 /**
