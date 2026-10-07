@@ -26,6 +26,11 @@
   --faint: #6d8a6d;
   --panel: rgba(13, 26, 16, .92);
   --panel-solid: #0d1a10;
+  /* Tiles are more opaque than the old panel wash. A small discrete control
+     needs to read as a solid object sitting on the scene; the big translucent
+     card needed to be see-through because it covered so much of it. */
+  --tile: rgba(11, 22, 14, .88);
+  --tile-edge: rgba(63, 138, 82, .45);
   --edge:  #3f8a52;
   --edge-dim: rgba(63, 138, 82, .28);
   --gold:  #d9a441;
@@ -93,19 +98,40 @@ html, body {
 /* The panels start below the icon row so nothing overlaps. */
 #season, #belt { margin-top: calc(var(--icon) + var(--s2)); }
 
-.card {
-  /* Transparent acrylic: the user wants the game visible THROUGH the panels,
-   * so a near-opaque panel was replaced with a frosted-glass wash.
-   * backdrop-filter keeps the text legible over the forest without actually
-   * painting a solid slab; inset hairline shadows preserve the 3D lifting
-   * that made the old solid card look raised. */
-  border: 1px solid var(--edge-dim);
+/* --- tiles ---------------------------------------------------------------
+ * A tile is a discrete SURFACE for something pressable -- an action button, a
+ * slot, an icon button. It is the only chrome in the HUD.
+ *
+ * Readouts (the season name, Rank/ROI/Finds, the satchel) get NO box. The
+ * reference art floats "Customize" and the character name as plain text over
+ * the scene; only the things you can press are surfaces. Boxing the readouts
+ * was what made the left column read as one more panel -- three stacked
+ * translucent rectangles look like a card no matter how small each one is.
+ * Text is kept legible with a shadow instead of a plate.
+ * ------------------------------------------------------------------------ */
+.tile {
+  background: var(--tile);
+  border: 1px solid var(--tile-edge);
   border-radius: var(--radius);
-  box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.06);
-  backdrop-filter: blur(6px) saturate(1.1);
-  -webkit-backdrop-filter: blur(6px) saturate(1.1);
-  background: var(--panel);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .07),
+    0 2px 0 rgba(0, 0, 0, .45),
+    0 6px 16px rgba(0, 0, 0, .35);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
   padding: var(--s2) var(--s3);
+}
+
+/* Boxless readouts. Same treatment the reference gives its labels: straight on
+   the scene, held readable by a text shadow rather than a panel. */
+.readout {
+  background: none;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding: 0;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .95), 0 0 8px rgba(0, 0, 0, .7);
 }
 
 .card-title {
@@ -122,17 +148,22 @@ html, body {
  * blocks vertically inside a capped width; the panel is narrow enough that the
  * middle of the forest stays clear. */
 #season {
-  padding: var(--s2) var(--s3);
+  padding: 0;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--s1);
-  border-radius: var(--radius);
+  /* Content-sized tiles, left-aligned. Stretching all three to the same width
+     made them read as rows of one segmented card again -- the whole point is
+     that each is a discrete object floating on the scene. */
+  align-items: flex-start;
+  gap: var(--s2);
 }
 
+/* The left clusters are separate tiles, so the rules that used to divide them
+   inside one card (and the card's own padding) are gone. */
 .season-head { margin-bottom: 0; }
 .season-grid { margin-top: 0; }
-#satchel     { margin-top: var(--s1); }
+#satchel     { margin-top: 0; }
 
 /* Player portrait. 32px, circular, in the card head beside the season title.
    Deliberately NOT over the game: it is inside the one persistent card, so it
@@ -338,14 +369,14 @@ button.chip { position: relative; }
  * column; the claim is 96px and fits beside it with room to spare.
  * ------------------------------------------------------------------------ */
 #belt {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  column-gap: var(--s2);
-  row-gap: 3px;
-  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s2);
+  /* No chrome: #belt is a transparent layout wrapper. The tiles inside it
+     carry the surfaces. */
+  padding: 0;
   margin-top: calc(var(--icon) + var(--s2));
-  padding: var(--s2) var(--s3);
   font-family: var(--mono);
   font-size: 10px;
   line-height: 1.3;
@@ -393,12 +424,11 @@ button.chip { position: relative; }
  * ------------------------------------------------------------------------ */
 
 #satchel {
-  /* Placement lives in the row map above, with every other block. This rule is
-   * only the satchel's own box now -- repeating grid-column/grid-row here is
-   * what let a stale `column 3` override the map and push the satchel into a
-   * phantom third column. */
-  padding-top: var(--s1);
-  border-top: 1px solid var(--edge-dim);
+  /* No box, no divider. It was a `border-top` rule when the satchel was a row
+   * inside the header card; boxless, a stray line above it reads as the top
+   * edge of yet another panel. */
+  padding-top: 0;
+  border-top: 0;
 }
 #satchel .card-title { display: block; margin-bottom: 1px; font-size: 9px; }
 
@@ -501,10 +531,10 @@ button.chip { position: relative; }
  * by side underneath, and the vertical rules are kept because they are what
  * hold the columns apart. */
 @media (max-width: 700px) {
-  /* Below this width two side panels plus a centre chip stop fitting on one
-   * row, so the panels stack: the left panel keeps the top-left, the toolbelt
-   * drops under it, and the icon buttons stay pinned to the top corners. The
-   * forest stays visible to the right of the stack. */
+  /* Below this width two side columns plus a centre chip stop fitting on one
+   * row, so they stack: the left tiles keep the top-left, the toolbelt drops
+   * under them, and the icon buttons stay pinned to the top corners. The forest
+   * stays visible to the right of the stack. */
   #hud {
     grid-template-columns: minmax(0, 1fr) auto;
     row-gap: var(--s2);
@@ -529,6 +559,7 @@ button.chip { position: relative; }
   #season { grid-column: 1; grid-row: 1; width: 78%; }
   #belt   { grid-column: 1; grid-row: 2; width: 78%; margin-top: 0; }
   #status { grid-column: 1; grid-row: 3; justify-self: start; }
+  .tile { padding: 6px 10px; }
   #belt-counts { font-size: 10px; }
   .chip.btn { font-size: 9px; padding: 1px 5px; }
   .belt-tool { font-size: 10px; }

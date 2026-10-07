@@ -1208,7 +1208,11 @@ export class ForestScene extends Phaser.Scene {
     // recomputed on resize.
     this.logText = this.add.text(12, H - 96, '', {
       fontFamily: 'monospace', fontSize: '12px', color: '#cfe0cf',
-      backgroundColor: '#060e11cc', padding: { x: 8, y: 6 },
+      // No background plate. It painted a wide translucent rectangle across
+      // the bottom-left, which read as one more panel. The reference art floats
+      // its text straight on the scene; a text shadow keeps it legible over the
+      // moss without a box.
+      stroke: '#040a06', strokeThickness: 3,
       wordWrap: { width: Math.max(120, W - 40), useAdvancedWrap: true },
     });
     this.hud.add(this.logText);
@@ -1216,7 +1220,7 @@ export class ForestScene extends Phaser.Scene {
     // prompt shown when near a node
     this.prompt = this.add.text(W / 2, H - 70, '', {
       fontFamily: 'monospace', fontSize: '14px', color: '#fff8d0',
-      backgroundColor: '#0d1a10cc', padding: { x: 10, y: 6 },
+      backgroundColor: '#0d1a10dd', padding: { x: 10, y: 5 },
     }).setOrigin(0.5).setVisible(false);
     this.hud.add(this.prompt);
   }

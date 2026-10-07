@@ -116,14 +116,15 @@
     })();
   </script>
 
-  <!-- HUD. Floating side panels over the forest, not a header card.
+  <!-- HUD. Discrete floating tiles over the forest -- no panels, no cards.
        See src/hud.css for the layout rules. -->
   <div id="hud">
-    <!-- LEFT PANEL: season identity + stats + satchel.
-         Deliberately does NOT span the screen: it is a floating card docked to
-         the left edge, so the middle of the forest stays clear. -->
-    <section id="season" class="card">
-      <div class="season-head" style="position:relative">
+    <!-- LEFT: season identity, stats and satchel as SEPARATE floating tiles.
+         There is deliberately no container: the reference art has no panel
+         behind its controls, and wrapping these in one box is what rebuilt the
+         header card as two smaller ones. Each cluster carries its own tile. -->
+    <section id="season">
+      <div class="season-head readout" style="position:relative">
         <!-- Player portrait: a vibe viber (vibevibe.fun PFP collection). It is
              the PLAYER AVATAR in the card, not the walker -- the collection is
              1080x1080 head-and-shoulders PFPs, which have no direction and no
@@ -142,14 +143,14 @@
              phase() and current(). -->
         <span class="card-title" id="season-title">Connecting&hellip;</span>
       </div>
-      <div class="season-grid">
+      <div class="season-grid readout">
         <div class="stat"><span class="k">Rank</span><span class="v hi" id="rank">&mdash;</span></div>
         <div class="stat"><span class="k">ROI</span><span class="v" id="roi">&mdash;</span></div>
         <div class="stat"><span class="k">Finds</span><span class="v" id="finds">&mdash;</span></div>
       </div>
 
-      <!-- Satchel: the find tally by rarity, in the same left panel. -->
-      <div id="satchel">
+      <!-- Satchel: the find tally by rarity, its own tile. -->
+      <div id="satchel" class="readout">
         <span class="card-title">Satchel</span>
         <div id="gemlist"></div>
       </div>
@@ -161,12 +162,12 @@
       <div class="chip" id="chainstat"><span class="dot warn"></span><span id="chaintext">checking&hellip;</span></div>
     </div>
 
-    <!-- RIGHT PANEL: the toolbelt. Floats over the right edge so the action
-         buttons sit where the reference art puts its controls. -->
-    <div id="belt" class="card">
-      <span class="belt-counts" id="belt-counts">no tool yet</span>
+    <!-- RIGHT: the toolbelt. Discrete tiles, no container -- the reference art
+         floats its controls straight on the scene. -->
+    <div id="belt">
+      <span class="belt-counts readout" id="belt-counts">no tool yet</span>
       <span class="belt-mode" id="belt-mode">PREVIEW - simulation only</span>
-      <div class="belt-tool" id="belt-tool">no tool - buy Wood to start hunting</div>
+      <div class="belt-tool readout" id="belt-tool">no tool - buy Wood to start hunting</div>
       <div class="belt-actions" id="belt-actions"></div>
       <span class="belt-msg" id="belt-msg"></span>
     </div>
