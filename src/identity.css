@@ -184,7 +184,8 @@ button.chip {
   font-size: 11px;
   background: linear-gradient(180deg, #3f2e1e, #0f1e18);
   border: 1px solid rgba(0, 0, 0, .6);
-  border-radius: 999px;
+  /* Rounded square, matching hud.css -- not a pill. */
+  border-radius: 12px;
   box-shadow:
     inset 0 0 0 1px rgba(122, 98, 54, .55),
     inset 0 1px 0 rgba(255, 255, 255, .14),   /* top highlight */
@@ -228,8 +229,10 @@ button.chip.act {
   padding: 8px 10px !important;
   min-height: 34px !important;
   min-width: 56px !important;
-  /* non-sharp edges: fully rounded ends (the existing 999px radius) */
-  border-radius: 999px !important;
+  /* Rounded SQUARE (12px), not a pill. The 999px radius made every action
+   * read as a status chip; 12px corners are what make it read as a button
+   * you press, matching the reference art. */
+  border-radius: 12px !important;
   /* The 3D: gradient body, top gloss, bottom shade, and a hard bottom
    * 'ledge' that the button visually SITS on. Pressing flattens the
    * ledge (translateY) so it feels like the button goes INTO the wood. */
@@ -263,14 +266,11 @@ button.chip.act:active {
 #belt-actions .act {
   min-width: 56px;
 }
-/* The connect button lives on the season header line -- same treatment. */
-button.chip#connect {
-  font-size: 11px !important;
-  padding: 8px 12px !important;
-  min-height: 34px !important;
-  border-radius: 999px !important;
-  background: linear-gradient(180deg, #543e28, #0f1e18) !important;
-}
+/* The connect control is an ICON button now (see hud.css .icon-btn), so the
+ * old pill treatment no longer applies. Only the wallet-state ring is styled
+ * here, and it must not fight the circular geometry. */
+button.icon-btn#connect.ok   { border-color: var(--gold) !important; }
+button.icon-btn#connect.warn { border-color: var(--warn) !important; }
 
 .dot.ok   { background: var(--edge);   box-shadow: 0 0 6px var(--edge); }
 .dot.warn { background: var(--warn);   box-shadow: 0 0 6px rgba(217, 164, 65, .6); }
