@@ -6,8 +6,6 @@
  * being presented as two stacked boxes.
  * ------------------------------------------------------------------------ */
 #belt {
-  margin-top: var(--s2); padding-top: var(--s2);
-  border-top: 1px solid var(--edge-dim);
   font-family: var(--mono);
   font-size: 10px;
   line-height: 1.3;

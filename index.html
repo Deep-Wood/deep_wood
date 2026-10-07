@@ -116,9 +116,12 @@
     })();
   </script>
 
-  <!-- HUD. One grid owns both top slots so they cannot collide; see
-       src/hud.css for the measured overlaps this replaces. -->
+  <!-- HUD. Floating side panels over the forest, not a header card.
+       See src/hud.css for the layout rules. -->
   <div id="hud">
+    <!-- LEFT PANEL: season identity + stats + satchel.
+         Deliberately does NOT span the screen: it is a floating card docked to
+         the left edge, so the middle of the forest stays clear. -->
     <section id="season" class="card">
       <div class="season-head" style="position:relative">
         <!-- Player portrait: a vibe viber (vibevibe.fun PFP collection). It is
@@ -138,68 +141,49 @@
              been read when it has not. paintSeasonState() fills it in from
              phase() and current(). -->
         <span class="card-title" id="season-title">Connecting&hellip;</span>
-        <!-- Connect lives at the top right of the card, on the season's own
-             header line. It was previously down in the chain block with the
-             status chip, which buried the one control a first-time player needs
-             under three rows of numbers they have no stake in yet. -->
-        <button class="chip" id="connect">Connect wallet</button>
       </div>
       <div class="season-grid">
         <div class="stat"><span class="k">Rank</span><span class="v hi" id="rank">&mdash;</span></div>
         <div class="stat"><span class="k">ROI</span><span class="v" id="roi">&mdash;</span></div>
         <div class="stat"><span class="k">Finds</span><span class="v" id="finds">&mdash;</span></div>
-        <div class="stat"><button type="button" id="leaderboard-btn" class="lb-btn">LEADERBOARD</button></div>
       </div>
 
-      <!-- Chain and wallet live in the same card. They were a second floating
-           panel, which made the top of the screen two stacked boxes for what is
-           one piece of information about the same season. -->
-      <div id="status">
-        <div class="chip" id="chainstat"><span class="dot warn"></span><span id="chaintext">checking&hellip;</span></div>
-        <!-- The Connect button moved up to the season header line. It used to
-             sit here beside the status chip, which put the one control a new
-             player needs three rows below the season title. -->
+      <!-- Satchel: the find tally by rarity, in the same left panel. -->
+      <div id="satchel">
+        <span class="card-title">Satchel</span>
+        <div id="gemlist"></div>
       </div>
+    </section>
 
-      <!-- The toolbelt, in that same card. It is not a panel over the game:
-           three earlier versions opened one (340px fixed, then a 44% bottom
-           sheet, then a right-hand drawer) and the complaint was never the size.
-           Nothing here covers the forest and there is nothing to dismiss. -->
-      <div id="belt">
-        <!-- Rebuilt for the redeploy economy (ECONOMY-SPEC.md section 1):
-             ONE tool, bought and upgraded with ETH. Gems only repair and sell.
-             No tool array, no stow, no EQUIP -- upgrading replaces the tool.
+    <!-- CENTRE: the season/chain status chip, centred under the top edge so the
+         chain state is readable without a full-width bar holding it. -->
+    <div id="status">
+      <div class="chip" id="chainstat"><span class="dot warn"></span><span id="chaintext">checking&hellip;</span></div>
+    </div>
 
-             Four slots, in the order a player needs them:
-               counts   lifetime finds + balance
-               tool     the held tool, durability, repair
-               actions  buy/upgrade (ETH) and sell gems (ETH)
-               msg      transient feedback, auto-clears -->
-        <span class="belt-counts" id="belt-counts">no tool yet</span>
-        <span class="belt-mode" id="belt-mode">PREVIEW - simulation only</span>
-        <div class="belt-tool" id="belt-tool">no tool - buy Wood to start hunting</div>
-        <div class="belt-actions" id="belt-actions"></div>
-        <span class="belt-msg" id="belt-msg"></span>
-      </div>
+    <!-- RIGHT PANEL: the toolbelt. Floats over the right edge so the action
+         buttons sit where the reference art puts its controls. -->
+    <div id="belt" class="card">
+      <span class="belt-counts" id="belt-counts">no tool yet</span>
+      <span class="belt-mode" id="belt-mode">PREVIEW - simulation only</span>
+      <div class="belt-tool" id="belt-tool">no tool - buy Wood to start hunting</div>
+      <div class="belt-actions" id="belt-actions"></div>
+      <span class="belt-msg" id="belt-msg"></span>
+    </div>
 
-            <!-- Satchel: the find tally by rarity.
-                 It used to be a SEPARATE floating card below the header, hidden until
-                 the first gem, auto-retiring after 5s. That was a receipt, not an
-                 inventory -- and a second box on a screen that had just been reduced
-                 to one box.
-
-                 It now lives INSIDE the header card, in the toolbelt column beside
-                 the pick, and is permanently visible with all five rarities listed at
-                 zero. Two reasons it can no longer be hidden: the player needs to see
-                 what they have not found yet as much as what they have, and a readout
-                 that appears and vanishes on a timer cannot be the one place the
-                 season's finds are recorded. -->
-            <div id="satchel">
-              <span class="card-title">Satchel</span>
-              <div id="gemlist"></div>
-            </div>
-          </section>
-        </div>
+    <!-- Icon buttons: circular, docked to the panel corners, matching the
+         reference art's round back/confirm controls. -->
+    <button type="button" id="leaderboard-btn" class="icon-btn" aria-label="Leaderboard" title="Leaderboard">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+        <path d="M4 13h4v7H4zM10 8h4v12h-4zM16 4h4v16h-4z" fill="currentColor"/>
+      </svg>
+    </button>
+    <button class="icon-btn" id="connect" aria-label="Connect wallet" title="Connect wallet">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+        <path d="M7 10V7a5 5 0 0 1 10 0v3h1a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h1Zm2 0h6V7a3 3 0 0 0-6 0v3Z" fill="currentColor"/>
+      </svg>
+    </button>
+  </div>
 
         <div id="hint" class="chip"></div>
 
@@ -502,31 +486,35 @@
     let pendingMsg = null;
     const setPending = (m) => { pendingMsg = m; };
 
+    // The connect control is an ICON button (circular, wallet glyph). The
+    // wallet state therefore cannot be written with textContent -- that would
+    // destroy the <svg> glyph and leave an empty circle. State goes to a badge
+    // class + the title instead, and the icon stays put.
+    const setIconState = (state, title) => {
+      btn.classList.remove('warn', 'ok');
+      if (state) btn.classList.add(state);
+      btn.title = title || '';
+    };
+
     function render() {
       const s = getState();
       if (s.connected) {
         pendingMsg = null; // connected: the state text is the true one
-        btn.textContent = short(s.account);
-        btn.style.borderColor = '#d9a441';
-        btn.title = `${s.account}\nchain ${s.chainId} · writes go to the DeepWood contract`;
+        setIconState('ok', `${s.account}\nchain ${s.chainId} · writes go to the DeepWood contract`);
         noteWallet(`Wallet ${short(s.account)} on chain ${s.chainId}. Buy gems and claim tools in the shop.`);
         return;
       }
       if (s.account && !s.rightChain) {
         // Wrong chain is NOT connected -- same stance live.js takes on reads.
         // Offer the switch instead of pretending the wallet is ready.
-        btn.textContent = 'Switch to chain ' + GAME_CHAIN_ID;
-        btn.style.borderColor = '#d9a441';
-        btn.title = `Wallet ${short(s.account)} is on chain ${s.chainId}; the game is on ${GAME_CHAIN_ID}.`;
+        setIconState('warn', `Wallet ${short(s.account)} is on chain ${s.chainId}; the game is on ${GAME_CHAIN_ID}.`);
         // pendingMsg wins: it says WHY the switch did not happen ("rejected in
         // the wallet"), which is more useful than restating the mismatch the
         // player can already see in the button label.
         noteWallet(pendingMsg || `Wrong network: wallet on chain ${s.chainId}, game on ${GAME_CHAIN_ID}.`);
         return;
       }
-      btn.textContent = 'Connect wallet';
-      btn.style.borderColor = '';
-      btn.title = '';
+      setIconState('', 'Connect wallet');
       noteWallet(pendingMsg || 'Off-chain preview. Connect a wallet to buy a tool and sell gems.');
     }
 

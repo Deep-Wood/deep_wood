@@ -59,29 +59,43 @@ html, body {
 
 #hud {
   position: absolute;
-  /* Flush to the top, left and right edges: inset 0 on those three sides.
+  /* Floating side panels over the forest, not a header card.
    *
-   * It used to be `var(--s3) var(--s3) auto var(--s3)` -- a 12px margin all round,
-   * which on a phone meant a 12px gutter down both sides and a visible strip of
-   * forest between the card and the screen edge. The card is the HUD; on a phone
-   * the forest that matters is the playfield BELOW it, not a border around the
-   * status box. Bottom stays `auto` because the card must not be pinned down
-   * over the controls. */
-  inset: 0 0 auto 0;
+   * The old shape was one full-width card welded to the top edge: it spanned
+   * 100% of the screen width and cost 15-20% of the view height, so the top of
+   * the playfield was permanently behind a status bar. The brief was to drop
+   * the card and move the controls out to the sides, as the reference art does.
+   *
+   * Three columns: a left panel, a centred status chip, and a right panel. The
+   * side panels are content-sized (`auto`) and the middle is `1fr`, so the
+   * panels hug their edges and the forest stays open between them. */
+  inset: var(--s3) var(--s3) auto var(--s3);
   display: grid;
-  /* One column: the top of the screen is a single card now, not a card plus a
-     column of chips beside it. */
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: start;
-  gap: var(--s3);
+  column-gap: var(--s3);
   z-index: 9;
   pointer-events: none;   /* the forest underneath stays walkable */
 }
 #hud > * { pointer-events: auto; }
 
+/* Panel widths. Capped so a long tool label cannot stretch the right panel
+   across the forest, and floored so the satchel's five tiles stay legible. */
+#season { grid-column: 1; grid-row: 1; width: clamp(180px, 26vw, 300px); }
+#status { grid-column: 2; grid-row: 1; justify-self: center; }
+#belt   { grid-column: 3; grid-row: 1; width: clamp(200px, 30vw, 360px); }
+
+/* Icon buttons ride the outer top corners, level with the panels. Circular,
+   like the reference art's back/confirm controls, rather than pill chips. */
+#hud > .icon-btn { position: absolute; top: 0; }
+#hud > #leaderboard-btn { left: 0; }
+#hud > #connect { right: 0; }
+/* The panels start below the icon row so nothing overlaps. */
+#season, #belt { margin-top: calc(var(--icon) + var(--s2)); }
+
 .card {
-  /* Transparent acrylic: the user wants the game visible THROUGH the header
-   * card, so a near-opaque panel was replaced with a frosted-glass wash.
+  /* Transparent acrylic: the user wants the game visible THROUGH the panels,
+   * so a near-opaque panel was replaced with a frosted-glass wash.
    * backdrop-filter keeps the text legible over the forest without actually
    * painting a solid slab; inset hairline shadows preserve the 3D lifting
    * that made the old solid card look raised. */
@@ -90,6 +104,8 @@ html, body {
   box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.06);
   backdrop-filter: blur(6px) saturate(1.1);
   -webkit-backdrop-filter: blur(6px) saturate(1.1);
+  background: var(--panel);
+  padding: var(--s2) var(--s3);
 }
 
 .card-title {
@@ -100,126 +116,23 @@ html, body {
   font-weight: 600;
 }
 
-/* --- season card -------------------------------------------------------- */
+/* --- left panel: season identity, stats, satchel ------------------------ */
 
-/* Compact. With the chain chips and the toolbelt merged in, the card had grown
- * to 278px of an 844px phone -- a third of the screen for status the player
- * glances at. Every measure here was pulled in; the card now costs ~180px. */
+/* A floating panel, not a bar welded to the top edge. It stacks its three
+ * blocks vertically inside a capped width; the panel is narrow enough that the
+ * middle of the forest stays clear. */
 #season {
-  /* Padding trimmed from 8/12/8 to 6/10/5. The card now bleeds to the screen
-   * edges, so this padding is the only thing separating content from the bezel
-   * -- it has to stay, but it does not have to be generous. */
-  padding: 6px 10px 5px;
+  padding: var(--s2) var(--s3);
   min-width: 0;
-  /* Square off the corners the card now touches the screen with, or it reads
-   * as a floating box with the bezel shaved off rather than as part of the HUD.
-   * The bottom corners stay rounded: that edge is not against the screen. */
-  border-radius: 0 0 var(--radius) var(--radius);
-  border-top: 0; border-left: 0; border-right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+  border-radius: var(--radius);
 }
 
-/* The card is a wide, short strip rather than a tall stack.
- *
- * It was SIX full-width blocks stacked vertically -- head, stat grid, progress
- * bar, chain chips, then three toolbelt rows -- which measured 191px tall on a
- * 1256px-wide viewport. That is a column of status sitting on top of the game,
- * and the width was going completely unused: at 1256px there was room for all
- * of it side by side.
- *
- * So the card is now a grid: identity on the left, season stats in the middle,
- * and chain + toolbelt on the right, with the progress bar as a hairline
- * spanning the full width underneath. Same content, same order, same ids --
- * only the arrangement changed. Nothing is removed and no panel is added.
- *
- * `auto-fit` + `minmax` means this degrades on its own: as the viewport narrows,
- * columns wrap and stack exactly as before, so a narrow phone gets the old
- * vertical layout without needing a separate mobile rule. */
-#season {
-  display: grid;
-  /* TWO columns, not three.
-   *
-   * The third column was `minmax(150px, auto)` for the season title, and the
-   * Connect button was moved into that header -- which left the button stranded
-   * 878px from the card's right edge, because the title column is sized to its
-   * content and stops well short of the card edge. The title row now spans both
-   * columns, so this template has two entries to match:
-   *   col 1 = season title (full width) over the stats
-   *   col 2 = chain state, toolbelt, satchel
-   */
-  /* Column 2 was `minmax(0, auto)`, so it sized to the CONTENT of the belt
-   * -- which meant the actions row got ~170px on a 1280px desktop and three
-   * buttons had to truncate their labels, while column 1 sat mostly empty.
-   *
-   * Splitting the space instead (1fr / 1fr on wide screens) hands the belt
-   * room for three buttons at full size and fills the card, rather than
-   * shrinking type or abbreviating tier names to fit an artificially narrow
-   * column. The phone stack is unaffected: below 720px both columns collapse
-   * to full width. */
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  justify-content: start;
-  align-items: start;
-  column-gap: var(--s2);
-  row-gap: var(--s1);
-}
-/* Everything from the progress bar down spans all three columns. */
-#season > .bar { grid-column: 1 / -1; margin-top: 0; }
-#status, #belt { margin-top: 0; padding-top: 0; border-top: 0; }
-
-/* Explicit placement. These five children are NOT auto-placed: with the bar
- * pulled out of flow order, auto-placement would drop #belt into column 1 of a
- * second row and leave a hole under the stats. The intended arrangement is
- *
- *   row 1:  [ identity ] [ stats ] [ chain chips ]
- *   row 2:  [ - - - - - - - - - - - - - - - - - ]  [ toolbelt ]
- *   row 3:  [ ============ progress bar ============ ]
- *
- * The toolbelt sits under the chain chips in the same column, so those two stack
- * in the space the old card spent on them being separate full-width bands. */
-/* Grid shape.
- *
- * Reverted to TWO columns, not three. The three-column strip put the season
- * title in column 1 and the stats in column 2 -- so Rank/ROI/Ends read as a
- * sibling block beside the title rather than as belonging to it. The brief was
- * for them to sit BELOW the season header, and they now do.
- *
- * Left column  = identity (title + connect) over the stats.
- * Right column = chain state, toolbelt, satchel.
- * The bar spans the full width underneath.
- *
- * This also removes a column, which is where the height saving comes from. The
- * card had grown 139 -> 186px because each addition stacked a new row rather
- * than filling space that was already there.
- */
-/* Row/column map. The header spans the full width so Connect can sit hard
- * against the card's right edge; that pushes everything below it down one row.
- * Every placement below is explicit because implicit auto-placement collides
- * with an explicitly-placed item -- which is exactly what happened when the
- * header started spanning: #status stayed on row 1, the grid invented a third
- * column to keep it out of the header's way, and the card grew a phantom
- * column that pushed Connect 878px from the edge. */
-.season-head { grid-column: 1 / -1; grid-row: 1; margin-bottom: 0; }
-.season-grid { grid-column: 1; grid-row: 2; }
-/* The satchel goes UNDER THE STATS in the left column, not at the foot of the
- * right one. Stacked in the right column it made that column 26+58+30 = 114px
- * while the left held 26px, so the card was as tall as its tallest column plus
- * the header. Split this way both columns land near 84px. */
-#satchel     { grid-column: 1; grid-row: 3; }
-#status      { grid-column: 2; grid-row: 2; }
-#belt        { grid-column: 2; grid-row: 3; }
-#season > .bar { grid-column: 1 / -1; grid-row: 4; }
-
-/* The belt is the tallest block, so the two rules that used to divide the
- * vertical stack now divide the COLUMNS -- one between stats and chain state,
- * one between chain state and the toolbelt. Horizontal rules are exactly what
- * made the old card read as a tall list. */
-#status {
-  border-left: 1px solid var(--edge-dim);
-  padding-left: var(--s3);
-}
-#belt {
-  border-left: 1px solid var(--edge-dim);
-  padding-left: var(--s3);
-}
+.season-head { margin-bottom: 0; }
+.season-grid { margin-top: 0; }
+#satchel     { margin-top: var(--s1); }
 
 /* Player portrait. 32px, circular, in the card head beside the season title.
    Deliberately NOT over the game: it is inside the one persistent card, so it
@@ -280,14 +193,13 @@ html, body {
   border-radius: 2px; transition: width .4s ease;
 }
 
-/* --- status / wallet column -------------------------------------------- */
-
-/* Inside the season card now, not a second floating panel. */
+/* --- status chip ---------------------------------------------------------
+ * A single centred chip under the top edge. It is no longer a column inside
+ * the season card, so it carries its own panel treatment. */
 #status {
   display: flex; flex-direction: row; align-items: center;
   flex-wrap: wrap; gap: var(--s2);
-  margin-top: var(--s2); padding-top: var(--s2);
-  border-top: 1px solid var(--edge-dim);
+  margin-top: calc(var(--icon) + var(--s2));
 }
 
 .chip {
@@ -309,7 +221,10 @@ button.chip {
   font-size: 11px;
   background: linear-gradient(to bottom, #1c3a24 0%, #0d1a10 100%);
   border: 1px solid var(--edge);
-  border-radius: 999px;
+  /* Rounded SQUARE, not a pill. The pill radius made every control read as a
+   * status chip; the reference art uses ~12px corners for its action buttons,
+   * which is what makes them read as buttons you press. */
+  border-radius: 12px;
   /* Inner highlight for the top, drop shadow for the bottom -- classic 3D. */
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, .18),
@@ -337,6 +252,74 @@ button.chip:active {
 }
 button.chip:disabled { opacity: .55; cursor: default; }
 
+/* Selected state: a gold ring plus a corner dot, matching the reference art's
+ * active item slot. Used by the toolbelt's active action and by the token rail
+ * when it is the chosen payment path. */
+button.chip.selected {
+  border-color: var(--gold);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .22),
+    inset 0 -1px 0 rgba(0, 0, 0, .6),
+    0 2px 0 rgba(0, 0, 0, .55),
+    0 0 0 2px rgba(217, 164, 65, .55),
+    0 6px 14px rgba(0, 0, 0, .35);
+}
+button.chip.selected::after {
+  content: '';
+  position: absolute; top: -3px; right: -3px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 0 2px var(--panel-solid);
+}
+/* The dot needs a positioned parent, and only the selected state has one. */
+button.chip { position: relative; }
+
+/* --- icon buttons -------------------------------------------------------
+ * Circular, icon-only controls for the HUD corners (leaderboard, wallet).
+ * Same 3D anatomy as button.chip -- gradient, inset highlight, bottom ledge --
+ * at a square aspect so the radius reads as a circle. The reference art puts
+ * its back/confirm controls in exactly this shape.
+ * ------------------------------------------------------------------------ */
+:root { --icon: 34px; }
+
+.icon-btn {
+  width: var(--icon); height: var(--icon);
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0; cursor: pointer;
+  font-family: inherit;
+  color: var(--ink);
+  background: linear-gradient(to bottom, #1c3a24 0%, #0d1a10 100%);
+  border: 1px solid var(--edge);
+  border-radius: 50%;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .18),
+    inset 0 -1px 0 rgba(0, 0, 0, .6),
+    0 2px 0 rgba(0, 0, 0, .55),
+    0 6px 12px rgba(0, 0, 0, .3);
+}
+.icon-btn:hover {
+  background: linear-gradient(to bottom, #274a30 0%, #14261a 100%);
+  border-color: var(--gold);
+}
+.icon-btn:active {
+  transform: translateY(2px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .10),
+    inset 0 -1px 0 rgba(0, 0, 0, .5),
+    0 0 0 rgba(0, 0, 0, .55),
+    0 2px 4px rgba(0, 0, 0, .25);
+}
+.icon-btn svg { display: block; pointer-events: none; }
+/* Wallet-state ring on the icon button. The glyph is the only label, so the
+ * connection state has to be readable without replacing it: a gold ring when
+ * connected, amber when the wallet is on the wrong chain. */
+.icon-btn.ok   { border-color: var(--gold); box-shadow:
+  inset 0 1px 0 rgba(255,255,255,.18), inset 0 -1px 0 rgba(0,0,0,.6),
+  0 2px 0 rgba(0,0,0,.55), 0 0 0 2px rgba(217,164,65,.45), 0 6px 12px rgba(0,0,0,.3); }
+.icon-btn.warn { border-color: var(--warn); box-shadow:
+  inset 0 1px 0 rgba(255,255,255,.18), inset 0 -1px 0 rgba(0,0,0,.6),
+  0 2px 0 rgba(0,0,0,.55), 0 0 0 2px rgba(180,134,58,.45), 0 6px 12px rgba(0,0,0,.3); }
+
 .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--edge); flex: none; }
 .dot.ok   { background: var(--edge); }
 .dot.warn { background: var(--warn); }
@@ -360,6 +343,13 @@ button.chip:disabled { opacity: .55; cursor: default; }
   align-items: center;
   column-gap: var(--s2);
   row-gap: 3px;
+  border-radius: var(--radius);
+  margin-top: calc(var(--icon) + var(--s2));
+  padding: var(--s2) var(--s3);
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.3;
+  color: var(--text-dim);
 }
 #belt-counts { grid-column: 1; grid-row: 1; }
 #belt-mode   { grid-column: 2; grid-row: 1; justify-self: end; }
@@ -430,7 +420,25 @@ button.chip:disabled { opacity: .55; cursor: default; }
 .gem {
   display: flex; align-items: baseline; justify-content: center;
   gap: 2px; min-width: 0; line-height: 1.1;
+  position: relative;
 }
+/* Diamond rarity marker. The reference art uses rotated-square badges as its
+ * category selector; the satchel's five rarities are the same idea -- five
+ * fixed categories you scan at a glance -- so they carry the same diamond
+ * language. A marker rather than the tile SHAPE, because the label and count
+ * still have to be legible at 9px. */
+.gem::before {
+  content: '';
+  width: 5px; height: 5px;
+  transform: rotate(45deg);
+  background: currentColor;
+  border-radius: 1px;
+  flex: none;
+  align-self: center;
+  opacity: .85;
+  box-shadow: 0 0 3px currentColor;
+}
+.gem.none::before { opacity: .3; box-shadow: none; }
 .gem .n {
   font-size: 7px; letter-spacing: .03em; text-transform: uppercase;
   color: var(--dim);
@@ -447,11 +455,11 @@ button.chip:disabled { opacity: .55; cursor: default; }
 .gem.none .c { color: var(--faint); }
 .gem.none .n { opacity: .75; }
 
-/* The persistent note. Lives at the top-right of the status column rather than
- * inside the satchel, so it cannot inherit the satchel's visibility. */
+/* The persistent note. Sits under the right panel now, because the header card
+ * it used to hang beneath is gone. */
 #hint {
   position: absolute;
-  top: calc(var(--s3) + 76px);
+  top: calc(var(--icon) + var(--s3) + 72px);
   right: var(--s3);
   max-width: min(240px, 52vw);
   font-size: 9px;
@@ -465,7 +473,7 @@ button.chip:disabled { opacity: .55; cursor: default; }
   z-index: 8;
 }
 #hint:empty { display: none; }
-@media (max-width: 420px) { #hint { top: auto; bottom: var(--s3); left: var(--s3); right: var(--s3);
+@media (max-width: 700px) { #hint { top: auto; bottom: var(--s3); left: var(--s3); right: var(--s3);
   max-width: none; text-align: left; } }
 
 /* --- narrow screens -----------------------------------------------------
@@ -493,135 +501,40 @@ button.chip:disabled { opacity: .55; cursor: default; }
  * by side underneath, and the vertical rules are kept because they are what
  * hold the columns apart. */
 @media (max-width: 700px) {
-  #season {
-    grid-template-columns:
-      minmax(0, 1fr)        /* identity + stats share the top row */
-      minmax(0, auto);      /* chain + toolbelt, as narrow as it can be */
-    align-items: start;
-    column-gap: var(--s2);
-    row-gap: var(--s1);
+  /* Below this width two side panels plus a centre chip stop fitting on one
+   * row, so the panels stack: the left panel keeps the top-left, the toolbelt
+   * drops under it, and the icon buttons stay pinned to the top corners. The
+   * forest stays visible to the right of the stack. */
+  #hud {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: var(--s2);
   }
-  /* Identity top-left, stats top-right, then chain and the whole toolbelt
-   * side by side underneath. Two columns rather than one long list. */
-  .season-head { grid-column: 1; grid-row: 1; margin-bottom: 0; }
-  .season-grid { grid-column: 2; grid-row: 1; }
-  #status      { grid-column: 1; grid-row: 2; }
-  #belt        { grid-column: 2; grid-row: 2; }
-  /* Satchel spans both columns here: five rarity tiles need the full width to
-     stay legible, and this row is otherwise empty on the left. */
-  #season > .bar { grid-column: 1 / -1; grid-row: 4; margin-top: 0; }
-
-  /* Column divider only -- no horizontal rules. On a phone the vertical rules
-     are the whole point: they are what keeps the card two columns wide instead
-     of five stacked bands. */
-  #status, #belt {
-    margin-top: 0; padding-top: 0; border-top: 0;
-  }
-  #status, #belt {
-    border-left: 1px solid var(--edge-dim);
-    padding-left: var(--s2);
-  }
-  /* The stats no longer get a full row to themselves, so tighten them. */
+  #season { grid-column: 1; grid-row: 1; width: auto; }
+  #status { grid-column: 1 / -1; grid-row: 3; justify-self: start; }
+  #belt   { grid-column: 2; grid-row: 1 / span 2; width: clamp(180px, 44vw, 300px); }
   .season-grid { gap: var(--s1) var(--s2); }
   .stat .k { font-size: 8px; }
   .stat .v { font-size: 11px; }
 }
 
-/* Very narrow (small phones, and the Telegram in-app browser): the two columns
- * stop fitting, and at this size a five-band stack is what "half the screen"
- * looks like. Drop the secondary rows rather than shrink everything to
- * illegibility -- the season title, the countdown, the counts and the pick are
- * what a player actually glances at mid-hunt. */
+/* Very narrow (small phones, and the Telegram in-app browser): two side panels
+ * cannot both fit at 390px, but the answer is NOT a full-width stack -- that
+ * would rebuild the header card the redesign removed. The panels stay narrow
+ * and dock to the left, stacked, so the right of the screen stays forest. */
 @media (max-width: 430px) {
-  #season {
-    /* Two columns, not one: the chain chip and the satchel are each one short
-       line and fit side by side at 390px. The old single column here was what
-       put them on two separate rows. */
-    /* Column 2 was `minmax(0, auto)`, so it sized to the CONTENT of the belt
-   * -- which meant the actions row got ~170px on a 1280px desktop and three
-   * buttons had to truncate their labels, while column 1 sat mostly empty.
-   *
-   * Splitting the space instead (1fr / 1fr on wide screens) hands the belt
-   * room for three buttons at full size and fills the card, rather than
-   * shrinking type or abbreviating tier names to fit an artificially narrow
-   * column. The phone stack is unaffected: below 720px both columns collapse
-   * to full width. */
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    row-gap: 0;
+  #hud {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--s2);
   }
-  .season-head, .season-grid, #belt { grid-column: 1 / -1; }
-  .season-head  { grid-row: 1; }
-  #belt         { grid-row: 2; }
-  /* Chain state and the satchel share one row.
-   *
-   * The chain chip is one short line and the satchel is one short line; stacked
-   * they were costing the phone 19px for a row that has room for both. They sit
-   * side by side here with the vertical rule between them doing the separating,
-   * which is the same trick the desktop grid uses. */
-  /* Stats get a full-width row of their own -- four columns of ~85px each is
-   * comfortable, whereas splitting them against the chain chip gave them 46px
-   * apiece and made the labels the tightest thing on the card.
-   *
-   * The satchel and the chain chip then share the row below. They were on rows
-   * of their own, which cost a full row (~21px) for a 30px satchel and a 14px
-   * chip that fit side by side without trouble. */
-  .season-grid  { grid-row: 3; grid-column: 1 / -1; justify-self: stretch; text-align: left; }
-  #satchel      { grid-row: 4; grid-column: 1; }
-  #status       { grid-row: 4; grid-column: 2; align-self: center; }
-  #season > .bar { grid-row: 5; margin-top: var(--s1); }
-  /* 3px, not var(--s1)+var(--s1). Each stacked block carried 4px of margin and
-   * 4px of padding above itself, and with four stacked blocks that was 32px of
-   * the phone card's 188px spent on air. A 1px rule already separates them. */
-  #belt {
-    border-left: 0; padding-left: 0;
-    margin-top: 3px; padding-top: 3px;
-    border-top: 1px solid var(--edge-dim);
-  }
-  #satchel {
-    margin-top: 3px; padding-top: 3px;
-    border-top: 1px solid var(--edge-dim);
-    border-left: 1px solid var(--edge-dim); padding-left: var(--s2);
-  }
-  #season > .bar { margin-top: 3px; }
-  /* Chain state and the toolbelt share one row: the wallet chip sits left, the
-   * counts and the pick sit right. This is the row that was costing 35px. */
-  #status { display: flex; gap: var(--s1); }
-  .chip { font-size: 9px; padding: 1px 6px; }
-  #belt .belt-row { gap: var(--s1); }
-
-  /* The toolbelt is 104px on a phone, taller than the entire season header,
-   * because its three rows each wrap onto their own line at 390px: counts, then
-   * the pick, then CLAIM, then the shop. The rows are merged instead --
-   * `#belt-msg` and the mode line are already hidden or empty here, so a row
-   * that only holds CLAIM and the shop has nothing in it but buttons and can
-   * sit beside the counts rather than below them. */
-  /* The belt grid carries over unchanged: counts + mode, pick + claim, shop.
-   * These were once `.belt-row` rules for wrapper divs that no longer exist. */
+  #season { grid-column: 1; grid-row: 1; width: 62%; }
+  #belt   { grid-column: 1; grid-row: 2; width: 62%; margin-top: 0; }
+  #status { grid-column: 1; grid-row: 3; justify-self: start; }
   #belt-counts { font-size: 10px; }
   .chip.btn { font-size: 9px; padding: 1px 5px; }
   .belt-tool { font-size: 10px; }
-  /* The shop is the last 42px of the belt: two rows, each a rarity name, a
-   * price and a button, stacked. At 390px both rows fit SIDE BY side once the
-   * price drops the "ETH" suffix, so they are laid out as a two-column grid
-   * instead of stacked flex lines. That is the difference between the belt
-   * being 78px and 99px. */
-  .belt-shop {
-    /* Needs the !important: belt.css sets `.belt-shop { display: flex }` in a
-     * plain rule, and a bare `display: grid` here loses the cascade while its
-     * sibling `grid-template-columns` still applied -- so the rows stayed
-     * flex-stacked with grid tracks that were doing nothing. */
-    display: grid !important;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 2px var(--s1);
-    width: 100%;
-  }
-  .belt-shop .row { min-width: 0; gap: var(--s1); }
-  .belt-shop .row > span {
-    font-size: 9px; min-width: 0; overflow: hidden;
-    text-overflow: ellipsis; white-space: nowrap;
-  }
-  /* The mode line ("PREVIEW - simulation only") restates the chain chip two
-     lines above it. On a phone that is a whole line spent saying nothing. */
+  .chip { font-size: 9px; padding: 1px 6px; }
+  /* The mode line ("PREVIEW - simulation only") restates the chain chip. On a
+     phone that is a whole line spent saying nothing. */
   #belt-mode { display: none; }
   .belt-msg:empty { display: none; }
 }
@@ -757,12 +670,8 @@ button.chip:disabled { opacity: .55; cursor: default; }
 }
 
 /* ---- season leaderboard ---- */
-.lb-btn {
-  font-family: inherit; font-size: 11px; letter-spacing: .08em;
-  padding: 2px 8px; border: 1px solid var(--edge); color: var(--gold);
-  background: transparent; border-radius: 6px; cursor: pointer;
-}
-.lb-btn:hover { background: rgba(63,138,82,.15); }
+/* The trigger is an .icon-btn now (see the icon button block above), so only
+   the overlay needs styling here. */
 .lb-overlay { font-family: inherit; color: var(--ink); }
 .lb-panel {
   background: var(--panel-solid); border: 2px solid var(--edge);
