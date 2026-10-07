@@ -126,7 +126,12 @@
  * in a column with 440px of unused space right next to it. */
 .belt-actions {
   display: flex;
-  flex-wrap: nowrap;
+  /* WRAP, not nowrap. With four buttons (buy / buy with $DEEPWOOD / sell /
+     settle) a 227px phone panel cannot fit them on one line at any legible
+     size, and `nowrap` clipped the tail of every label -- the buttons read
+     "buy Bro...", "buy 2 $...", "sell ge...". Wrapping costs a row and keeps
+     every label whole. */
+  flex-wrap: wrap;
   gap: var(--s2);
   width: 100%;
   /* Actions size to their own labels instead of splitting the row into equal

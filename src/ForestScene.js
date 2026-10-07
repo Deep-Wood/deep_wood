@@ -1160,9 +1160,16 @@ export class ForestScene extends Phaser.Scene {
     // living on the d-pad where it competes with the directions.
     zone('hunt', r.hunt, 'HUNT', { radius: 1, fontSize: 15, alpha: 0.96, tint: 0x6fd08c });
 
-    // Only BOARD. The TOOLBELT button is gone: the toolbelt is permanent rows
-    // in the top card, so there is nothing left to open.
-    zone('board', r.board, 'BOARD', { fontSize: 11, alpha: 0.82, tint: 0x86a98c });
+    // BOARD is GONE from the canvas.
+    //
+    // It drew a second leaderboard trigger at the top-right, and the DOM icon
+    // button (#leaderboard-btn, circular, top-right corner) now opens exactly
+    // the same panel via the same openLeaderboard(). Two controls for one
+    // action -- one of them a 60x24 rectangle sitting under the wallet panel --
+    // is a duplicate, so the canvas one is removed and the icon button owns it.
+    //
+    // The 'board' KEY is untouched: L still opens the leaderboard, and the key
+    // map still lists board: 'L'.
 
     this.touchLayer.setVisible(this.touchVisible);
 
@@ -1215,29 +1222,17 @@ export class ForestScene extends Phaser.Scene {
   }
 
   updateHud() {
-    // The HUD is built in create() -> setupHud(). An external caller (the
-    // wallet sync) can reach here before that; the end of create() redraws.
-    if (!this.durBar) return;
+    // The canvas HUD panel is gone (see setupHud), so there is no durBar to
+    // gate on. This used to `return` early when durBar was missing, which now
+    // would be ALWAYS -- and that would have silently stopped paintSeasonStats()
+    // from ever running. The season stats are DOM, but they are painted from
+    // here, so the guard has to go with the thing it guarded.
     this.paintSeasonStats();
-    const tool = heldTool(this.econ);
-    const pct = tool ? tool.left / tool.max : 0;
-    this.durBar.width = 200 * pct;
-    this.durBar.fillColor = pct > 0.4 ? 0x3f8a52 : pct > 0.15 ? 0xd9a441 : 0xd83a5a;
 
-    const tierName = tool ? tool.name : (this.econ.tier ? 'BROKEN' : 'NO TOOL');
-    const uses = tool ? `${tool.left}/${tool.max}` : '--';
-
-    // Name the controls the player actually has. Telling a phone player to
-    // "press SPACE" is the same defect as having no button: the instruction
-    // refers to hardware they do not have.
-    const hint = this.hasTouchPad
-      ? 'use the pad to move  -  HUNT to dig  -  BOARD'
-      : 'WASD move  -  SPACE hunt  -  L board';
-
-    this.tierText.setText(
-      `${tierName}  ${uses} uses   ${hint}`
-    );
-    this.tierText.setColor(tool ? '#9fbc9f' : '#d83a5a');
+    // The tool name, durability pips and controls hint are all painted by
+    // syncToolDom() into #belt-tool now. They were duplicated on the canvas
+    // (a 200px bar plus a tier line) and that copy is removed -- one source of
+    // truth for tool state, in the DOM, where the panel already shows it.
 
     // Show every find, quartz included. Filtering quartz out made the log
     // read "no finds yet" while the satchel held gems -- the two panels

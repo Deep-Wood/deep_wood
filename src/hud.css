@@ -526,8 +526,8 @@ button.chip { position: relative; }
     grid-template-columns: minmax(0, 1fr);
     row-gap: var(--s2);
   }
-  #season { grid-column: 1; grid-row: 1; width: 62%; }
-  #belt   { grid-column: 1; grid-row: 2; width: 62%; margin-top: 0; }
+  #season { grid-column: 1; grid-row: 1; width: 78%; }
+  #belt   { grid-column: 1; grid-row: 2; width: 78%; margin-top: 0; }
   #status { grid-column: 1; grid-row: 3; justify-self: start; }
   #belt-counts { font-size: 10px; }
   .chip.btn { font-size: 9px; padding: 1px 5px; }
