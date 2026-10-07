@@ -1238,10 +1238,11 @@ export class ForestScene extends Phaser.Scene {
     // (a 200px bar plus a tier line) and that copy is removed -- one source of
     // truth for tool state, in the DOM, where the panel already shows it.
 
-    // Show every find, quartz included. Filtering quartz out made the log
-    // read "no finds yet" while the satchel held gems -- the two panels
-    // disagreed because only the log had the filter.
-    const lines = this.finds.slice(-5).map((f) => {
+    // Show only the last 2 finds. Five lines of monospace text piled up on the
+    // left side of the screen and read as clutter -- the satchel already shows
+    // what you hold, so the log only needs to confirm the most recent action.
+    // Auto-fade after 3s so it doesn't sit there permanently.
+    const lines = this.finds.slice(-2).map((f) => {
       const name = RARITY_NAME[f.rarity] || 'Quartz';
       return `found ${name} x${f.count}  =  ${(Number(f.valueWei) / 1e18).toFixed(5)} ETH`;
     });
@@ -1256,10 +1257,19 @@ export class ForestScene extends Phaser.Scene {
       this._logWrap = logMax;
       this.logText.setWordWrapWidth(logMax, true);
     }
-    this.logText.setText(lines.length ? lines.join('\n')
-      : (this.hasTouchPad
-        ? 'no finds yet - walk to a glowing stone and tap HUNT'
-        : 'no finds yet - walk to a glowing stone and press SPACE'));
+    this.logText.setText(lines.join('\n'));
+
+    // Auto-fade the find log after 3s. It is a transient confirmation, not a
+    // permanent readout -- the satchel already shows what you hold. Without
+    // this the last two finds sat on screen forever, piling up visually with
+    // every dig and reading as clutter.
+    this.logText.setAlpha(1);
+    clearTimeout(this._logFadeTimer);
+    if (lines.length) {
+      this._logFadeTimer = setTimeout(() => {
+        this.logText.setAlpha(0);
+      }, 3000);
+    }
   }
 
   /* ---------------- season leaderboard ---------------- */
