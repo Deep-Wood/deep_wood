@@ -1183,28 +1183,15 @@ export class ForestScene extends Phaser.Scene {
     const W = this.scale.width, H = this.scale.height;
     this.hud = this.add.container(0, 0).setScrollFactor(0).setDepth(UI_DEPTH);
 
-    // The toolbelt is NOT drawn here. The card the player actually sees --
-    // Season I, Rank, ROI, the chain chip, Connect wallet -- is the DOM top bar
-    // in index.html, and it paints OVER this canvas. Belt rows drawn here were
-    // completely hidden underneath the wallet chips. It lives in that top bar
-    // now; see syncBeltDom().
-    const panel = this.add.rectangle(10, 10, 250, 74, 0x0d1a10, 0.82)
-      .setOrigin(0).setStrokeStyle(2, 0x3f8a52);
-    this.hud.add(panel);
-
-    this.hudText = this.add.text(22, 20,
-      'DeepWood', { fontFamily: 'monospace', fontSize: '15px', color: '#e8f0e0' });
-    this.hud.add(this.hudText);
-
-    this.durBarBg = this.add.rectangle(22, 44, 200, 10, 0x1a2a1a).setOrigin(0);
-    this.durBar = this.add.rectangle(22, 44, 200, 10, 0x3f8a52).setOrigin(0);
-    this.hud.add([this.durBarBg, this.durBar]);
-
-    this.tierText = this.add.text(22, 60,
-      'Tool I  -  WASD move  -  SPACE hunt', {
-      fontFamily: 'monospace', fontSize: '11px', color: '#9fbc9f',
-    });
-    this.hud.add(this.tierText);
+    // The old canvas HUD panel is GONE. It drew a bordered 250x74 box with
+    // "DeepWood", a durability bar and a tier line at the top-left -- which sat
+    // UNDER the DOM HUD and, once the header card became a narrow left panel,
+    // poked out from behind it as a stray green frame with clipped "pWood"
+    // text. The DOM owns all of that now: the season panel carries the tool
+    // state, and the find log below carries the controls hint.
+    //
+    // The find log and the walk-up prompt stay: they are canvas-native, sit
+    // bottom-left away from the panels, and are not duplicated in the DOM.
 
     // find log, bottom left.
     // wordWrap is load-bearing: the idle line is 57 characters of monospace and
