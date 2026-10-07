@@ -280,3 +280,16 @@
   padding: 0;
 }
 .tutorial-skip:hover { color: var(--ink, #e8f0e0); }
+
+/* --- small phones: one button per row ------------------------------------
+ * Two buttons side by side in a ~130px rail gives each ~62px, and "buy Wood"
+ * ellipsised to "buy W…" at that width. A taller stack of full-width buttons
+ * is readable; a clipped label is not.
+ *
+ * This lives HERE, not in hud.css, because belt.css is linked AFTER hud.css
+ * and its two-column rule above would otherwise win the cascade -- the
+ * override was silently doing nothing.
+ * ------------------------------------------------------------------------ */
+@media (max-width: 430px) {
+  .belt-actions { grid-template-columns: minmax(0, 1fr); }
+}

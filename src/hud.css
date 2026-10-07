@@ -511,71 +511,49 @@ button.chip { position: relative; }
   z-index: 8;
 }
 #hint:empty { display: none; }
-@media (max-width: 700px) { #hint { top: auto; bottom: var(--s3); left: var(--s3); right: var(--s3);
-  max-width: none; text-align: left; } }
-
 /* --- narrow screens -----------------------------------------------------
- * Below 420px the three season stats and the status column cannot share a row
- * without the title truncating to nothing, so the status column drops under
- * the season card and the pair becomes one full-width stack.
+ * ONE set of mobile rules, and the rails stay SIDE BY SIDE.
+ *
+ * The reference is a mobile game and it keeps its two columns on a phone;
+ * stacking them into a vertical column is exactly what rebuilt the header card
+ * at 390px. So the rails only get narrower -- they do not fold.
+ *
+ * This file had accumulated three overlapping mobile queries (700 / 430 / 420)
+ * that contradicted each other: the 430px one stacked the rails into a
+ * full-width column while the 700px one laid them out side by side, so the
+ * phone got whichever happened to come last in the file. One breakpoint per
+ * concern now.
  * ------------------------------------------------------------------------ */
-@media (max-width: 420px) {
-  #hud { grid-template-columns: minmax(0, 1fr); }
-  #status { flex-direction: row; align-items: center; flex-wrap: wrap; }
-  #season { width: 100%; }
-}
-
-/* Narrow screens: fold the strip into two columns instead of one long stack.
- *
- * The first attempt at this restored the OLD vertical layout below 700px,
- * reasoning that the horizontal version needed room. That was wrong for the
- * case that matters most: a phone. At 390px the card measured 243px -- 29% of
- * an 844px screen and closer to half on a shorter one -- because the fallback
- * was precisely the tall stack being fixed. Desktop got the strip, phones kept
- * the problem.
- *
- * So narrow screens get their own arrangement rather than the old one:
- * identity and stats share the top row, chain state and the toolbelt sit side
- * by side underneath, and the vertical rules are kept because they are what
- * hold the columns apart. */
 @media (max-width: 700px) {
-  /* Below this width two side columns plus a centre chip stop fitting on one
-   * row, so they stack: the left tiles keep the top-left, the toolbelt drops
-   * under them, and the icon buttons stay pinned to the top corners. The forest
-   * stays visible to the right of the stack. */
-  #hud {
-    grid-template-columns: minmax(0, 1fr) auto;
-    row-gap: var(--s2);
-  }
-  #season { grid-column: 1; grid-row: 1; width: auto; }
-  #status { grid-column: 1 / -1; grid-row: 3; justify-self: start; }
-  #belt   { grid-column: 2; grid-row: 1 / span 2; width: clamp(180px, 44vw, 300px); }
+  /* Both rails stay on the top row, just narrower. The middle column keeps the
+     forest open between them. */
+  #hud { grid-template-columns: var(--rail) minmax(0, 1fr) var(--rail); }
+  #season { grid-column: 1; grid-row: 1; width: var(--rail); }
+  #status { grid-column: 2; grid-row: 1; justify-self: center; }
+  #belt   { grid-column: 3; grid-row: 1; width: var(--rail); }
   .season-grid { gap: var(--s1) var(--s2); }
   .stat .k { font-size: 8px; }
   .stat .v { font-size: 11px; }
-}
-
-/* Very narrow (small phones, and the Telegram in-app browser): two side panels
- * cannot both fit at 390px, but the answer is NOT a full-width stack -- that
- * would rebuild the header card the redesign removed. The panels stay narrow
- * and dock to the left, stacked, so the right of the screen stays forest. */
-@media (max-width: 430px) {
-  #hud {
-    grid-template-columns: minmax(0, 1fr);
-    row-gap: var(--s2);
-  }
-  #season { grid-column: 1; grid-row: 1; width: 78%; }
-  #belt   { grid-column: 1; grid-row: 2; width: 78%; margin-top: 0; }
-  #status { grid-column: 1; grid-row: 3; justify-self: start; }
-  .tile { padding: 6px 10px; }
-  #belt-counts { font-size: 10px; }
   .chip.btn { font-size: 9px; padding: 1px 4px; }
-  .belt-tool { font-size: 10px; }
   .chip { font-size: 9px; padding: 1px 4px; }
-  /* The mode line ("PREVIEW - simulation only") restates the chain chip. On a
-     phone that is a whole line spent saying nothing. */
+  .belt-tool { font-size: 10px; }
+  #belt-counts { font-size: 10px; }
+  /* The mode line ("PREVIEW - simulation only") restates the chain chip, and on
+     a phone that is a whole line spent saying nothing. */
   #belt-mode { display: none; }
   .belt-msg:empty { display: none; }
+  #hint {
+    top: auto; bottom: var(--s3); left: var(--s3); right: var(--s3);
+    max-width: none; text-align: left;
+  }
+}
+
+/* Small phones. The rails narrow further and the action buttons drop to ONE
+   column: two buttons side by side in a ~120px rail cannot show their labels,
+   and a clipped "buy Wood" is worse than a taller stack. */
+@media (max-width: 430px) {
+  :root { --rail: clamp(116px, 34vw, 150px); }
+  .belt-actions { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* The satchel used to be lifted clear of the d-pad here with a hardcoded 190px
@@ -630,14 +608,11 @@ button.chip { position: relative; }
  *
  * The breakpoint is on WIDTH, not height: what costs the extra 42px on a phone
  * is the columns stacking, and that is the width. */
-#season {
-  height: 156px;
-  overflow: hidden;
-}
-@media (max-width: 720px) {
-  #season { height: 198px; }
-}
-
+/* NO fixed height. #season was pinned to 156px (198px on a phone) from when it
+ * was a card with a known row count; the rails are boxless now and the tiles
+ * size to their own content, so a fixed height only cropped them or left dead
+ * space under the satchel. */
+#season { overflow: visible; }
 /* The one message line: ellipsis instead of wrapping. A wallet error is long
  * ("Connected, but could not switch to chain 46630 (chain switch rejected in
  * the wallet)...") and wrapped to three lines it was the single biggest cause

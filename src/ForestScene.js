@@ -2603,14 +2603,50 @@ export class ForestScene extends Phaser.Scene {
     // y-sort smoke failed behind-the-tree cases.
     if (this.cameras && this.cameras.main) {
       const cam = this.cameras.main;
-      const hud = document.getElementById('hud');
-      const hudPx = (hud?.offsetHeight || 150) + 12;   // a little clearance
-      const minY = cam.scrollY + (hudPx / cam.zoom);
+
+      // The HUD is two SIDE rails now, not a full-width header bar, so the old
+      // rule ("keep the player below #hud's height") is wrong twice over:
+      //
+      //  1. #hud is the full-screen grid CONTAINER. Its offsetHeight is the
+      //     tallest rail (~200px), not a top band, so the clamp band became 5x
+      //     its old size.
+      //  2. The middle of the screen is clear -- the rails are at the edges, so
+      //     there is no full-width ceiling at all.
+      //
+      // Getting this wrong is exactly what made the UP button throw the player
+      // DOWNWARD: walking north hit the oversized invisible ceiling within a
+      // few pixels, the clamp snapped `player.y` back to minY (which is BELOW
+      // where they were), and the upward input read as a hard downward jump.
+      //
+      // So clamp against the rail the player is actually underneath, plus a
+      // small band for the top-centre chip. Cached: this runs every frame and
+      // two getBoundingClientRect() calls per frame would thrash layout.
+      const now = this.time.now;
+      if (!this._hudBandAt || now - this._hudBandAt > 250) {
+        this._hudBandAt = now;
+        const bands = [];
+        for (const id of ['season', 'belt']) {
+          const el = document.getElementById(id);
+          if (el) {
+            const r = el.getBoundingClientRect();
+            bands.push({ l: r.left, r: r.right, b: r.bottom });
+          }
+        }
+        this._hudBands = bands;
+      }
+
+      let bandPx = 52;   // the top-centre status chip and the icon row
+      const screenX = this.player.x - cam.scrollX;
+      for (const b of (this._hudBands || [])) {
+        if (screenX >= b.l && screenX <= b.r) bandPx = Math.max(bandPx, b.b + 12);
+      }
+
+      const minY = cam.scrollY + (bandPx / cam.zoom);
       const walking = this.player.body && this.player.body.velocity.y < -10;
       if (walking && this.player.y < minY) {
         this.player.y = minY;
-        // Stop the upward velocity so the sprite doesn't jitter against
-        // the ceiling. Otherwise the player can feel themselves push and get
+        // Stop the upward velocity so the sprite doesn't jitter against the
+        // ceiling. Otherwise the player can feel themselves push and get
         // pushed back, which reads as a bug rather than a wall.
         this.player.body.velocity.y = 0;
       }
