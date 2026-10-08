@@ -465,6 +465,7 @@ button.chip { position: relative; }
 .gem-ic {
   display: flex;
   align-items: center;
+  gap: 3px;
 }
 .gem-ic img {
   width: 22px;
@@ -476,11 +477,18 @@ button.chip { position: relative; }
      blend turns magenta to transparent and brightens the gem itself. */
   mix-blend-mode: screen;
 }
-/* A rarity at zero is NOT dimmed to near-invisibility. The strip's job is to
- * show the player the five rarities that exist and can be found; a 0.32 +
- * grayscale treatment made empty gems vanish into the dark forest, so the
- * whole strip looked like "one gem, maybe". Full opacity keeps all five
- * legible. The satchel/belt carries the actual counts. */
+/* Count next to each icon. Tabular numerals so the digits don't jitter. Zero
+ * is faint but still present -- it names the rarity as a target without
+ * pretending you have found one. */
+.gem-ic .gc {
+  font-size: 12px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  min-width: 1ch;
+  text-align: left;
+}
+.gem-ic .gc.zero { color: var(--faint); opacity: .6; }
 
 #gemlist {
   display: grid;
