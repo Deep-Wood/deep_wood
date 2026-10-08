@@ -692,10 +692,21 @@ export async function readSqrtPriceX96(rpcUrl, fallbackRpcUrls, poolManager, poo
   
   // Read storage at that slot
   const data = await rpcFirst(rpcUrl, fallbackRpcUrls, 'eth_getStorageAt', [poolManager, stateSlot.result, 'latest']);
-  if (!data.result) throw new Error('eth_getStorageAt failed');
+  // An empty read means the pool state slot has no data -- either the poolId is
+  // wrong, the PoolManager address is wrong, or the pool was never initialized.
+  // rpcFirst already tries every endpoint, so reaching here means the slot is
+  // genuinely empty, not that an endpoint was down. Surface the WHY (the slot
+  // and pool) so this is diagnosable from the thrown message, not a bare
+  // "eth_getStorageAt failed" that says nothing about which read is missing.
+  if (data === undefined || data === null || data === '') {
+    throw new Error(`pool state slot ${stateSlot.result} empty for poolId ${poolId} at ${poolManager} -- pool uninitialized or wrong address`);
+  }
   
-  // Decode: low 160 bits = sqrtPriceX96
-  const raw = BigInt(data.result);
+  // Decode: low 160 bits = sqrtPriceX96. `data` IS the hex string -- rpcFirst
+  // returns j.result directly (not a {result} wrapper), so decode `data`, not
+  // data.result. The old `!data.result` guard always evaluated truthy and threw
+  // on every call, and BigInt(data.result) was reading a property off a string.
+  const raw = BigInt(data);
   const sqrtPriceX96 = raw & ((1n << 160n) - 1n);
   return sqrtPriceX96;
 }
