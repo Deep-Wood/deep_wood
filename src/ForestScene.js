@@ -1308,7 +1308,7 @@ export class ForestScene extends Phaser.Scene {
 
     // Data: chain first, local mirror as fallback. Both paths hand the same
     // shape to the painter below, so the layout never forks.
-    let rows = null, rankNote = null, phaseLabel = null;
+    let rows = [], rankNote = null, phaseLabel = null;
     try {
       const { getReader } = await import('./onchain.js');
       const r = await getReader();
@@ -1327,7 +1327,7 @@ export class ForestScene extends Phaser.Scene {
         rankNote = `${lb.playerCount} player(s) settled on-chain`;
       }
     } catch {
-      rows = null;   // chain read failed -- show empty state
+      rows = [];   // chain read failed -- show empty state
     }
     // No local fallback: chain-only. If the chain read fails or returns no
     // rows, the panel shows the empty state below.
