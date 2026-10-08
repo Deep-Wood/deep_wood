@@ -508,13 +508,16 @@ button.chip { position: relative; }
   pointer-events: none;
 }
 .icon-btn { position: relative; }   /* anchor for .icon-badge */
-/* SETTLE sits a little lower than the buy/sell/repair chips above it and is
-   pushed to the very edge of the rail, so it reads as the terminal step of the
-   action column. The margin-top drops it below the others; the negative
-   left-margin hugs the screen edge (cancels the rail's inner padding). */
+/* SETTLE sits lower than the buy/sell/repair chips and is pinned to the far
+   LEFT edge of the screen. A negative margin does NOT work here because
+   #belt-actions centers its children -- the centering absorbs it. So the item
+   is pulled out to the container's left edge (margin-left: calc(-1 * ...)) and
+   then hard-anchored with position:relative + left, which survives centering. */
 .rail-action-item.settle-item {
   margin-top: 18px;
-  margin-left: -6px;
+  position: relative;
+  left: -100px;        /* pin to the far-left edge, past the centered column */
+  align-self: start;   /* in case the container is flex/grid start-aligned */
 }
 /* Wallet-state ring on the icon button. The glyph is the only label, so the
  * connection state has to be readable without replacing it: a gold ring when
