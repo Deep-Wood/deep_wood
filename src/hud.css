@@ -236,6 +236,16 @@ html, body {
   letter-spacing: .06em;       /* a little air so the blackletter strokes don't blur together */
   color: var(--gold);          /* warm brand gold, not plain white -- matches the emblem's gilt */
   text-shadow: 0 1px 3px rgba(0, 0, 0, .7);
+  /* Stretch the HEIGHT only (not the width). Grenze Gotisch has no width axis,
+     so font-size alone grows both. scaleY(1.35) makes the glyphs ~35% taller
+     while the letterforms stay the same width. transform-origin keeps it
+     anchored so it grows up from the baseline, and the line-height below
+     reserves room so the taller caps are not clipped (the .card-title overflow
+     opt-out further down already sets overflow:visible). */
+  transform: scaleY(1.35);
+  transform-origin: center center;
+  line-height: 1.3;            /* reserve vertical room for the stretched caps */
+  display: inline-block;       /* transform + reliable box height */
 }
 /* The season phase is HIDDEN (see the hidden attribute in index.html) until a
    placement is chosen. The rules stay so it is ready to unhide in place.
