@@ -3406,6 +3406,15 @@ export class ForestScene extends Phaser.Scene {
         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
         fontSize: '11px', color: '#fff8d0',
         backgroundColor: '#0d1a10dd', padding: { x: 8, y: 4 },
+        // Two lines, not one. At 11px the broken-tool line is ~370px long,
+        // which stretches the bubble wider than the rail and reads as a
+        // banner rather than a note. Wrapping at 260px splits it exactly in
+        // two ("Tool broken -- repair with gems or / upgrade to keep
+        // hunting."); 200px made it three lines, which is a paragraph, not
+        // a note. wordWrap rather than a hard \n so every flash message
+        // gets the same treatment, not just this one.
+        wordWrap: { width: 260 },
+        align: 'center',
       }).setOrigin(0.5, 1).setDepth(UI_DEPTH + 1);
       t.setAlpha(0);
       this._toast = t;
