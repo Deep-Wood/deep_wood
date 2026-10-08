@@ -576,7 +576,6 @@ button.chip { position: relative; }
   #belt   { grid-column: 3; grid-row: 1; width: var(--rail); }
   .chip.btn { font-size: 9px; padding: 1px 4px; }
   .chip { font-size: 9px; padding: 1px 4px; }
-  .belt-tool { font-size: 10px; }
   #belt-counts { font-size: 10px; }
   /* The mode line ("PREVIEW - simulation only") restates the chain chip, and on
      a phone that is a whole line spent saying nothing. */

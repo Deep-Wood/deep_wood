@@ -1475,62 +1475,12 @@ export class ForestScene extends Phaser.Scene {
         : 'PREVIEW \u2014 simulation only';
     mode.style.color = m === 'onchain' ? 'var(--ok)' : 'var(--warn)';
 
-    this.syncToolDom();
     this.syncActionDom();
 
     // The badge lives OUTSIDE the mode span (it would be blown away by the
     // textContent rewrite above), so refresh its copy here to stay in sync
     // with any queue writes that landed while the belt was being rebuilt.
     window.renderQueue?.(this.queue?.size ?? 0);
-  }
-
-  /** The held tool: name, durability, and the repair affordance.
-   *
-   * Durability is drawn as a pip row rather than "18/35" because the number
-   * alone does not answer the question the player is actually asking at a
-   * break, which is "how much of this have I got left".
-   */
-  syncToolDom() {
-    const el = document.getElementById('belt-tool');
-    if (!el) return;
-    const p = this.econ;
-    el.textContent = '';
-
-    if (p.tier === 0) {
-      el.className = 'belt-tool empty';
-      el.textContent = 'no tool \u2014 buy Wood to start hunting';
-      return;
-    }
-
-    const name = toolName(p.tier);
-    const broke = p.left === 0;
-    el.className = 'belt-tool' + (broke ? ' broke' : '');
-
-    const label = document.createElement('span');
-    label.className = 'tn';
-    label.textContent = name;
-
-    // Pips: one per use. At 40 max (Gold) they are still under 3px each at
-    // belt width, which is why durability rises only 5 per tier.
-    const pips = document.createElement('span');
-    pips.className = 'pips';
-    for (let i = 0; i < p.max; i++) {
-      const pip = document.createElement('i');
-      if (i >= p.left) pip.className = 'spent';
-      pips.appendChild(pip);
-    }
-    const cnt = document.createElement('span');
-    cnt.className = 'cnt';
-    cnt.textContent = `${p.left}/${p.max}`;
-
-    el.append(label, pips, cnt);
-
-    if (broke) {
-      const tag = document.createElement('span');
-      tag.className = 'tag bad';
-      tag.textContent = 'BROKEN';
-      el.appendChild(tag);
-    }
   }
 
   /** The two ETH actions: buy/upgrade the tool, and sell gems.
@@ -2946,11 +2896,35 @@ export class ForestScene extends Phaser.Scene {
       }
       return;
     }
+    // A SPENT tool cannot dig, in ANY mode. This check is FIRST, before the
+    // onchain gate, because `heldTool()` deliberately returns a broken tool
+    // rather than null (the belt still renders its name), so the `!tool`
+    // branch above only ever fires for a player who owns nothing at all.
+    //
+    // It used to live inside the `onchainActive()` block, which meant a
+    // preview-mode player with a spent pick got NO message at all -- the dig
+    // simply never happened and the screen stayed silent.
+    //
+    // Throttled to once every 2s: a player who keeps mashing HUNT on a dead
+    // pick would otherwise reprint the same line several times a second, which
+    // reads as the game erroring rather than as a resource being exhausted.
+    if (this.econ.tier > 0 && this.econ.left <= 0) {
+      const now = this.time.now;
+      if (now - (this._gateAt ?? -1e9) > 2000) {
+        this._gateAt = now;
+        this.openBelt();
+        this.flash('Tool broken \u2014 repair with gems or upgrade to keep hunting.');
+        // A broken tool is NOT a settle problem unless there is ALSO an
+        // unsettled batch. Pulsing the settle button here taught the player to
+        // think the fix was "settle", when the fix is actually "repair or
+        // upgrade". Only pulse settle when something real is queued.
+        if ((this.queue?.size ?? 0) > 0) window.pulseSettle?.();
+      }
+      return;
+    }
     // Settle-queue gate (V3): a dig is a queue push in connected mode, so the
-    // queue rules bind here, before any animation. Two stopping conditions:
-    // a FULL queue only needs a settle (tool is fine), a SPENT tool needs
-    // repair or upgrade first. The settle pulse is reserved for the cases
-    // where settling is actually the right move.
+    // queue rules bind here, before any animation. A FULL queue only needs a
+    // settle (tool is fine), so the broken-tool case is already handled above.
     //
     // pulseSettle is a window global because this file has no DOM imports.
     if (onchainActive()) {
@@ -2960,13 +2934,13 @@ export class ForestScene extends Phaser.Scene {
         // legal dig. If _huntIndex is still unknown (refreshChainTool hasn't
         // resolved), DON'T create the queue with base=0 -- reveal() will read
         // the chain and build it with the RIGHT base. The gate only rejects
-        // when the queue exists and is full / the tool is out.
+        // when the queue exists and is full.
         if (this._huntIndex !== undefined) {
           this.queue = new HuntQueue(BigInt(this._huntIndex), this.econ.tier);
         }
         // else: fall through; reveal's path will await huntIndexOf before
-        // queueing, and the full-batch AND broken-tool checks below cannot
-        // fire for a queue that has not yet been created.
+        // queueing, and the full-batch check cannot fire for a queue that has
+        // not yet been created.
       }
       const now = this.time.now;
       if (this.queue && this.queue.size >= MAX_BATCH) {
@@ -2975,19 +2949,6 @@ export class ForestScene extends Phaser.Scene {
           this.openBelt();
           this.flash(`Batch full (${MAX_BATCH} hunts) \u2014 SETTLE them below, then keep hunting.`);
           window.pulseSettle?.();
-        }
-        return;
-      }
-      if (this.econ.left <= 0) {
-        if (now - (this._gateAt ?? -1e9) > 2000) {
-          this._gateAt = now;
-          this.openBelt();
-          // A broken tool is NOT a settle problem unless there is ALSO an
-          // unsettled batch. Pulsing the settle button here taught the player
-          // to think the fix was "settle", when the fix is actually "repair
-          // or upgrade". Only pulse settle when something real is queued.
-          this.flash('Tool broken. Repair or upgrade first.');
-          if ((this.queue?.size ?? 0) > 0) window.pulseSettle?.();
         }
         return;
       }
@@ -3424,12 +3385,44 @@ export class ForestScene extends Phaser.Scene {
     this.busy = false;
   }
 
+  /** An on-screen message that appears and then disappears.
+   *
+   * ONE reusable element, not a new Text per call. The old version created a
+   * fresh object every time, so two messages inside 2s (a pick breaking and
+   * the very next press being refused) drew two overlapping banners, and a
+   * message that arrived mid-fade stacked a third on top. One element, one
+   * live tween: a new message kills the pending tween, rewrites the text and
+   * restarts the fade, so only the newest line is ever on screen.
+   *
+   * It sits OVER THE PLAYER rather than at a fixed screen position. A 16px
+   * banner at the top of the screen is a chrome bar the player has to look
+   * away from the forest to read; a small line just above their own feet is
+   * read without moving the eye. The offset is in world space, so it follows
+   * the hunter as they walk and stays anchored while the camera tracks.
+   */
   flash(msg) {
-    const t = this.add.text(this.scale.width / 2, 90, msg, {
-      fontFamily: 'monospace', fontSize: '16px', color: '#fff8d0',
-      backgroundColor: '#0d1a10ee', padding: { x: 12, y: 8 },
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(UI_DEPTH + 1);
-    this.tweens.add({ targets: t, alpha: 0, delay: 1600, duration: 400, onComplete: () => t.destroy() });
+    if (!this._toast) {
+      const t = this.add.text(0, 0, '', {
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+        fontSize: '11px', color: '#fff8d0',
+        backgroundColor: '#0d1a10dd', padding: { x: 8, y: 4 },
+      }).setOrigin(0.5, 1).setDepth(UI_DEPTH + 1);
+      t.setAlpha(0);
+      this._toast = t;
+    }
+    const t = this._toast;
+    // Anchor above the player, in WORLD coordinates. 30px above the feet is
+    // clear of the sprite's own head and of the STRIKE n/3 label that also
+    // hangs under a dig site.
+    t.setPosition(this.player.x, this.player.y - 30);
+    this.tweens.killTweensOf(t);
+    t.setText(msg);
+    t.setAlpha(1);
+    t.setVisible(true);
+    this._toastTween = this.tweens.add({
+      targets: t, alpha: 0, delay: 2200, duration: 500,
+      onComplete: () => { t.setVisible(false); this._toastTween = null; },
+    });
   }
 }
 
