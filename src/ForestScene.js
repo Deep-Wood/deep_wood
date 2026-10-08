@@ -1734,13 +1734,22 @@ export class ForestScene extends Phaser.Scene {
       (hud || el).appendChild(wrap);
       // Align settle's vertical position to the SELL button's row. Settle is
       // position:absolute against #hud, so its top is relative to the HUD's top
-      // edge; the sell button's offsetTop within the left rail plus the rail's
-      // own offset gives the matching absolute Y.
+      // edge. The wrapper has its own internal offset (the button does not sit
+      // flush at the wrapper's top edge), so measure that gap and compensate:
+      // we want settle's BUTTON top to equal sell's BUTTON top.
       const sellBtn = document.getElementById('belt-sell');
       if (sellBtn) {
         const hudRect = hud.getBoundingClientRect();
         const sellRect = sellBtn.getBoundingClientRect();
+        // Two-pass alignment. Settle is position:absolute inside the #hud GRID,
+        // whose containing-block math for absolute children does not match a
+        // naive top-from-padding-box (the grid adds its own offset). So set an
+        // initial top, measure the actual residual error between settle's button
+        // and sell's button, then correct by that error. This lands settle's
+        // button exactly on sell's row at every viewport.
         wrap.style.top = (sellRect.top - hudRect.top) + 'px';
+        const before = st.getBoundingClientRect().top - sellRect.top;
+        wrap.style.top = (sellRect.top - hudRect.top - before) + 'px';
       }
     }
   }
