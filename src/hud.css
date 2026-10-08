@@ -447,7 +447,7 @@ button.chip { position: relative; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 14px;   /* clears the ~9px extruded 3D base so the label floats below it */
 }
 .rail-action-label {
   font-size: 9.5px;
@@ -544,6 +544,33 @@ button.chip { position: relative; }
     0 2px 4px rgba(0, 0, 0, .45);
 }
 .icon-btn.repair:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+  filter: grayscale(.4);
+}
+/* SELL converts gems to value, so it wears COPPER (the gem/metal accent): copper
+   face, darker copper extruded base. Same 3D puck construction, same column. */
+.icon-btn.sell {
+  background: linear-gradient(to bottom, #c88a4a 0%, #a86a2e 45%, #7a4a1e 100%);
+  border-color: #dda76e;
+  color: #2a1706;
+  box-shadow:
+    inset 0 2px 1px rgba(255, 255, 255, .38),
+    inset 0 -2px 3px rgba(0, 0, 0, .4),
+    0 6px 0 #543314,
+    0 9px 0 #3d240e,
+    0 11px 14px rgba(0, 0, 0, .55),
+    0 3px 8px rgba(0, 0, 0, .4);
+}
+.icon-btn.sell:hover { border-color: #ecc28f; }
+.icon-btn.sell:active {
+  box-shadow:
+    inset 0 2px 3px rgba(0, 0, 0, .35),
+    inset 0 -1px 1px rgba(255, 255, 255, .22),
+    0 1px 0 #543314,
+    0 2px 4px rgba(0, 0, 0, .45);
+}
+.icon-btn.sell:disabled {
   opacity: .5;
   cursor: not-allowed;
   filter: grayscale(.4);

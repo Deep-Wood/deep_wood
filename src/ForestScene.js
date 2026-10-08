@@ -1593,27 +1593,40 @@ export class ForestScene extends Phaser.Scene {
     this.decoratePending(buy);
     el.appendChild(buy);
 
-    // --- sell gems
-    const sell = document.createElement('button');
-    sell.className = 'chip btn act';
-    sell.id = 'belt-sell';
-    const held = p.gems.reduce((a, b) => a + b, 0);
-    const val = redeemValueWei(p);
-    // 4dp is plenty for a gem payout and saves 4 characters, which is what
-    // lets all three buttons read in full on a 390px phone. The exact figure
-    // is in the title.
-    const shortVal = held > 0 ? String(Number(val) / 1e18).replace(/0+$/, '').replace(/\.$/, '') : 'sell gems';
-    const rowW2 = (el.getBoundingClientRect().width) || window.innerWidth;
-    const tight = p.left === 0 || rowW2 < 260;
-    const payoutLabel = this.tokenAddress ? '$DEEPWOOD' : 'ETH';
-    sell.textContent = held > 0 ? (tight ? 'sell gems' : `sell ${shortVal}`) : 'sell gems';
-    sell.title = held > 0 ? `sell ${held} gems for ${shortVal} ${payoutLabel}` : 'no gems to sell';
-    const rchk = canRedeem(p);
-    sell.disabled = !rchk.ok;
-    if (!rchk.ok) sell.title = rchk.reason;
-    sell.onclick = () => this.doSellGems();
-    this.decoratePending(sell);
-    el.appendChild(sell);
+    // --- sell gems. Rendered as a 3D CIRCLE ICON (like settle/repair) with the
+    // "sell gems" label beneath it, in the same column. Wears COPPER (a
+    // convert-to-value action) so the column reads green/copper/blue/gold.
+    // The dynamic payout stays in the tooltip; the icon + label are fixed.
+    {
+      const swrap = document.createElement('div');
+      swrap.className = 'rail-action-item settle-item';
+      const sell = document.createElement('button');
+      sell.className = 'icon-btn sell';
+      sell.id = 'belt-sell';
+      const held = p.gems.reduce((a, b) => a + b, 0);
+      const val = redeemValueWei(p);
+      const shortVal = held > 0 ? String(Number(val) / 1e18).replace(/0+$/, '').replace(/\.$/, '') : 'sell gems';
+      const payoutLabel = this.tokenAddress ? '$DEEPWOOD' : 'ETH';
+      // A gems-to-coin glyph: a stacked gem converting to a coin.
+      sell.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">'
+        + '<path d="M6.5 10.5 9 7h6l2.5 3.5L12 18l-5.5-7.5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>'
+        + '<path d="M6.5 10.5h11" fill="none" stroke="currentColor" stroke-width="1.6"/>'
+        + '<path d="M9 7l1.4 3.5M15 7l-1.4 3.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>'
+        + '</svg>';
+      sell.setAttribute('aria-label', 'Sell gems');
+      sell.title = held > 0 ? `sell ${held} gems for ${shortVal} ${payoutLabel}` : 'no gems to sell';
+      const rchk = canRedeem(p);
+      sell.disabled = !rchk.ok;
+      if (!rchk.ok) sell.title = rchk.reason;
+      sell.onclick = () => this.doSellGems();
+      this.decoratePending(sell);
+      swrap.appendChild(sell);
+      const slbl = document.createElement('span');
+      slbl.className = 'rail-action-label';
+      slbl.textContent = 'sell gems';
+      swrap.appendChild(slbl);
+      el.appendChild(swrap);
+    }
 
     // --- repair, shown only when broken and affordable. It is a gem action
     // dressed like the ETH ones, so it sits on its own row under them.
