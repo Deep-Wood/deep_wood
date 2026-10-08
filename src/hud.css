@@ -215,16 +215,16 @@ html, body {
   margin-top: calc(-1 * (var(--icon) + var(--s2)));
 }
 /* Brand lockup: the logo + wordmark share the first row; the phase line wraps
-   to its own row beneath (flex-basis:100%). The logo is the circular DEEPWOOD
-   medallion, pre-cropped to a centered 600x600 square (deepwood-emblem-circle.jpg)
-   so it displays as a TIGHT circle: equal width/height, border-radius 50%,
-   object-fit cover. Cropping to a square first (not relying on cover to crop a
-   wide banner) keeps the medallion centered and full in the round. */
+   to its own row beneath (flex-basis:100%). The logo is a PNG whose corners are
+   already transparent (deepwood-emblem-round.png) -- the emblem was cropped to
+   its inscribed circle and everything outside masked to alpha. So it renders as
+   ONLY the round emblem, no dark forest crescent. object-fit:contain (not cover)
+   keeps the whole circle; border-radius:50% is belt-and-suspenders. */
 .brand-logo {
   width: 52px;
   height: 52px;
-  border-radius: 50%;          /* tight circle around the pre-cropped square */
-  object-fit: cover;
+  border-radius: 50%;          /* round; PNG corners are already transparent */
+  object-fit: contain;         /* show the whole pre-masked circle */
   flex: 0 0 auto;
   box-shadow: 0 1px 4px rgba(0, 0, 0, .6);
 }
