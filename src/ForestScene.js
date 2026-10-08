@@ -308,6 +308,12 @@ export class ForestScene extends Phaser.Scene {
   has(key) { return this.textures.exists(key); }
 
   create() {
+    // Route in-scene flash messages through a global hook so modules with no
+    // Phaser reference (wallet.js's signing path) can show the SAME centred,
+    // auto-disappearing toast the repair/sell/settle actions use -- instead of
+    // a bespoke DOM overlay. flash() anchors the text over the player and fades
+    // it, so "Confirm in wallet…" reads exactly like every other action note.
+    window.deepwoodFlash = (msg) => { if (msg) this.flash(msg); };
     buildAllTextures(this, WORLD_W * TILE, WORLD_H * TILE);
     // Animations can only be registered AFTER the generated spritesheet
     // exists, so this must happen here. Skipping it makes every later
@@ -1970,6 +1976,7 @@ export class ForestScene extends Phaser.Scene {
     // Get on-chain price
     this.beltMsg('Reading pool price…', 'busy');
     const { getEthPerToken, getBuyNonce } = await import('./chain.js');
+    const { getState } = await import('./wallet.js');
     const ethPerToken = await getEthPerToken(
       this.rpcUrl,
       this.fallbackRpcUrls,
@@ -1983,11 +1990,21 @@ export class ForestScene extends Phaser.Scene {
     // and, with the old underflowing price, divided by zero.)
     const discountedEth = (cost * 9000n) / 10000n;
     const tokenCost = (discountedEth * 10n ** 18n) / ethPerToken;
+    // The buy nonce is keyed by the PLAYER ADDRESS. Use the live connected
+    // account from getState(), NOT this.wallet: this.wallet is a Phaser property
+    // set by the wallet-sync and can be stale/undefined mid-flight, and
+    // getBuyNonce does player.slice(2) -- passing undefined crashed with
+    // "Cannot read properties of undefined (reading 'slice')" (DEEPWOOD-B).
+    const { account } = getState();
+    if (!account) {
+      this.beltMsg('Token buy requires a connected wallet', 'bad');
+      return;
+    }
     const nonce = await getBuyNonce(
       this.rpcUrl,
       this.fallbackRpcUrls,
       this.gameAddress,
-      this.wallet
+      account
     );
     const quoteExpiresAt = Math.floor(Date.now() / 1000) + 30;
 
@@ -2009,8 +2026,6 @@ export class ForestScene extends Phaser.Scene {
     this.beltMsg('Confirm in wallet…', 'busy');
     this.setTxPending('belt-buy-token', 'buying');
     const { buyToolWithTokenTx } = await import('./chain.js');
-    const { getState } = await import('./wallet.js');
-    const { account } = getState();
     const before = await this.getReader()?.toolOf(account);
 
     let r;

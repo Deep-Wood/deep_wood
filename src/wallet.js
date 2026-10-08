@@ -772,13 +772,25 @@ function notReady() {
 }
 
 /**
- * Show/hide the centred "Confirm in wallet" flash (#signing in index.html).
- * It exists only for the duration of a wallet signature: shown the moment
- * eth_sendTransaction is called, hidden the moment it resolves or rejects.
- * Understated on purpose (small, warn-toned, pointer-events:none) -- it must
- * never block the wallet popup or read as a modal.
+ * Show/hide the centred signing prompt.
+ *
+ * It uses the SAME in-scene flash() toast that the repair/sell/settle actions
+ * use (via the window.deepwoodFlash hook ForestScene wires up in create()), so
+ * "Confirm in wallet…" appears centred over the player and auto-fades exactly
+ * like every other action note -- not a bespoke DOM overlay. The DOM #signing
+ * element is only a fallback for when the Phaser scene is not alive (e.g. a
+ * signing path that runs before/between scenes); it is never the primary.
+ *
+ * flash() auto-fades after ~2.7s, so there is no explicit "hide" call for the
+ * flash path -- a rejection or resolve just lets it fade. The DOM fallback is
+ * hidden explicitly on resolve/reject so it never sticks.
  */
 function showSigning(text) {
+  if (typeof window !== "undefined" && typeof window.deepwoodFlash === "function") {
+    window.deepwoodFlash(text);
+    return;
+  }
+  // Fallback: DOM element, only when the scene hook is unavailable.
   if (typeof document === "undefined") return;
   const el = document.getElementById("signing");
   if (!el) return;
@@ -787,6 +799,8 @@ function showSigning(text) {
   el.hidden = false;
 }
 function hideSigning() {
+  // The flash path self-fades; nothing to hide. Only the DOM fallback needs an
+  // explicit hide so a rejection cannot leave it stuck on screen.
   if (typeof document === "undefined") return;
   const el = document.getElementById("signing");
   if (el) el.hidden = true;
