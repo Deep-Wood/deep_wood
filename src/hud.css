@@ -465,7 +465,6 @@ button.chip { position: relative; }
 .gem-ic {
   display: flex;
   align-items: center;
-  gap: 3px;
 }
 .gem-ic img {
   width: 22px;
@@ -477,16 +476,11 @@ button.chip { position: relative; }
      blend turns magenta to transparent and brightens the gem itself. */
   mix-blend-mode: screen;
 }
-/* Count next to each icon. Tabular numerals so the digits don't jitter. */
-.gem-ic .gc {
-  font-size: 12px;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-  min-width: 1ch;
-  text-align: left;
-}
-.gem-ic .gc.zero { color: var(--faint); opacity: .6; }
+/* No count next to the icon -- see renderGems() in index.html. The `none`
+ * class still marks a rarity the player has not found, but it is a DIM, not
+ * a zero: the icon reads as a target rather than as a failing score. */
+.gem-ic.none { opacity: .32; filter: grayscale(1); }
+.gem-ic.none:hover { opacity: .8; filter: none; }
 
 #gemlist {
   display: grid;

@@ -369,11 +369,15 @@
           + `<span class="c">${c}</span></div>`;
       }).join('');
 
-      // The live top-centre strip.
+      // The live top-centre strip. ICONS ONLY -- the number is deliberately
+      // gone. Five gems with five different counts read as a scoreboard and
+      // pull the eye to the arithmetic instead of the forest. The count is
+      // still available on hover (title) and in full in the satchel, which is
+      // one button away.
       gemstrip.innerHTML = bal.map((c, i) =>
-        `<div class="gem-ic" title="${gemNames[i]}: ${c}">`
+        `<div class="gem-ic${c ? '' : ' none'}" title="${gemNames[i]}: ${c}">`
         + `<img src="${gemIcons[i]}" alt="${gemNames[i]}" draggable="false">`
-        + `<span class="gc${c ? '' : ' zero'}">${c}</span></div>`
+        + `</div>`
       ).join('');
     }
     // Exposed so the belt's buy/repair/sell handlers can repaint the satchel
