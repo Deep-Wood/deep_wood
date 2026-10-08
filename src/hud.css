@@ -200,27 +200,30 @@ html, body {
   margin-top: calc(-1 * (var(--icon) + var(--s2)));
 }
 /* Brand lockup: the logo + wordmark share the first row; the phase line wraps
-   to its own row beneath (flex-basis:100%). The logo is the full circular
-   DEEPWOOD emblem (deepwood-emblem.jpg), so it carries its own ornate frame --
-   no border/radius needed, the emblem is already a finished round medallion. */
+   to its own row beneath (flex-basis:100%). The logo is the full DEEPWOOD
+   emblem image (deepwood-emblem.jpg) exactly as supplied -- a 1280x698
+   landscape banner -- so it is shown at its NATURAL aspect ratio (contain),
+   NOT cropped into a circle: a circular cover-crop of a wide banner grabs a
+   tiny bright centre sliver that reads as a white blob at icon size. */
 .brand-logo {
-  width: 48px; height: 48px;
-  border-radius: 50%;          /* circular, matching the emblem's round shape */
-  object-fit: cover;           /* fill the circle with the medallion */
+  width: 64px;
+  height: auto;
+  object-fit: contain;         /* show the whole emblem, no crop */
+  border-radius: 8px;
   flex: 0 0 auto;
   box-shadow: 0 1px 4px rgba(0, 0, 0, .6);
 }
 .brand-name,
 .season-head .card-title.brand-name {
   font-family: var(--serif);
-  font-size: 34px;
-  letter-spacing: .02em;
+  font-size: 20px;             /* fits the 236px rail; "DEEPWOOD" at 34px overflowed */
+  letter-spacing: .04em;
   color: var(--ink);
   font-weight: 700;
 }
-/* The season phase is a small supporting line under the wordmark. LEMON GREEN,
-   matching the emblem's glowing crystal / mossy bioluminescent accent, so the
-   phase reads as part of the same magical identity. */
+/* The season phase is HIDDEN (see the hidden attribute in index.html) until a
+   placement is chosen. The rules stay so it is ready to unhide in place.
+   LEMON GREEN, matching the emblem's glowing-crystal accent. */
 .season-phase {
   flex-basis: 100%;
   font-family: var(--mono);

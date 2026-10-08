@@ -135,12 +135,13 @@
              "DeepWood" first and the phase as supporting detail. -->
         <img class="avatar brand-logo" src="/art/deepwood-emblem.jpg" width="44" height="44"
              alt="DeepWood" aria-hidden="true">
-        <span class="card-title brand-name" id="season-title">DeepWood</span>
-        <!-- The season phase (chain state) moved to its own smaller line under
-             the wordmark. paintSeasonTitle() writes here now, NOT into
-             #season-title -- the title is the brand and must not be clobbered
-             by the phase readout. -->
-        <span class="season-phase" id="season-phase"></span>
+        <span class="card-title brand-name" id="season-title">DEEPWOOD</span>
+        <!-- The season phase (chain state) line is HIDDEN for now -- the user
+             has not said where it should go, so it is removed from view rather
+             than parked in a spot that might be wrong. paintSeasonTitle() still
+             runs and writes #season-phase, but the element is display:none until
+             a placement is chosen. Unhide it (and place it) on request. -->
+        <span class="season-phase" id="season-phase" hidden></span>
       </div>
 
       <!-- Satchel: the find tally by rarity, its own tile. -->
