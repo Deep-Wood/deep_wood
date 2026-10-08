@@ -424,24 +424,27 @@ button.chip { position: relative; }
     0 2px 4px rgba(0, 0, 0, .25);
 }
 .icon-btn svg { display: block; pointer-events: none; }
-/* The leaderboard button carries a TEXT LABEL under its icon, so it becomes a
-   vertical (column) pill -- icon on top, label beneath -- instead of a bare
-   circle. Scoped to #leaderboard-btn so the wallet button stays a pure circle. */
-#leaderboard-btn {
-  width: auto;
-  height: auto;
+/* Leaderboard rail action: the icon stays a TRUE 3D CIRCLE (the base .icon-btn
+   styling -- round, beveled, drop shadow), and the label is SMALL-CAPS TEXT
+   floating BELOW it, outside any box. Wrapper is a column so the label sits
+   under the circle; the label itself is bare text with a soft shadow for
+   legibility over the dark scene. */
+.rail-action-item {
+  display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 7px 12px 6px;
-  border-radius: 12px;
+  align-items: center;
+  gap: 4px;
 }
-#leaderboard-btn .icon-label {
-  font-size: 9px;
+.rail-action-label {
+  font-size: 8.5px;
   font-weight: 700;
-  letter-spacing: .04em;
+  letter-spacing: .12em;
+  text-transform: uppercase;      /* small caps */
+  font-variant: all-small-caps;
   line-height: 1;
   color: var(--ink);
-  text-transform: uppercase;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .95), 0 0 8px rgba(0, 0, 0, .7);
+  white-space: nowrap;
   pointer-events: none;
 }
 /* Wallet-state ring on the icon button. The glyph is the only label, so the
