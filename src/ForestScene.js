@@ -308,12 +308,41 @@ export class ForestScene extends Phaser.Scene {
   has(key) { return this.textures.exists(key); }
 
   create() {
-    // Route in-scene flash messages through a global hook so modules with no
-    // Phaser reference (wallet.js's signing path) can show the SAME centred,
-    // auto-disappearing toast the repair/sell/settle actions use -- instead of
-    // a bespoke DOM overlay. flash() anchors the text over the player and fades
-    // it, so "Confirm in wallet…" reads exactly like every other action note.
-    window.deepwoodFlash = (msg) => { if (msg) this.flash(msg); };
+    // Screen-CENTERED signing flash. wallet.js's signing path has no Phaser
+    // reference, so it calls this hook. Unlike gameplay flash() (which anchors
+    // over the player so you read it without looking away from the forest), the
+    // signing prompt pins to the DEAD CENTRE of the viewport on both axes --
+    // scrollX + width/2, scrollY + height/2 -- and self-fades. This is the one
+    // message that must read as a modal "the wallet is open" state, so it takes
+    // the screen centre, not the character.
+    window.deepwoodFlash = (msg) => {
+      if (!msg) return;
+      if (!this._centerToast) {
+        const t = this.add.text(0, 0, '', {
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+          fontSize: '12px', color: '#fff8d0',
+          backgroundColor: '#0d1a10dd', padding: { x: 10, y: 6 },
+          align: 'center',
+        }).setOrigin(0.5, 0.5).setDepth(UI_DEPTH + 2);
+        t.setAlpha(0);
+        this._centerToast = t;
+      }
+      const t = this._centerToast;
+      // Dead centre of the viewport in WORLD coords (camera scroll + half the
+      // view), so it is centred regardless of where the camera/player is.
+      t.setPosition(
+        this.cameras.main.scrollX + this.scale.width / 2,
+        this.cameras.main.scrollY + this.scale.height / 2
+      );
+      this.tweens.killTweensOf(t);
+      t.setText(msg);
+      t.setAlpha(1);
+      t.setVisible(true);
+      this.tweens.add({
+        targets: t, alpha: 0, delay: 2200, duration: 500,
+        onComplete: () => { t.setVisible(false); },
+      });
+    };
     buildAllTextures(this, WORLD_W * TILE, WORLD_H * TILE);
     // Animations can only be registered AFTER the generated spritesheet
     // exists, so this must happen here. Skipping it makes every later
