@@ -1700,7 +1700,7 @@ export class ForestScene extends Phaser.Scene {
     // and label remain on screen.
     {
       const wrap = document.createElement('div');
-      wrap.className = 'rail-action-item rail-action-icon order-settle';
+      wrap.className = 'rail-action-item rail-action-icon settle-right';
       const st = document.createElement('button');
       st.className = 'icon-btn settle';
       st.id = 'belt-settle';
@@ -1726,7 +1726,22 @@ export class ForestScene extends Phaser.Scene {
       lbl.className = 'rail-action-label';
       lbl.textContent = 'settle hunt';
       wrap.appendChild(lbl);
-      el.appendChild(wrap);
+      // Appended to the HUD (not the left rail) so it can break out to the FAR
+      // RIGHT edge. .settle-right anchors it to the right edge (aligned with the
+      // leaderboard column); the top is set below so it sits on the SAME row as
+      // the sell button, which is measured from the live layout.
+      const hud = document.getElementById('hud');
+      (hud || el).appendChild(wrap);
+      // Align settle's vertical position to the SELL button's row. Settle is
+      // position:absolute against #hud, so its top is relative to the HUD's top
+      // edge; the sell button's offsetTop within the left rail plus the rail's
+      // own offset gives the matching absolute Y.
+      const sellBtn = document.getElementById('belt-sell');
+      if (sellBtn) {
+        const hudRect = hud.getBoundingClientRect();
+        const sellRect = sellBtn.getBoundingClientRect();
+        wrap.style.top = (sellRect.top - hudRect.top) + 'px';
+      }
     }
   }
 
