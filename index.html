@@ -119,6 +119,15 @@
   <!-- HUD. Discrete floating tiles over the forest -- no panels, no cards.
        See src/hud.css for the layout rules. -->
   <div id="hud">
+    <!-- CENTRED SIGNING FLASH: a one-line notice that appears dead-centre of the
+         screen ONLY while a wallet signature is in flight, then vanishes when the
+         tx resolves or is rejected. It is not the persistent mode label (that is
+         #belt-mode in the right rail); this is the transient "Confirm in wallet"
+         / "Signing…" feedback for a chain write. Hidden by default; wallet.js
+         shows/hides it around eth_sendTransaction. -->
+    <div id="signing" class="signing" aria-live="polite" hidden>
+      <span id="signing-text">Confirm in wallet…</span>
+    </div>
     <!-- LEFT: season identity, stats and satchel as SEPARATE floating tiles.
          There is deliberately no container: the reference art has no panel
          behind its controls, and wrapping these in one box is what rebuilt the

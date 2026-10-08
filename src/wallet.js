@@ -771,12 +771,37 @@ function notReady() {
   return null;
 }
 
+/**
+ * Show/hide the centred "Confirm in wallet" flash (#signing in index.html).
+ * It exists only for the duration of a wallet signature: shown the moment
+ * eth_sendTransaction is called, hidden the moment it resolves or rejects.
+ * Understated on purpose (small, warn-toned, pointer-events:none) -- it must
+ * never block the wallet popup or read as a modal.
+ */
+function showSigning(text) {
+  if (typeof document === "undefined") return;
+  const el = document.getElementById("signing");
+  if (!el) return;
+  const t = document.getElementById("signing-text");
+  if (t && text) t.textContent = text;
+  el.hidden = false;
+}
+function hideSigning() {
+  if (typeof document === "undefined") return;
+  const el = document.getElementById("signing");
+  if (el) el.hidden = true;
+}
+
 /** eth_sendTransaction with a typed result and no throw. */
 async function send(data, { valueWei } = {}) {
   const blocked = notReady();
   if (blocked) return blocked;
   const tx = { from: state.account, to: config.gameAddress, data: "0x" + data };
   if (valueWei !== undefined) tx.value = toQuantity(valueWei);
+  // Show the centred "Confirm in wallet" flash for the WHOLE time the wallet is
+  // open (signature request -> user approves -> hash back). It is hidden in the
+  // finally block so a rejection or a throw never leaves it stuck on screen.
+  showSigning("Confirm in wallet…");
   try {
     const hash = await getProvider().request({
       method: "eth_sendTransaction",
@@ -793,6 +818,8 @@ async function send(data, { valueWei } = {}) {
           ? "transaction rejected in the wallet"
           : String(e?.message || e),
     };
+  } finally {
+    hideSigning();
   }
 }
 

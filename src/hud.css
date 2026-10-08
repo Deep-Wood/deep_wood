@@ -669,30 +669,34 @@ button.chip { position: relative; }
 }
 #belt-counts { }
 /* The mode line ("ON-CHAIN — writes go to the DeepWood contract" / "PREVIEW —
- * simulation only" / "OFFLINE — …") is the single most important status readout,
- * so it is CENTERED across the whole screen and BOLD, not tucked right-aligned
- * in the side rail. `position: fixed` lifts it out of the right-rail #belt and
- * pins it to the top-centre of the viewport, so it reads as a headline status
- * band. It sits below the gem strip (top ~ y=96) and never intercepts pointer
- * events. */
-#belt-mode {
+ * simulation only" / "OFFLINE — …") is styled in belt.css as a small warn-toned
+ * label in the right rail. It is a persistent MODE readout, not a signing
+ * indicator, so it stays in the rail at its original size/colour. */
+/* CENTRED SIGNING FLASH: dead-centre of the screen, appears only while a
+ * signature is in flight, disappears when the tx settles. `position: fixed` +
+ * translate(-50%,-50%) centres it on BOTH axes over the whole viewport. It is
+ * intentionally understated -- same small warn-toned mono look as the belt
+ * notes -- so it reads as a transient prompt, not a modal. `pointer-events:
+ * none` so it never blocks the wallet popup or the scene. `hidden` until shown. */
+#signing {
   position: fixed;
-  top: 20px;
+  top: 50%;
   left: 50%;
-  transform: translateX(-50%);
-  z-index: 10;
-  font-weight: 700;
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink);
+  transform: translate(-50%, -50%);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--warn);
   text-align: center;
   pointer-events: none;
+  padding: 10px 16px;
   white-space: nowrap;
-  max-width: 92vw;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
+#signing[hidden] { display: none; }
 /* The message is the belt's only feedback channel, so when it has text it gets
  * a line of its own rather than squeezing the row it lands in. */
 .belt-msg:not(:empty) { }
@@ -889,13 +893,9 @@ button.chip { position: relative; }
   .chip.btn { font-size: 9px; padding: 1px 4px; }
   .chip { font-size: 9px; padding: 1px 4px; }
   #belt-counts { font-size: 10px; }
-  /* The mode line is now the centered, bold status headline ABOVE the gem strip
-     on every screen -- it stays visible on a phone too, just slightly smaller. */
-  #belt-mode {
-    top: 14px;
-    font-size: 10px;
-    max-width: 96vw;
-  }
+  /* The mode line ("PREVIEW - simulation only") restates the chain chip, and on
+     a phone that is a whole line spent saying nothing. */
+  #belt-mode { display: none; }
   .belt-msg:empty { display: none; }
   #hint {
     top: auto; bottom: var(--s3); left: var(--s3); right: var(--s3);
