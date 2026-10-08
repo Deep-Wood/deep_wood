@@ -708,10 +708,17 @@ export async function getEthPerToken(rpcUrl, fallbackRpcUrls, poolManager, poolI
   const sqrtPriceX96 = await readSqrtPriceX96(rpcUrl, fallbackRpcUrls, poolManager, poolId);
   if (sqrtPriceX96 === 0n) throw new Error('sqrtPriceX96 is zero');
   const Q96 = 2n ** 96n;
-  // sqrtPriceX96 = sqrt(token/eth) * 2^96
-  // eth/token = (2^96 / sqrtPriceX96)^2
-  const ethPerToken = (Q96 * Q96) / (sqrtPriceX96 * sqrtPriceX96);
-  return ethPerToken;
+  // sqrtPriceX96 = sqrt(token/eth) * 2^96  =>  eth/token = (2^96 / sqrtPriceX96)^2
+  // Computed in FIXED POINT scaled by 1e18 so it does not underflow to zero:
+  // when the pool prices the token BELOW 1 ETH (sqrtPriceX96 > Q96), the naive
+  // (Q96*Q96)/(sqrt*sqrt) floors to 0 and every downstream token cost divides
+  // by zero -- which is exactly what made "pay DeepWood" fail. The 1e18 scale
+  // keeps integer precision across the full uint256 range, so the returned value
+  // is wei-of-ETH per token, already scaled by 1e18 (i.e. it is "eth per token"
+  // in 1e18 fixed point). Divide a wei cost by it and multiply by 1e18 to get a
+  // token amount in the token's own 18-decimal units.
+  const ethPerTokenScaled = (Q96 * Q96 * 10n ** 18n) / (sqrtPriceX96 * sqrtPriceX96);
+  return ethPerTokenScaled;
 }
 
 /**
@@ -719,6 +726,8 @@ export async function getEthPerToken(rpcUrl, fallbackRpcUrls, poolManager, poolI
  * Returns tokens per ETH (18 decimals).
  */
 export async function getTokensPerEth(rpcUrl, fallbackRpcUrls, poolManager, poolId) {
+  // ethPerToken is now 1e18-scaled (eth per token, fixed point). Invert it to
+  // tokens per ETH in the same 1e18 fixed point: 1e18 / (ethPerToken/1e18).
   const ethPerToken = await getEthPerToken(rpcUrl, fallbackRpcUrls, poolManager, poolId);
   if (ethPerToken === 0n) throw new Error('ethPerToken is zero');
   return (10n ** 18n * 10n ** 18n) / ethPerToken;

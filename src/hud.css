@@ -668,6 +668,31 @@ button.chip { position: relative; }
   text-align: right;
 }
 #belt-counts { }
+/* The mode line ("ON-CHAIN — writes go to the DeepWood contract" / "PREVIEW —
+ * simulation only" / "OFFLINE — …") is the single most important status readout,
+ * so it is CENTERED across the whole screen and BOLD, not tucked right-aligned
+ * in the side rail. `position: fixed` lifts it out of the right-rail #belt and
+ * pins it to the top-centre of the viewport, so it reads as a headline status
+ * band. It sits below the gem strip (top ~ y=96) and never intercepts pointer
+ * events. */
+#belt-mode {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+  text-align: center;
+  pointer-events: none;
+  white-space: nowrap;
+  max-width: 92vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 /* The message is the belt's only feedback channel, so when it has text it gets
  * a line of its own rather than squeezing the row it lands in. */
 .belt-msg:not(:empty) { }
@@ -864,9 +889,13 @@ button.chip { position: relative; }
   .chip.btn { font-size: 9px; padding: 1px 4px; }
   .chip { font-size: 9px; padding: 1px 4px; }
   #belt-counts { font-size: 10px; }
-  /* The mode line ("PREVIEW - simulation only") restates the chain chip, and on
-     a phone that is a whole line spent saying nothing. */
-  #belt-mode { display: none; }
+  /* The mode line is now the centered, bold status headline ABOVE the gem strip
+     on every screen -- it stays visible on a phone too, just slightly smaller. */
+  #belt-mode {
+    top: 14px;
+    font-size: 10px;
+    max-width: 96vw;
+  }
   .belt-msg:empty { display: none; }
   #hint {
     top: auto; bottom: var(--s3); left: var(--s3); right: var(--s3);

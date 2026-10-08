@@ -1932,8 +1932,12 @@ export class ForestScene extends Phaser.Scene {
         this.poolId
       );
       const cost = toolPrice(tier);
-      // tokenCost = cost * 0.9 / ethPerToken
-      const tokenCost = (cost * 9000n) / (ethPerToken * 10000n / 10000n);
+      // tokenCost (in the token's 18-decimal units) = discounted ETH cost / ethPerToken.
+      // ethPerToken is now 1e18-scaled (eth per token, fixed point), so:
+      //   discountedEth = cost * 0.9   (wei)
+      //   tokenCost = discountedEth * 1e18 / ethPerToken   (token units, 18 dec)
+      const discountedEth = (cost * 9000n) / 10000n;
+      const tokenCost = (discountedEth * 10n ** 18n) / ethPerToken;
       return tokenCost;
     } catch {
       return 0n;
@@ -1973,7 +1977,12 @@ export class ForestScene extends Phaser.Scene {
       this.poolId
     );
     const cost = toolPrice(tier);
-    const tokenCost = (cost * 9000n) / (ethPerToken * 10000n / 10000n);
+    // tokenCost (token's 18-decimal units) = discounted ETH cost / ethPerToken.
+    // ethPerToken is 1e18-scaled, so scale the discounted wei cost back up by
+    // 1e18 before dividing. (The old `ethPerToken * 10000n / 10000n` was a no-op
+    // and, with the old underflowing price, divided by zero.)
+    const discountedEth = (cost * 9000n) / 10000n;
+    const tokenCost = (discountedEth * 10n ** 18n) / ethPerToken;
     const nonce = await getBuyNonce(
       this.rpcUrl,
       this.fallbackRpcUrls,
