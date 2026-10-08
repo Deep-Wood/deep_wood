@@ -251,8 +251,18 @@ html, body {
   margin-top: 3px;
 }
 /* The title takes the slack so Connect sits hard against the card's right edge,
-   level with the season name rather than tucked beside it. */
+   level with the season name rather than tucked beside it. The overflow:hidden +
+   ellipsis exist to truncate a LONG season name -- but they must NOT apply to
+   the BRAND wordmark: Grenze Gotisch at weight 900 has a 30px font box (22px
+   ascent) that is taller than the flex row, and overflow:hidden slices the tall
+   gothic caps top and bottom. The brand text is fixed and never needs
+   truncating, so it opts out and gets its own line-height to fit the glyphs. */
 .season-head .card-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.season-head .card-title.brand-name {
+  overflow: visible;
+  line-height: 1.15;           /* room for the 22px ascent + 8px descent */
+  text-overflow: clip;
+}
 
 /* The countdown ring's rules lived here. The ring element is deleted from
  * index.html, so these are dead selectors -- removed with it rather than left
