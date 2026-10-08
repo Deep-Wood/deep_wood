@@ -2428,7 +2428,12 @@ export class ForestScene extends Phaser.Scene {
    * a future season 2 from being labelled "Season 1".
    */
   async paintSeasonTitle() {
-    const el = document.getElementById('season-title');
+    // The BRAND wordmark lives in #season-title ("DeepWood") and is never
+    // touched here. The season PHASE -- real chain state -- is written to the
+    // separate #season-phase line beneath it, so the corner reads "DeepWood"
+    // with the phase as supporting detail instead of the phase replacing the
+    // brand.
+    const el = document.getElementById('season-phase');
     if (!el) return;
 
     const say = (label) => { el.textContent = label; };

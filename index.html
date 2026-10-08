@@ -125,23 +125,22 @@
          header card as two smaller ones. Each cluster carries its own tile. -->
     <section id="season">
       <div class="season-head readout" style="position:relative">
-        <!-- Player portrait: a vibe viber (vibevibe.fun PFP collection). It is
-             the PLAYER AVATAR in the card, not the walker -- the collection is
-             1080x1080 head-and-shoulders PFPs, which have no direction and no
-             silhouette at the 64px the map needs. Used here, where portrait
-             framing is the correct format. -->
-        <img class="avatar" src="/art/viber.png" width="32" height="32"
-             alt="Player portrait" aria-hidden="true">
-        <!-- The season name is CHAIN STATE, not decoration. It was a hardcoded
-             "Season I - Verdant Hollow" string, so after the V2 cutover it kept
-             claiming Season I while the deployed contract was in Preseason --
-             a header that lied about the phase the player was actually in.
+        <!-- Brand lockup in the top-left corner: the DeepWood logo (the same
+             green-diamond emblem as the splash / favicon) beside a "DeepWood"
+             wordmark. This is the GAME IDENTITY, so it is the brand, not the
+             player's viber portrait or the chain phase.
 
-             It starts as "Connecting..." rather than a guess, because a wrong
-             season name is worse than an absent one: it implies the chain has
-             been read when it has not. paintSeasonState() fills it in from
-             phase() and current(). -->
-        <span class="card-title" id="season-title">Connecting&hellip;</span>
+             The season phase is still shown -- it is real chain state -- but it
+             moved to the smaller line beneath the wordmark, so the corner reads
+             "DeepWood" first and the phase as supporting detail. -->
+        <img class="avatar brand-logo" src="/art/deepwood-logo.svg" width="32" height="32"
+             alt="DeepWood" aria-hidden="true">
+        <span class="card-title brand-name" id="season-title">DeepWood</span>
+        <!-- The season phase (chain state) moved to its own smaller line under
+             the wordmark. paintSeasonTitle() writes here now, NOT into
+             #season-title -- the title is the brand and must not be clobbered
+             by the phase readout. -->
+        <span class="season-phase" id="season-phase"></span>
       </div>
 
       <!-- Satchel: the find tally by rarity, its own tile. -->

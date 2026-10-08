@@ -1,9 +1,12 @@
 /**
- * The season title must be CHAIN STATE, not decoration.
+ * The season PHASE line must be CHAIN STATE, not decoration.
  *
  * It was a hardcoded "Season I - Verdant Hollow" string in index.html, so after
  * the V2 cutover the site kept claiming Season I while the deployed contract was
  * in Preseason. Nothing caught it because nothing read it from the chain.
+ *
+ * The brand wordmark ("DeepWood") now owns #season-title and is static; the
+ * phase readout moved to #season-phase and is painted from phase() as before.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -13,8 +16,11 @@ import { readFileSync } from 'fs';
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const scene = readFileSync(new URL('./ForestScene.js', import.meta.url), 'utf8');
 
-test('the heading carries an id the renderer can find', () => {
-  assert.match(html, /id="season-title"/, 'the title needs a hook to be updated');
+test('the season PHASE line carries an id the renderer can find', () => {
+  // The phase is chain state written by paintSeasonTitle(). It lives on its own
+  // line now (#season-phase); the brand wordmark (#season-title) is separate
+  // and is never overwritten by the phase readout.
+  assert.match(html, /id="season-phase"/, 'the phase line needs a hook to be updated');
 });
 
 test('no hardcoded season name remains in the markup', () => {
@@ -24,9 +30,11 @@ test('no hardcoded season name remains in the markup', () => {
   );
 });
 
-test('the initial heading admits it has not read the chain yet', () => {
+test('the initial phase line admits it has not read the chain yet', () => {
   // Anything else is a claim about chain state before any chain state is read.
-  assert.match(html, /id="season-title">Connecting/);
+  // The phase line starts empty; paintSeasonTitle() fills it from phase().
+  assert.match(html, /id="season-phase"/, 'the phase line must exist for the renderer');
+  assert.match(html, /id="season-title">DeepWood/, 'the brand wordmark is the static title');
 });
 
 test('the title is painted from phase(), not from a constant', () => {

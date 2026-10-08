@@ -180,13 +180,9 @@ html, body {
 }
 
 /* The left clusters are separate tiles, so the rules that used to divide them
-   inside one card (and the card's own padding) are gone. */
-/* The season-head (portrait + PRESEASON title) is pulled UP into the top-left
-   corner. #season carries the icon-row offset (margin-top on the left rail),
-   which pushed this head down below the corner; a matching negative margin
-   lifts just the head back to the corner without moving the rest of #season
-   (the satchel below stays where it is). */
-.season-head { margin-bottom: 0; margin-top: calc(-1 * (var(--icon) + var(--s2))); }
+   inside one card (and the card's own padding) are gone. The season-head
+   negative-margin (lifting it to the top-left corner) and the brand lockup
+   styles live in the main .season-head block below. */
 #satchel     { margin-top: 0; }
 
 /* Player portrait. 32px, circular, in the card head beside the season title.
@@ -210,12 +206,41 @@ html, body {
 
 .season-head {
   display: flex; align-items: center; gap: var(--s1);
+  flex-wrap: wrap;
   margin-bottom: 0;
+  margin-top: calc(-1 * (var(--icon) + var(--s2)));
+}
+/* Brand lockup: the logo + wordmark share the first row; the phase line wraps
+   to its own row beneath (flex-basis:100%). */
+.brand-logo {
+  width: 28px; height: 28px;
+  border-radius: 7px;          /* matches the favicon's rounded-square mark */
+  object-fit: contain;         /* the SVG already has its own dark backing */
+  flex: 0 0 auto;
+  border: 1px solid rgba(196, 154, 76, .55);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .5);
+}
+.brand-name {
+  font-family: var(--serif);
+  font-size: 18px;
+  letter-spacing: .02em;
+  color: var(--ink);
+  font-weight: 700;
+}
+/* The season phase is a small supporting line under the wordmark: dim, mono,
+   full-width so it wraps to the second row. */
+.season-phase {
+  flex-basis: 100%;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-top: 1px;
 }
 /* The title takes the slack so Connect sits hard against the card's right edge,
    level with the season name rather than tucked beside it. */
 .season-head .card-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.season-head #connect { flex: none; margin-left: auto; }
 
 /* The countdown ring's rules lived here. The ring element is deleted from
  * index.html, so these are dead selectors -- removed with it rather than left
