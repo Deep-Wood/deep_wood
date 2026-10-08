@@ -1638,13 +1638,16 @@ export class ForestScene extends Phaser.Scene {
     // Rendered as a 3D CIRCLE ICON (like the leaderboard/wallet buttons) with
     // the "settle hunt" label beneath it, not a text chip. The queued count
     // rides as a small badge on the icon so the number is still glanceable.
-    if (onchainActive()) {
+    // Always rendered so the button stays visible. In preview mode it shows
+    // disabled (there's no on-chain queue to settle), but the 3D circle icon
+    // and label remain on screen.
+    {
       const wrap = document.createElement('div');
       wrap.className = 'rail-action-item settle-item';
       const st = document.createElement('button');
       st.className = 'icon-btn settle';
       st.id = 'belt-settle';
-      const queued = this.queue?.size ?? 0;
+      const queued = onchainActive() ? (this.queue?.size ?? 0) : 0;
       // A settle/checkmark glyph: a claw/hook stamping a card onto the chain.
       st.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">'
         + '<path d="M6.5 3h11a2 2 0 0 1 2 2v9.5a2 2 0 0 1-2 2H13l-1.8 3.2a1 1 0 0 1-1.7 0L7.7 16.5h-1.2a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>'
@@ -1652,10 +1655,13 @@ export class ForestScene extends Phaser.Scene {
         + '</svg>'
         + (queued > 0 ? `<span class="icon-badge">${queued}</span>` : '');
       st.setAttribute('aria-label', queued > 0 ? `Settle ${queued} hunts` : 'Settle');
-      st.title = queued > 0
-        ? `bank ${queued} queued hunt${queued === 1 ? '' : 's'} on-chain (one signature)`
-        : 'nothing queued -- dig first';
-      st.disabled = queued === 0;
+      const offline = !onchainActive();
+      st.title = offline
+        ? 'settle is on-chain only -- connect a wallet'
+        : queued > 0
+          ? `bank ${queued} queued hunt${queued === 1 ? '' : 's'} on-chain (one signature)`
+          : 'nothing queued -- dig first';
+      st.disabled = queued === 0 || offline;
       st.onclick = () => this.doSettle();
       this.decoratePending(st);
       wrap.appendChild(st);
