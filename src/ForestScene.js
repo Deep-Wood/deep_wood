@@ -1163,7 +1163,8 @@ export class ForestScene extends Phaser.Scene {
     // BOARD is GONE from the canvas.
     //
     // It drew a second leaderboard trigger at the top-right, and the DOM icon
-    // button (#leaderboard-btn, circular, top-left corner) now opens exactly
+    // button (#leaderboard-btn, the bar-chart/signal glyph, now in the right
+    // rail) opens exactly
     // the same panel via the same openLeaderboard(). Two controls for one
     // action -- one of them a 60x24 rectangle sitting under the wallet panel --
     // is a duplicate, so the canvas one is removed and the icon button owns it.

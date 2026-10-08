@@ -175,23 +175,23 @@
          (plus repair/settle/sell) live here as a vertical column. -->
     <div class="belt-actions" id="belt-actions"></div>
 
-    <!-- The CONNECT / signal button sits in the RIGHT rail on the same row as
-         the action buttons. It shows wallet state (gold ring connected, amber
-         wrong chain), so it belongs beside the controls that act on the chain,
-         not floating in a corner with the leaderboard. -->
+    <!-- The SIGNAL / leaderboard button (the bar-chart glyph) sits in the
+         RIGHT rail on the same row as the action buttons, right-aligned under
+         the belt -- the mirror of the action buttons on the left. It was a
+         floating icon in the top-left corner, which read as chrome. -->
     <div class="rail-actions">
-      <button class="icon-btn" id="connect" aria-label="Connect wallet" title="Connect wallet">
+      <button type="button" id="leaderboard-btn" class="icon-btn" aria-label="Leaderboard" title="Leaderboard">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-          <path d="M7 10V7a5 5 0 0 1 10 0v3h1a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h1Zm2 0h6V7a3 3 0 0 0-6 0v3Z" fill="currentColor"/>
+          <path d="M4 13h4v7H4zM10 8h4v12h-4zM16 4h4v16h-4z" fill="currentColor"/>
         </svg>
       </button>
     </div>
 
-    <!-- Icon buttons: circular, docked to the panel corners, matching the
-         reference art's round back/confirm controls. -->
-    <button type="button" id="leaderboard-btn" class="icon-btn" aria-label="Leaderboard" title="Leaderboard">
+    <!-- The wallet (connect) button rides the outer top-right corner, as it
+         always has. Circular, matching the reference art's round controls. -->
+    <button class="icon-btn" id="connect" aria-label="Connect wallet" title="Connect wallet">
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-        <path d="M4 13h4v7H4zM10 8h4v12h-4zM16 4h4v16h-4z" fill="currentColor"/>
+        <path d="M7 10V7a5 5 0 0 1 10 0v3h1a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h1Zm2 0h6V7a3 3 0 0 0-6 0v3Z" fill="currentColor"/>
       </svg>
     </button>
   </div>
@@ -639,17 +639,11 @@
         '<button class="wm-item" type="button">Disconnect</button>';
       // Anchor to the BUTTON, not its parent.
       //
-      // The parent (.rail-actions) is a grid item in an `auto` column, so the
-      // column is sized by the widest thing in it -- the belt text, which is
-      // much wider than a 34px icon. The button is justify-self:end inside
-      // that oversized cell, so `right: 0` against the parent put the menu
-      // ~186px to the LEFT of the button it belongs to, floating mid-screen
-      // over the forest. Making the button the positioning context lines the
-      // menu up with the control that opened it.
-      //
-      // relative, not fixed: the HUD is already positioned, so the button's
-      // own box is a valid containing block and the menu tracks it if the
-      // layout reflows.
+      // Anchoring to the parent (.rail-actions) put the menu ~187px to the
+      // LEFT of the button: that rail is an `auto` grid column sized by the
+      // belt text, far wider than the icon inside it. Making the button the
+      // positioning context lines the menu up with the control that opened it,
+      // wherever that control happens to live (corner or rail).
       btn.style.position = 'relative';
       btn.appendChild(walletMenu);
       btn.dataset.open = '1';
