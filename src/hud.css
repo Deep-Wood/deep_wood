@@ -215,23 +215,23 @@ html, body {
   margin-top: calc(-1 * (var(--icon) + var(--s2)));
 }
 /* Brand lockup: the logo + wordmark share the first row; the phase line wraps
-   to its own row beneath (flex-basis:100%). The logo is the full DEEPWOOD
-   emblem image (deepwood-emblem.jpg) exactly as supplied -- a 1280x698
-   landscape banner -- so it is shown at its NATURAL aspect ratio (contain),
-   NOT cropped into a circle: a circular cover-crop of a wide banner grabs a
-   tiny bright centre sliver that reads as a white blob at icon size. */
+   to its own row beneath (flex-basis:100%). The logo is the circular DEEPWOOD
+   medallion, pre-cropped to a centered 600x600 square (deepwood-emblem-circle.jpg)
+   so it displays as a TIGHT circle: equal width/height, border-radius 50%,
+   object-fit cover. Cropping to a square first (not relying on cover to crop a
+   wide banner) keeps the medallion centered and full in the round. */
 .brand-logo {
-  width: 64px;
-  height: auto;
-  object-fit: contain;         /* show the whole emblem, no crop */
-  border-radius: 8px;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;          /* tight circle around the pre-cropped square */
+  object-fit: cover;
   flex: 0 0 auto;
   box-shadow: 0 1px 4px rgba(0, 0, 0, .6);
 }
 .brand-name,
 .season-head .card-title.brand-name {
   font-family: var(--serif);
-  font-size: 20px;             /* fits the 236px rail; "DEEPWOOD" at 34px overflowed */
+  font-size: 22px;             /* a touch bigger; fits the 236px rail */
   font-weight: 900;            /* heaviest weight -> the gothic letterforms read at small size */
   letter-spacing: .06em;       /* a little air so the blackletter strokes don't blur together */
   color: var(--gold);          /* warm brand gold, not plain white -- matches the emblem's gilt */
