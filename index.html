@@ -150,11 +150,16 @@
       </div>
 
       <!-- Satchel: the find tally by rarity, its own tile. -->
-      <div id="satchel" class="readout">
+      <div id="satchel" class="readout" hidden>
         <span class="card-title">Satchel</span>
         <div id="gemlist"></div>
       </div>
     </section>
+
+    <!-- TOP CENTRE: the gem tally as ICONS + counts, replacing the satchel's
+         text tiles. Five AI-generated cut-gem icons, one per rarity, each with
+         its live on-chain balance. No labels -- the icon IS the rarity. -->
+    <div id="gemstrip" class="readout"></div>
 
     <!-- CENTRE: the season/chain status chip, centred under the top edge so the
          chain state is readable without a full-width bar holding it. -->
@@ -328,6 +333,18 @@
       return p && Array.isArray(p.gems) ? p.gems : totals;
     }
 
+    // The gem strip (top-centre) replaces the satchel entirely. Five
+    // AI-generated cut-gem icons with their live counts -- no labels, the
+    // icon is the rarity.
+    const gemstrip = document.getElementById('gemstrip');
+    const gemIcons = [
+      '/art/gem-quartz.png',
+      '/art/gem-amber.png',
+      '/art/gem-sapphire.png',
+      '/art/gem-ruby.png',
+      '/art/gem-diamond.png',
+    ];
+
     function renderGems() {
       // All five rarities, ALWAYS, including the ones still at zero.
       //
@@ -338,14 +355,21 @@
       // cannot tell the difference between "you have found no ruby" and "this
       // box is broken". A zero is information: it names the rarity as a target.
       const bal = playerBalance();
-      const rows = gemNames.map((n, i) => {
+      // Satchel markup is kept for backwards compat but the element is
+      // hidden. The top-centre gemstrip is the live display.
+      gemlist.innerHTML = gemNames.map((n, i) => {
         const c = bal[i];
         return `<div class="gem${c ? '' : ' none'}" title="${n}: ${c}">`
           + `<span class="n" style="color:${gemColors[i]}">${n.slice(0, 3)}</span>`
           + `<span class="c">${c}</span></div>`;
       }).join('');
 
-      gemlist.innerHTML = rows;
+      // The live top-centre strip.
+      gemstrip.innerHTML = bal.map((c, i) =>
+        `<div class="gem-ic" title="${gemNames[i]}: ${c}">`
+        + `<img src="${gemIcons[i]}" alt="${gemNames[i]}" draggable="false">`
+        + `<span class="gc${c ? '' : ' zero'}">${c}</span></div>`
+      ).join('');
     }
     // Exposed so the belt's buy/repair/sell handlers can repaint the satchel
     // after they change the balance. Without this the satchel only refreshed on

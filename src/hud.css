@@ -96,7 +96,8 @@ html, body {
    content sizes itself and the right rail matches, which is what stops the two
    sides drifting into different widths. */
 #season { grid-column: 1; grid-row: 1; width: var(--rail); }
-#status { grid-column: 2; grid-row: 1; justify-self: center; }
+#gemstrip { grid-column: 2; grid-row: 1; justify-self: center; align-self: start; }
+#status { grid-column: 2; grid-row: 2; justify-self: center; }
 #belt   { grid-column: 3; grid-row: 1; width: var(--rail); }
 
 /* Icon buttons ride the outer top corners, level with the panels. Circular,
@@ -438,7 +439,50 @@ button.chip { position: relative; }
   padding-top: 0;
   border-top: 0;
 }
+/* The satchel is fully replaced by the top-centre gemstrip. Hidden, not
+   deleted, so the old markup and its render path stay intact for reference. */
+#satchel[hidden] { display: none; }
 #satchel .card-title { display: block; margin-bottom: 1px; font-size: 9px; }
+
+/* --- gem strip -----------------------------------------------------------
+ * Top-centre tally: five AI-generated cut-gem icons, one per rarity, each
+ * with its live count. No labels -- the icon IS the rarity. This replaces
+ * the satchel's text tiles entirely.
+ * ------------------------------------------------------------------------ */
+#gemstrip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  /* No box -- same boxless readout treatment as the rest of the HUD. */
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .95), 0 0 8px rgba(0, 0, 0, .7);
+  pointer-events: none;
+}
+.gem-ic {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.gem-ic img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  image-rendering: auto;
+  /* The magenta cutout background is composited out -- the icons ship on
+     magenta so they read as clean cutouts against the dark forest. Screen
+     blend turns magenta to transparent and brightens the gem itself. */
+  mix-blend-mode: screen;
+}
+/* Count next to each icon. Tabular numerals so the digits don't jitter. */
+.gem-ic .gc {
+  font-size: 12px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  min-width: 1ch;
+  text-align: left;
+}
+.gem-ic .gc.zero { color: var(--faint); opacity: .6; }
 
 #gemlist {
   display: grid;
@@ -529,7 +573,8 @@ button.chip { position: relative; }
      forest open between them. */
   #hud { grid-template-columns: var(--rail) minmax(0, 1fr) var(--rail); }
   #season { grid-column: 1; grid-row: 1; width: var(--rail); }
-  #status { grid-column: 2; grid-row: 1; justify-self: center; }
+  #gemstrip { grid-column: 2; grid-row: 1; justify-self: center; align-self: start; }
+  #status { grid-column: 2; grid-row: 2; justify-self: center; }
   #belt   { grid-column: 3; grid-row: 1; width: var(--rail); }
   .season-grid { gap: var(--s1) var(--s2); }
   .stat .k { font-size: 8px; }
