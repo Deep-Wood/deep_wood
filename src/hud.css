@@ -16,10 +16,25 @@
  * and the boxes are placed in it rather than in the viewport.
  */
 
+/* Brand display face, self-hosted. A variable woff2 (latin subset) covering
+ * weights 700-900. Referenced as var(--serif) below. font-display:swap so a
+ * slow first load falls back to Georgia rather than blanking the wordmark. */
+@font-face {
+  font-family: 'Grenze Gotisch';
+  font-style: normal;
+  font-weight: 700 900;
+  font-display: swap;
+  src: url('/fonts/grenze-gotisch-latin.woff2') format('woff2');
+}
+
 :root {
   /* one spacing scale, used everywhere. Absolute pixel paddings are why the
      four old boxes each looked slightly wrong. */
   --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
+
+  /* Brand display face. 'Grenze Gotisch' is self-hosted (public/fonts/,
+     SIL OFL) as a variable font covering weights 700-900. */
+  --serif: 'Grenze Gotisch', Georgia, serif;
 
   --ink:   #e8f0e0;
   --dim:   #9fbc9f;
@@ -217,9 +232,10 @@ html, body {
 .season-head .card-title.brand-name {
   font-family: var(--serif);
   font-size: 20px;             /* fits the 236px rail; "DEEPWOOD" at 34px overflowed */
-  letter-spacing: .04em;
-  color: var(--ink);
-  font-weight: 700;
+  font-weight: 900;            /* heaviest weight -> the gothic letterforms read at small size */
+  letter-spacing: .06em;       /* a little air so the blackletter strokes don't blur together */
+  color: var(--gold);          /* warm brand gold, not plain white -- matches the emblem's gilt */
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .7);
 }
 /* The season phase is HIDDEN (see the hidden attribute in index.html) until a
    placement is chosen. The rules stay so it is ready to unhide in place.
