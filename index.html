@@ -599,11 +599,13 @@
 
     btn.addEventListener('click', () => {
       const s = getState();
-      if (s.connected && btn.dataset.open !== '1') {
-        // Already connected: a click should not silently re-connect (the
-        // address is already there); it should offer the way OUT. Show a
-        // one-item menu. Outside click or Escape dismisses it.
-        openWalletMenu();
+      if (s.connected) {
+        // Already connected. A click should not silently re-connect; it should
+        // toggle the account menu. Toggle (not open-only): clicking the button
+        // again while the menu is open closes it, rather than falling through
+        // to a pointless reconnect.
+        if (btn.dataset.open === '1') closeWalletMenu();
+        else openWalletMenu();
         return;
       }
       doConnect();
@@ -637,14 +639,15 @@
       walletMenu.innerHTML =
         '<div class="wm-account">' + short(getState().account || '') + '</div>' +
         '<button class="wm-item" type="button">Disconnect</button>';
-      // Anchor to the BUTTON, not its parent.
+      // Append the menu to the button and DO NOT touch its position.
       //
-      // Anchoring to the parent (.rail-actions) put the menu ~187px to the
-      // LEFT of the button: that rail is an `auto` grid column sized by the
-      // belt text, far wider than the icon inside it. Making the button the
-      // positioning context lines the menu up with the control that opened it,
-      // wherever that control happens to live (corner or rail).
-      btn.style.position = 'relative';
+      // The button is already `position: absolute` (top-right corner, from
+      // `#hud > #connect` in hud.css), which is a valid containing block for an
+      // absolutely-positioned child. Setting `position: relative` here would
+      // OVERRIDE that absolute rule: the button would drop out of the corner
+      // into normal flow and jump to the top-LEFT, dragging the menu with it
+      // (rendered at x≈73 under the action buttons instead of under the
+      // button). The bug is gone by leaving the position alone.
       btn.appendChild(walletMenu);
       btn.dataset.open = '1';
       document.addEventListener('click', outsideClose, true);

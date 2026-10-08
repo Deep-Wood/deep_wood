@@ -682,17 +682,18 @@ button.chip { position: relative; }
  * row used to cost. */
 #belt { row-gap: 2px; }
 
-/* Wallet disconnect menu. Anchored to the connect BUTTON (openWalletMenu
- * appends it there), right-aligned to the button's right edge so it hangs
- * under the control that opened it.
+/* Wallet account menu. A COMPACT dropdown under the wallet button, the way
+ * RainbowKit / Uniswap / OpenSea render it: a tight box (not full-width),
+ * truncated address on top, a single small "Disconnect" action below.
  *
- * The button now lives in the top-right corner (not the rail), so a
- * drop-DOWN renders on-screen. */
+ * min-width 0 (not 220px): 220px was far wider than the button it hangs from
+ * and read as a stray panel. The address is already truncated to 0x..4chars,
+ * so the box only needs to be as wide as that string plus a little padding. */
 .wallet-menu {
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  min-width: 220px;
+  min-width: 0;
   background: var(--panel-solid, #0d1a10);
   border: 1px solid var(--gold, #d9a441);
   border-radius: 6px;
@@ -704,16 +705,19 @@ button.chip { position: relative; }
   font-family: var(--mono);
   font-size: 10px;
   color: rgba(232, 240, 224, 0.55);
-  padding: 4px 6px 8px;
-  word-break: break-all;
+  padding: 4px 8px 6px;
+  white-space: nowrap;
 }
+/* The action is an inline-width text action, not a full-width bar. Matches
+ * the compact dropdown pattern: hover highlights a tight pill, not a
+ * 200px-wide banner. */
 .wallet-menu .wm-item {
-  display: block;
-  width: 100%;
+  display: inline-block;
+  width: auto;
   text-align: left;
   font-family: var(--mono);
   font-size: 11px;
-  padding: 6px 8px;
+  padding: 4px 8px;
   background: none;
   border: 1px solid transparent;
   border-radius: 4px;
