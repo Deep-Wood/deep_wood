@@ -424,6 +424,26 @@ button.chip { position: relative; }
     0 2px 4px rgba(0, 0, 0, .25);
 }
 .icon-btn svg { display: block; pointer-events: none; }
+/* The leaderboard button carries a TEXT LABEL under its icon, so it becomes a
+   vertical (column) pill -- icon on top, label beneath -- instead of a bare
+   circle. Scoped to #leaderboard-btn so the wallet button stays a pure circle. */
+#leaderboard-btn {
+  width: auto;
+  height: auto;
+  flex-direction: column;
+  gap: 3px;
+  padding: 7px 12px 6px;
+  border-radius: 12px;
+}
+#leaderboard-btn .icon-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  line-height: 1;
+  color: var(--ink);
+  text-transform: uppercase;
+  pointer-events: none;
+}
 /* Wallet-state ring on the icon button. The glyph is the only label, so the
  * connection state has to be readable without replacing it: a gold ring when
  * connected, amber when the wallet is on the wrong chain. */
