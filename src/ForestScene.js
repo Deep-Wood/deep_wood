@@ -2913,7 +2913,7 @@ export class ForestScene extends Phaser.Scene {
       if (now - (this._gateAt ?? -1e9) > 2000) {
         this._gateAt = now;
         this.openBelt();
-        this.flash('Tool broken \u2014 repair with gems or upgrade to keep hunting.');
+        this.flash('Tool broken \u2014 repair or upgrade to keep hunting.');
         // A broken tool is NOT a settle problem unless there is ALSO an
         // unsettled batch. Pulsing the settle button here taught the player to
         // think the fix was "settle", when the fix is actually "repair or
@@ -3406,13 +3406,13 @@ export class ForestScene extends Phaser.Scene {
         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
         fontSize: '11px', color: '#fff8d0',
         backgroundColor: '#0d1a10dd', padding: { x: 8, y: 4 },
-        // Two lines, not one. At 11px the broken-tool line is ~370px long,
-        // which stretches the bubble wider than the rail and reads as a
-        // banner rather than a note. Wrapping at 260px splits it exactly in
-        // two ("Tool broken -- repair with gems or / upgrade to keep
-        // hunting."); 200px made it three lines, which is a paragraph, not
-        // a note. wordWrap rather than a hard \n so every flash message
-        // gets the same treatment, not just this one.
+        // Two lines, not one. The longest line the game prints (the
+        // broken-tool refusal) is ~330px at 11px, which stretches the bubble
+        // wider than the rail and reads as a banner rather than a note.
+        // Wrapping at 260px splits it cleanly in two; 200px made it three
+        // lines, which is a paragraph, not a note. wordWrap rather than a
+        // hard \n so every flash message gets the same treatment, not just
+        // this one.
         wordWrap: { width: 260 },
         align: 'center',
       }).setOrigin(0.5, 1).setDepth(UI_DEPTH + 1);
