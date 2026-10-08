@@ -520,6 +520,34 @@ button.chip { position: relative; }
   align-items: flex-start;   /* left-align the icon within the stretched item */
   align-self: start;
 }
+/* REPAIR is a gem action, so it wears STEEL BLUE instead of the gold settle or
+   the forest-green default: blue face, darker blue extruded base. Same 3D puck
+   construction as its siblings, and it shares the .settle-item column layout. */
+.icon-btn.repair {
+  background: linear-gradient(to bottom, #6d8fa8 0%, #4a6b82 45%, #33495a 100%);
+  border-color: #8fb0c6;
+  color: #eaf3fa;
+  box-shadow:
+    inset 0 2px 1px rgba(255, 255, 255, .32),
+    inset 0 -2px 3px rgba(0, 0, 0, .4),
+    0 6px 0 #22323f,
+    0 9px 0 #18242e,
+    0 11px 14px rgba(0, 0, 0, .55),
+    0 3px 8px rgba(0, 0, 0, .4);
+}
+.icon-btn.repair:hover { border-color: #b8d4e6; }
+.icon-btn.repair:active {
+  box-shadow:
+    inset 0 2px 3px rgba(0, 0, 0, .35),
+    inset 0 -1px 1px rgba(255, 255, 255, .18),
+    0 1px 0 #22323f,
+    0 2px 4px rgba(0, 0, 0, .45);
+}
+.icon-btn.repair:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+  filter: grayscale(.4);
+}
 /* Wallet-state ring on the icon button. The glyph is the only label, so the
  * connection state has to be readable without replacing it: a gold ring when
  * connected, amber when the wallet is on the wrong chain. */

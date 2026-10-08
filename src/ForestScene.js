@@ -1617,19 +1617,32 @@ export class ForestScene extends Phaser.Scene {
 
     // --- repair, shown only when broken and affordable. It is a gem action
     // dressed like the ETH ones, so it sits on its own row under them.
+    // Rendered as a 3D CIRCLE ICON (like settle) with the "fix tool" label
+    // beneath it, in the same column, so the terminal actions read as a set.
     if (p.tier > 0 && p.left === 0) {
+      const rwrap = document.createElement('div');
+      rwrap.className = 'rail-action-item settle-item';
       const r = document.createElement('button');
-      r.className = 'chip btn act repair';
+      r.className = 'icon-btn repair';
       r.id = 'belt-repair';
+      // A wrench/hammer glyph: a tool being repaired.
+      r.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">'
+        + '<path d="M14.7 6.3a3.5 3.5 0 0 0 4.6 4.6l-3 3a1.5 1.5 0 0 1-2.1 0l-1.4-1.4a1.5 1.5 0 0 1 0-2.1l1.9-4.1Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>'
+        + '<path d="M11.5 12.5 4.6 19.4a1.6 1.6 0 0 0 0 2.3l.7.7a1.6 1.6 0 0 0 2.3 0l6.9-6.9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>'
+        + '</svg>';
       const need = repairNeeds(p);
       const chk = canRepair(p);
-      r.textContent = `fix ${fmtRepair(p.tier)}`;
-      r.title = `repair ${toolName(p.tier)} for ${fmtRepair(p.tier)}`;
+      r.setAttribute('aria-label', `Fix ${toolName(p.tier)}`);
+      r.title = chk.ok ? `repair ${toolName(p.tier)} for ${fmtRepair(p.tier)}` : chk.reason;
       r.disabled = !chk.ok;
-      if (!chk.ok) r.title = chk.reason;
       r.onclick = () => this.doRepair();
       this.decoratePending(r);
-      el.appendChild(r);
+      rwrap.appendChild(r);
+      const rlbl = document.createElement('span');
+      rlbl.className = 'rail-action-label';
+      rlbl.textContent = 'fix tool';
+      rwrap.appendChild(rlbl);
+      el.appendChild(rwrap);
     }
 
     // --- SETTLE: the only gameplay control that opens the wallet. Connected
