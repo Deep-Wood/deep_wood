@@ -215,16 +215,17 @@ html, body {
   margin-top: calc(-1 * (var(--icon) + var(--s2)));
 }
 /* Brand lockup: the logo + wordmark share the first row; the phase line wraps
-   to its own row beneath (flex-basis:100%). The logo is a PNG whose corners are
-   already transparent (deepwood-emblem-round.png) -- the emblem was cropped to
-   its inscribed circle and everything outside masked to alpha. So it renders as
-   ONLY the round emblem, no dark forest crescent. object-fit:contain (not cover)
-   keeps the whole circle; border-radius:50% is belt-and-suspenders. */
+   to its own row beneath (flex-basis:100%). The logo is a PNG cropped to the
+   emblem's true elliptical bbox with corners masked to alpha
+   (deepwood-emblem-round.png), so it renders as ONLY the emblem with the game
+   background showing through. It is an ellipse, so we let the PNG's own shape
+   show (object-fit:contain, NO forced border-radius -- a 50% radius on a
+   non-square image would clip the emblem oddly). Sized by height so the whole
+   emblem reads. */
 .brand-logo {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;          /* round; PNG corners are already transparent */
-  object-fit: contain;         /* show the whole pre-masked circle */
+  width: auto;
+  height: 46px;
+  object-fit: contain;         /* show the whole ellipse, no crop */
   flex: 0 0 auto;
   box-shadow: 0 1px 4px rgba(0, 0, 0, .6);
 }
