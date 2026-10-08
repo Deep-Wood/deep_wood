@@ -508,6 +508,14 @@ button.chip { position: relative; }
   pointer-events: none;
 }
 .icon-btn { position: relative; }   /* anchor for .icon-badge */
+/* SETTLE sits a little lower than the buy/sell/repair chips above it and is
+   pushed to the very edge of the rail, so it reads as the terminal step of the
+   action column. The margin-top drops it below the others; the negative
+   left-margin hugs the screen edge (cancels the rail's inner padding). */
+.rail-action-item.settle-item {
+  margin-top: 18px;
+  margin-left: -6px;
+}
 /* Wallet-state ring on the icon button. The glyph is the only label, so the
  * connection state has to be readable without replacing it: a gold ring when
  * connected, amber when the wallet is on the wrong chain. */

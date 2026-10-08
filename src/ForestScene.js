@@ -1640,7 +1640,7 @@ export class ForestScene extends Phaser.Scene {
     // rides as a small badge on the icon so the number is still glanceable.
     if (onchainActive()) {
       const wrap = document.createElement('div');
-      wrap.className = 'rail-action-item';
+      wrap.className = 'rail-action-item settle-item';
       const st = document.createElement('button');
       st.className = 'icon-btn settle';
       st.id = 'belt-settle';
