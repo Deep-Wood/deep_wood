@@ -47,8 +47,22 @@ test('an unreachable primary falls through to the backup', async () => {
   stubFetch({
     'https://backup1.example': () => ({ result: '0x' + 'cd'.repeat(32) }),
   });
-  const got = await rpcCall('eth_getBalance', ['0xabc', 'latest'], { minHexChars: 64 });
+  const got = await rpcCall('eth_getBalance', ['0xabc', 'latest'], { minBytes: 4 });
   assert.equal(got, '0x' + 'cd'.repeat(32));
+});
+
+test('a real balance with TRIMMED leading zeros is believed', async () => {
+  // The regression that greyed out the buy button: 46630 RPCs trim leading
+  // zeros from the uint256, so an 11 ETH balance arrives as 16 hex chars, not
+  // 64. Judging by trimmed hex-char count rejected every real balance and left
+  // a funded wallet reading as empty. A trimmed body of >= minBytes bytes is a
+  // plausible quantity and must be believed.
+  const calls = stubFetch({
+    'https://primary.example': () => ({ result: '0x9c2d438e044446e7' }), // 11.25 ETH, 8 bytes
+  });
+  const got = await rpcCall('eth_getBalance', ['0xabc', 'latest'], { minBytes: 4 });
+  assert.equal(got, '0x9c2d438e044446e7', 'a real balance with trimmed zeros passes');
+  assert.deepEqual(calls, ['https://primary.example'], 'must not fall through');
 });
 
 test('a SHORT hex answer is not believed -- it is retried elsewhere', async () => {
@@ -59,7 +73,7 @@ test('a SHORT hex answer is not believed -- it is retried elsewhere', async () =
     'https://primary.example': () => ({ result: '0xc7' }),
     'https://backup1.example': () => ({ result: '0x' + '11'.repeat(32) }),
   });
-  const got = await rpcCall('eth_getBalance', ['0xabc', 'latest'], { minHexChars: 64 });
+  const got = await rpcCall('eth_getBalance', ['0xabc', 'latest'], { minBytes: 4 });
   assert.equal(got, '0x' + '11'.repeat(32), 'the short answer was discarded');
   assert.deepEqual(calls, ['https://primary.example', 'https://backup1.example']);
 });
@@ -70,7 +84,7 @@ test('every endpoint answering badly returns null rather than a wrong number', a
     'https://backup1.example': () => ({ result: '0x01' }),
     'https://backup2.example': () => ({ result: '0x' }),
   });
-  const got = await rpcCall('eth_getBalance', ['0xabc', 'latest'], { minHexChars: 64 });
+  const got = await rpcCall('eth_getBalance', ['0xabc', 'latest'], { minBytes: 4 });
   assert.equal(got, null, 'unknown is not zero and not a guess');
 });
 
@@ -90,6 +104,6 @@ test('a network throw on the primary still reaches the backup', async () => {
     if (url === 'https://primary.example') throw new Error('network down');
     return { json: async () => ({ result: '0x' + '22'.repeat(32) }) };
   };
-  const got = await rpcCall('eth_getBalance', ['0xabc', 'latest'], { minHexChars: 64 });
+  const got = await rpcCall('eth_getBalance', ['0xabc', 'latest'], { minBytes: 4 });
   assert.equal(got, '0x' + '22'.repeat(32));
 });

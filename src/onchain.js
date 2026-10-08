@@ -121,10 +121,13 @@ export async function walletBalanceWeiOnchain() {
   try {
     // Failover: an endpoint answering with a 1-byte hex string instead of a
     // balance is a WRONG answer, not a failed one, so it must not be believed.
-    // A balance is a 32-byte word, so anything shorter than 64 hex chars
-    // (the 0x excluded) is implausible and worth retrying elsewhere.
+    // Judge the DECODED byte width, NOT the trimmed hex-char count: RPCs trim
+    // leading zeros from a uint256, so a real 11 ETH balance arrives as ~8 bytes
+    // of hex, not 32. Demanding 32 bytes here rejected every real balance on
+    // 46630 and left the buy/upgrade button greyed against a funded wallet.
+    // 4 bytes still rejects a degenerate 0x0/0x1 stub.
     const hex = await rpcCall("eth_getBalance", [account, "latest"], {
-      minHexChars: 64,
+      minBytes: 4,
     });
     if (!hex) return null;
     return BigInt(hex);

@@ -30,14 +30,16 @@ export function rpcEndpoints() {
  * @param {string} method        e.g. 'eth_getBalance'
  * @param {Array}  params        e.g. [address, 'latest']
  * @param {object} opts
- * @param {number} opts.minHexChars  reject hex results shorter than this. This
- *        is the guard against the silent-wrong-answer failure: an `eth_getCode`
- *        or `eth_getBalance` that returns a one-byte hex string is not a
- *        plausible answer, so it is treated as a failed read rather than a
- *        result to believe.
+ * @param {number} opts.minBytes   reject hex results whose DECODED byte width is
+ *        below this. The guard against the silent-wrong-answer failure: an
+ *        `eth_getCode` or `eth_getBalance` that returns a one-byte hex string is
+ *        not a plausible answer, so it is treated as a failed read rather than a
+ *        result to believe. Measured in bytes (not trimmed hex chars) because
+ *        RPCs trim leading zeros, so a real 11 ETH balance is 8 bytes of hex,
+ *        not 32.
  * @returns {Promise<any>} the result, or null if every endpoint failed
  */
-export async function rpcCall(method, params = [], { minHexChars = 0 } = {}) {
+export async function rpcCall(method, params = [], { minBytes = 0 } = {}) {
   const errors = [];
   for (const url of rpcEndpoints()) {
     try {
@@ -55,10 +57,18 @@ export async function rpcCall(method, params = [], { minHexChars = 0 } = {}) {
       const result = j?.result;
       if (result === undefined || result === null) throw new Error('empty result');
 
-      if (minHexChars > 0 && typeof result === 'string') {
+      if (minBytes > 0 && typeof result === 'string') {
         const body = result.startsWith('0x') ? result.slice(2) : result;
-        if (body.length < minHexChars) {
-          throw new Error(`implausible result: ${body.length} hex chars, need ${minHexChars}`);
+        // RPCs TRIM leading zeros from uint256 words, so an 11 ETH balance
+        // arrives as 16 hex chars, not 64 -- a trimmed body is normal and must
+        // not be read as "too short". What we are actually guarding against is
+        // a DEGENERATE blob (a 1-2 byte answer like 0x0 or 0x1 the endpoint
+        // substituted for a real value). Judge the DECODED byte width, not the
+        // trimmed hex-char count, so a real quantity with trimmed leading zeros
+        // passes and only a stub is rejected.
+        const significantBytes = Math.ceil(body.length / 2);
+        if (significantBytes < minBytes) {
+          throw new Error(`implausible result: ${significantBytes} byte(s), need >= ${minBytes}`);
         }
       }
       return result;
