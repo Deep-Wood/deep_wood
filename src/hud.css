@@ -509,15 +509,16 @@ button.chip { position: relative; }
 }
 .icon-btn { position: relative; }   /* anchor for .icon-badge */
 /* SETTLE sits lower than the buy/sell/repair chips and is pinned to the far
-   LEFT edge of the screen. A negative margin does NOT work here because
-   #belt-actions centers its children -- the centering absorbs it. So the item
-   is pulled out to the container's left edge (margin-left: calc(-1 * ...)) and
-   then hard-anchored with position:relative + left, which survives centering. */
+   LEFT edge of the screen. #belt-actions CENTERS its children, so a negative
+   margin is absorbed by the centering. The fix is to stretch the item to the
+   full rail width and left-align its contents, which beats centering without
+   a magic pixel offset -- it works at every viewport (the desktop grid AND the
+   single-column phone layout). */
 .rail-action-item.settle-item {
   margin-top: 18px;
-  position: relative;
-  left: -100px;        /* pin to the far-left edge, past the centered column */
-  align-self: start;   /* in case the container is flex/grid start-aligned */
+  width: 100%;
+  align-items: flex-start;   /* left-align the icon within the stretched item */
+  align-self: start;
 }
 /* Wallet-state ring on the icon button. The glyph is the only label, so the
  * connection state has to be readable without replacing it: a gold ring when
