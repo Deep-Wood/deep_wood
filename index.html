@@ -622,7 +622,11 @@
       document.removeEventListener('keydown', escClose, true);
     }
     function outsideClose(e) {
-      if (walletMenu && !walletMenu.contains(e.target) && e.target !== btn) closeWalletMenu();
+      // The menu is a CHILD of the button now, so a click anywhere inside the
+      // button (including the menu itself) must not close it. `contains` on
+      // the button covers both cases, which the old `e.target !== btn` check
+      // did not -- it closed the menu the instant you clicked its own items.
+      if (walletMenu && !btn.contains(e.target)) closeWalletMenu();
     }
     function escClose(e) { if (e.key === 'Escape') closeWalletMenu(); }
 
@@ -633,8 +637,21 @@
       walletMenu.innerHTML =
         '<div class="wm-account">' + short(getState().account || '') + '</div>' +
         '<button class="wm-item" type="button">Disconnect</button>';
-      btn.parentElement.style.position = 'relative';
-      btn.parentElement.appendChild(walletMenu);
+      // Anchor to the BUTTON, not its parent.
+      //
+      // The parent (.rail-actions) is a grid item in an `auto` column, so the
+      // column is sized by the widest thing in it -- the belt text, which is
+      // much wider than a 34px icon. The button is justify-self:end inside
+      // that oversized cell, so `right: 0` against the parent put the menu
+      // ~186px to the LEFT of the button it belongs to, floating mid-screen
+      // over the forest. Making the button the positioning context lines the
+      // menu up with the control that opened it.
+      //
+      // relative, not fixed: the HUD is already positioned, so the button's
+      // own box is a valid containing block and the menu tracks it if the
+      // layout reflows.
+      btn.style.position = 'relative';
+      btn.appendChild(walletMenu);
       btn.dataset.open = '1';
       document.addEventListener('click', outsideClose, true);
       document.addEventListener('keydown', escClose, true);

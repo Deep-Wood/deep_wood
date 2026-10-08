@@ -682,9 +682,12 @@ button.chip { position: relative; }
  * row used to cost. */
 #belt { row-gap: 2px; }
 
-/* Wallet disconnect menu. One item, positioned BELOW the connect button (the
- * card sits at the very top of the viewport, so an above-the-button dropup
- * would render off-screen and look like the button was dead). */
+/* Wallet disconnect menu. Anchored to the connect BUTTON (openWalletMenu
+ * appends it there), right-aligned to the button's right edge so it hangs
+ * under the control that opened it rather than under the whole rail.
+ *
+ * Do not move this to the rail: the rail is an `auto` grid column sized by
+ * the belt text, so `right: 0` there lands ~186px left of the button. */
 .wallet-menu {
   position: absolute;
   top: calc(100% + 6px);
