@@ -213,8 +213,8 @@ html, body {
 /* Brand lockup: the logo + wordmark share the first row; the phase line wraps
    to its own row beneath (flex-basis:100%). */
 .brand-logo {
-  width: 28px; height: 28px;
-  border-radius: 7px;          /* matches the favicon's rounded-square mark */
+  width: 44px; height: 44px;
+  border-radius: 10px;         /* matches the favicon's rounded-square mark */
   object-fit: contain;         /* the SVG already has its own dark backing */
   flex: 0 0 auto;
   border: 1px solid rgba(196, 154, 76, .55);
@@ -222,7 +222,7 @@ html, body {
 }
 .brand-name {
   font-family: var(--serif);
-  font-size: 18px;
+  font-size: 28px;
   letter-spacing: .02em;
   color: var(--ink);
   font-weight: 700;
@@ -232,11 +232,11 @@ html, body {
 .season-phase {
   flex-basis: 100%;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: .06em;
   text-transform: uppercase;
   color: var(--faint);
-  margin-top: 1px;
+  margin-top: 2px;
 }
 /* The title takes the slack so Connect sits hard against the card's right edge,
    level with the season name rather than tucked beside it. */
