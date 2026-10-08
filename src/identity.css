@@ -129,7 +129,6 @@
  * ------------------------------------------------------------------------ */
 .card-title,
 .season-head .card-title,
-.stat .k,
 .belt-msg,
 #boot .wordmark,
 #boot .tagline {
@@ -143,9 +142,6 @@
   font-weight: 600;
   text-shadow: 0 1px 0 rgba(0, 0, 0, .7);
 }
-
-.stat .k { color: var(--faint); letter-spacing: .14em; font-size: 9px; }
-.stat .v { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 
 /* --- compass medallion ---------------------------------------------------
  * The emblem's centre is a compass star inside concentric carved rings. The

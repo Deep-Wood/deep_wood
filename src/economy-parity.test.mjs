@@ -82,19 +82,6 @@ test('a hunt rolls against the tier the player HOLDS', () => {
   assert.ok(!/this\.player\.tier/.test(seg), 'must not read the sprite for the tier');
 });
 
-test('ROI is gem value over ETH spent, in real units', () => {
-  const j = scene.indexOf('  paintSeasonStats() {');
-  const seg = bare(scene.slice(j, scene.indexOf('  refreshBelt() {', j)));
-  assert.ok(
-    !/Math\.max\(1, .*ethSpent/.test(seg),
-    'a max(1,...) divisor turns a zero denominator into a huge fake percentage',
-  );
-  assert.ok(!/entry\.leq\s*\/\s*Number\(entry\.ethSpent/.test(seg),
-    'leq is a leaderboard rarity score, not a return; it must not be the ROI numerator');
-  assert.match(seg, /FACE_VALUE\[i\]/, 'ROI must be valued with FACE_VALUE');
-  assert.match(seg, /spent > 0/, 'zero spend must show a dash, not a number');
-});
-
 test('the 5800% case is impossible under the new formula', () => {
   // Reproduce the old arithmetic to prove what it was reporting.
   const oldFormula = 58 / Math.max(1, 0) * 100;

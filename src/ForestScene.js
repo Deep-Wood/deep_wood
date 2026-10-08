@@ -57,14 +57,14 @@ import {
 // names. A second import of the same binding is a redeclaration error, and it
 // would have been two sources of truth for the same string anyway.
 import {
-  RARITY_SHORT, TIER_NAME, FACE_VALUE,
+  RARITY_SHORT, TIER_NAME,
   toolPrice, durabilityOf, repairCost, fmtRepair, fmtEth,
   huntValueWei, netHuntWei, paybackHunts, cyclesToPayback, dropTable,
   REDEEM_FLOOR,
 } from './economy.js';
 import { DROP_TABLE, PRICE } from './engine.js';
 import {
-  newSeasonRecord, recordHunt, topN, standing,
+  newSeasonRecord, recordHunt, topN,
   seasonClock, roiPct, eth as seasonEth, fmt, onRoiBoard, shortOfFloor, recordToolSpend,
   TOP_N,
 } from './season.js';
@@ -2517,52 +2517,12 @@ export class ForestScene extends Phaser.Scene {
   }
 
   paintSeasonStats() {
+    // Rank / ROI / Finds were removed from the HUD at the user's request.
+    // The season TITLE is still chain state the player reads, so
+    // paintSeasonTitle() stays -- only the three stat readouts are gone.
+    // The leaderboard still ranks players; it is one click away via the
+    // trophy button, so the numbers were never the only route to them.
     this.paintSeasonTitle();
-    const rankEl = document.getElementById('rank');
-    const roiEl = document.getElementById('roi');
-    const findsEl = document.getElementById('finds');
-    if (!rankEl || !roiEl || !findsEl) return;
-
-    const me = String(this.wallet ?? '0xplayer').toLowerCase();
-    const entry = this.board.players.get(me);
-
-    // Finds is the one that always has an answer: it counts hunts, so it moves
-    // from the first dig onward. Rank and ROI need spend above the splay floor,
-    // so a player who has only hunted is genuinely unranked -- say so rather
-    // than showing a bare dash.
-    findsEl.textContent = entry ? fmt(entry.hunts) : '0';
-
-    if (!entry || entry.hunts === 0) {
-      rankEl.textContent = '—';
-      roiEl.textContent = '—';
-      return;
-    }
-    const st = standing(this.board, me);
-    rankEl.textContent = st.ranked ? `#${st.rank}` : 'unranked';
-
-    // ROI as a player would actually read it: the ETH value of what they have
-    // found, over the ETH they have committed.
-    //
-    // This used to be `leq / Math.max(1, ethSpent) * 100`. Two defects:
-    //
-    //  1. No wei scaling. `leq` is a rarity SCORE and `ethSpent` is wei, so the
-    //     quotient was off by 1e18.
-    //  2. `Math.max(1, ethSpent)`. When the tool spend had not been recorded
-    //     (ethSpent 0) the divisor became 1, so the score WAS the percentage:
-    //     58 leq -- about fifteen Wood digs -- rendered as "5800%". A number
-    //     with no ratio behind it at all.
-    //
-    // leq is also the wrong numerator for a player-facing ROI. season.js says
-    // outright that RARITY_WEIGHT is a leaderboard ranking device and must not
-    // be conflated with FACE_VALUE, so a single Diamond is 4096 "points" but
-    // 4000x the money of a Quartz. Using it here reported rarity, not return.
-    const spent = Number(entry.ethSpent);
-    const foundWei = (entry.gems || []).reduce(
-      (a, n, i) => a + Number(n) * Number(FACE_VALUE[i] ?? 0), 0,
-    );
-    roiEl.textContent = spent > 0
-      ? `${(foundWei / spent * 100).toFixed(1)}%`
-      : '—';
   }
 
   refreshBelt() {

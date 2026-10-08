@@ -176,7 +176,6 @@ html, body {
 /* The left clusters are separate tiles, so the rules that used to divide them
    inside one card (and the card's own padding) are gone. */
 .season-head { margin-bottom: 0; }
-.season-grid { margin-top: 0; }
 #satchel     { margin-top: 0; }
 
 /* Player portrait. 32px, circular, in the card head beside the season title.
@@ -211,25 +210,10 @@ html, body {
  * index.html, so these are dead selectors -- removed with it rather than left
  * to rot. ENDS and the season bar carry the countdown now. */
 
-.season-grid {
-  display: grid;
-  /* Four readouts now: Rank, ROI, Finds, Ends. They sit directly under the
-     season title, so the gap between the title row and this row is the only
-     thing separating them -- keep it to --s1. */
-  grid-template-columns: repeat(4, minmax(0,1fr));
-  gap: 0 var(--s2);
-  margin-top: var(--s1);
-}
-.stat { min-width: 0; }
-.stat .k {
-  font-size: 9px; letter-spacing: .12em; text-transform: uppercase;
-  color: var(--faint); display: block;
-}
-.stat .v {
-  font-size: 12px; color: var(--ink); display: block; margin-top: 0;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.stat .v.hi { color: var(--gold); }
+/* .season-grid and .stat were the Rank / ROI / Finds readouts. All three were
+ * removed from the HUD at the user's request; the leaderboard (one click away
+ * via the trophy button) is the route to those numbers now. Their rules go
+ * with them -- a selector with no markup is dead code. */
 
 .bar { height: 3px; background: rgba(26,42,26,.9); border-radius: 2px; margin-top: var(--s2); overflow: hidden; }
 .bar > i {
@@ -590,9 +574,6 @@ button.chip { position: relative; }
   #gemstrip { grid-column: 2; grid-row: 1; justify-self: center; align-self: start; }
   #belt-actions { grid-column: 1; grid-row: 2; width: var(--rail); }
   #belt   { grid-column: 3; grid-row: 1; width: var(--rail); }
-  .season-grid { gap: var(--s1) var(--s2); }
-  .stat .k { font-size: 8px; }
-  .stat .v { font-size: 11px; }
   .chip.btn { font-size: 9px; padding: 1px 4px; }
   .chip { font-size: 9px; padding: 1px 4px; }
   .belt-tool { font-size: 10px; }
