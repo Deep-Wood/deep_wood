@@ -175,13 +175,17 @@
          (plus repair/settle/sell) live here as a vertical column. -->
     <div class="belt-actions" id="belt-actions"></div>
 
-    <!-- Icon buttons: circular, docked to the panel corners, matching the
-         reference art's round back/confirm controls. -->
-    <button type="button" id="leaderboard-btn" class="icon-btn" aria-label="Leaderboard" title="Leaderboard">
-      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-        <path d="M4 13h4v7H4zM10 8h4v12h-4zM16 4h4v16h-4z" fill="currentColor"/>
-      </svg>
-    </button>
+    <!-- The leaderboard button sits in the RIGHT rail on the same row as the
+         action buttons, not as a floating icon in the top-left corner. The
+         corner put it at the top of the screen with the wallet button, which
+         reads as chrome; beside the other controls it reads as a control. -->
+    <div class="rail-actions">
+      <button type="button" id="leaderboard-btn" class="icon-btn" aria-label="Leaderboard" title="Leaderboard">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path d="M4 13h4v7H4zM10 8h4v12h-4zM16 4h4v16h-4z" fill="currentColor"/>
+        </svg>
+      </button>
+    </div>
     <button class="icon-btn" id="connect" aria-label="Connect wallet" title="Connect wallet">
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
         <path d="M7 10V7a5 5 0 0 1 10 0v3h1a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h1Zm2 0h6V7a3 3 0 0 0-6 0v3Z" fill="currentColor"/>

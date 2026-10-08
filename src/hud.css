@@ -98,19 +98,25 @@ html, body {
 #season { grid-column: 1; grid-row: 1; width: var(--rail); }
 #gemstrip { grid-column: 2; grid-row: 1; justify-self: center; align-self: start; }
 #belt-actions { grid-column: 1; grid-row: 2; width: var(--rail); }
+.rail-actions { grid-column: 3; grid-row: 2; width: var(--rail); justify-self: end; }
+/* Right-aligned so the trophy lines up with the right edge of the belt above
+ * it, exactly as the action buttons line up with the left edge of the panel
+ * above them. */
+.rail-actions { display: flex; justify-content: flex-end; }
 #belt   { grid-column: 3; grid-row: 1; width: var(--rail); }
 
-/* Icon buttons ride the outer top corners, level with the panels. Circular,
- * like the reference art's back/confirm controls, rather than pill chips. */
+/* The wallet button rides the outer top-right corner. Circular, like the
+ * reference art's round back/confirm controls, rather than a pill chip.
+ * The leaderboard button no longer lives here -- it is a grid item in the
+ * right rail now (see .rail-actions above). */
 #hud > .icon-btn { position: absolute; top: 0; }
-#hud > #leaderboard-btn { left: 0; }
 #hud > #connect { right: 0; }
 /* The panels start below the icon row so nothing overlaps. The action block
  * sits under #season in the same left rail, so it inherits the same offset
  * (it is row 2, but row 1 already starts below the icons, so only the gap
  * between the two rows is needed here). */
 #season, #belt { margin-top: calc(var(--icon) + var(--s2)); }
-#belt-actions { margin-top: var(--s2); }
+#belt-actions, .rail-actions { margin-top: var(--s2); }
 
 /* --- tiles ---------------------------------------------------------------
  * A tile is a discrete SURFACE for something pressable -- an action button, a
@@ -573,6 +579,7 @@ button.chip { position: relative; }
   #season { grid-column: 1; grid-row: 1; width: var(--rail); }
   #gemstrip { grid-column: 2; grid-row: 1; justify-self: center; align-self: start; }
   #belt-actions { grid-column: 1; grid-row: 2; width: var(--rail); }
+  .rail-actions { grid-column: 3; grid-row: 2; width: var(--rail); justify-self: end; }
   #belt   { grid-column: 3; grid-row: 1; width: var(--rail); }
   .chip.btn { font-size: 9px; padding: 1px 4px; }
   .chip { font-size: 9px; padding: 1px 4px; }
