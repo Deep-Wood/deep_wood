@@ -165,7 +165,10 @@
     <!-- RIGHT: the toolbelt. Discrete tiles, no container -- the reference art
          floats its controls straight on the scene. -->
     <div id="belt">
-      <span class="belt-counts readout" id="belt-counts">no gems yet</span>
+      <!-- belt-counts is intentionally EMPTY: the total "N gems" headline was
+           removed. The per-rarity gem strip at the top-centre is the single gem
+           readout. (Element kept so the paint path and any selectors still work.) -->
+      <span class="belt-counts readout" id="belt-counts"></span>
       <span class="belt-mode" id="belt-mode">PREVIEW - simulation only</span>
       <span class="belt-msg" id="belt-msg"></span>
     </div>

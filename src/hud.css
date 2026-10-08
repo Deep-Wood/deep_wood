@@ -504,14 +504,28 @@ button.chip { position: relative; }
  * Top-centre tally: five AI-generated cut-gem icons, one per rarity, each
  * with its live count. No labels -- the icon IS the rarity. This replaces
  * the satchel's text tiles entirely.
+ *
+ * The whole strip sits in a SOLID 3D LEMON HORIZONTAL BOX: a bright lemon
+ * face, a darker lemon bottom edge for the extruded 3D lip, a soft outer
+ * shadow so it floats off the dark forest, and a subtle top highlight. The
+ * gems read as dark ink against the bright lemon, like a sticker on a badge.
  * ------------------------------------------------------------------------ */
 #gemstrip {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: var(--s2);
-  /* No box -- same boxless readout treatment as the rest of the HUD. */
-  text-shadow: 0 1px 3px rgba(0, 0, 0, .95), 0 0 8px rgba(0, 0, 0, .7);
+  /* Solid 3D lemon box. Lemon face + darker lemon base (the extruded lip) via
+     a vertical gradient, rounded pill, warm outer glow, crisp 1px rim. */
+  background: linear-gradient(180deg, #f2f56b 0%, #e3e33f 55%, #c9c62e 100%);
+  border: 1px solid #b7b326;
+  border-radius: 12px;
+  padding: 7px 14px;
+  box-shadow:
+    0 3px 0 #a89f24,                 /* extruded 3D lip below the face */
+    0 6px 14px rgba(0, 0, 0, .55),   /* drop shadow floating off the scene */
+    inset 0 1px 0 rgba(255, 255, 255, .5); /* top highlight for the bevel */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .55);
   pointer-events: none;
 }
 .gem-ic {
@@ -524,23 +538,25 @@ button.chip { position: relative; }
   height: 22px;
   object-fit: contain;
   image-rendering: auto;
-  /* The magenta cutout background is composited out -- the icons ship on
-     magenta so they read as clean cutouts against the dark forest. Screen
-     blend turns magenta to transparent and brightens the gem itself. */
-  mix-blend-mode: screen;
+  /* The gem PNGs are ALREADY transparent-background (alpha 0 at the corners),
+     not magenta -- so no blend trick is needed. mix-blend-mode:screen was a
+     magenta-knockout for an old asset and would blow the gems to white on the
+     bright lemon box. Normal blend: the gems sit cleanly on the lemon face. */
+  mix-blend-mode: normal;
 }
 /* Count next to each icon. Tabular numerals so the digits don't jitter. Zero
  * is faint but still present -- it names the rarity as a target without
- * pretending you have found one. */
+ * pretending you have found one. Dark ink so it reads on the lemon box. */
 .gem-ic .gc {
   font-size: 12px;
-  color: var(--ink);
+  color: #23300f;              /* dark olive ink, readable on lemon */
   font-variant-numeric: tabular-nums;
   line-height: 1;
   min-width: 1ch;
   text-align: left;
+  text-shadow: none;
 }
-.gem-ic .gc.zero { color: var(--faint); opacity: .6; }
+.gem-ic .gc.zero { color: #6b6a2a; opacity: .8; }
 
 #gemlist {
   display: grid;

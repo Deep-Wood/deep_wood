@@ -1455,17 +1455,11 @@ export class ForestScene extends Phaser.Scene {
     if (!q('belt')) return;
     const p = this.econ;
 
-    // --- counts: the satchel balance is the only gem number on the card.
-    // The old line read "COMMON n . BURNED n . FEES n" while the satchel beside
-    // it showed the same gem as "Qtz n". One gem, two counters, and they
-    // The spendable balance per rarity is the only gem number. `found` (lifetime)
-    // is gone: the satchel tiles ARE the balances, they live on-chain once a
-    // wallet is connected, and repairs decrement them there. A headline that
-    // splits held from found invents a distinction the user reads as a bug.
-    const total = p.gems.reduce((a, b) => a + b, 0);
-    q('belt-counts').textContent = total > 0
-      ? `${fmtGem(total)} gems`
-      : 'no gems yet';
+    // --- counts: the headline "N gems" text is REMOVED. The gem strip at the
+    // top-centre (per-rarity icons + counts, inside a solid lemon box) is the
+    // single gem readout now; a second total-gem number on the toolbelt was
+    // redundant and the user asked for it gone. belt-counts is left empty. */
+    q('belt-counts').textContent = '';
 
     const m = chainMode();
     const mode = q('belt-mode');
