@@ -97,15 +97,20 @@ html, body {
    sides drifting into different widths. */
 #season { grid-column: 1; grid-row: 1; width: var(--rail); }
 #gemstrip { grid-column: 2; grid-row: 1; justify-self: center; align-self: start; }
+#belt-actions { grid-column: 1; grid-row: 2; width: var(--rail); }
 #belt   { grid-column: 3; grid-row: 1; width: var(--rail); }
 
 /* Icon buttons ride the outer top corners, level with the panels. Circular,
-   like the reference art's back/confirm controls, rather than pill chips. */
+ * like the reference art's back/confirm controls, rather than pill chips. */
 #hud > .icon-btn { position: absolute; top: 0; }
 #hud > #leaderboard-btn { left: 0; }
 #hud > #connect { right: 0; }
-/* The panels start below the icon row so nothing overlaps. */
+/* The panels start below the icon row so nothing overlaps. The action block
+ * sits under #season in the same left rail, so it inherits the same offset
+ * (it is row 2, but row 1 already starts below the icons, so only the gap
+ * between the two rows is needed here). */
 #season, #belt { margin-top: calc(var(--icon) + var(--s2)); }
+#belt-actions { margin-top: var(--s2); }
 
 /* --- tiles ---------------------------------------------------------------
  * A tile is a discrete SURFACE for something pressable -- an action button, a
@@ -422,19 +427,12 @@ button.chip { position: relative; }
 .belt-msg:empty, .belt-msg { display: none; }
 .belt-msg.has-text { display: block; }
 .belt-shop  { }
-/* The action row spans the whole belt.
- *
- * #belt is `minmax(0,1fr) auto`, and .belt-actions was auto-placed -- which put
- * it in column 2, the `auto` column. That column sizes to its widest child, and
- * since the row's own width came from its buttons the two fed each other: the
- * row measured 184px inside a 626px column, and equal-basis gave three buttons
- * 56px each, truncating "buy Bronze" with 440px of free space beside it.
- *
- * Spanning both columns makes the row take the belt's full width, which is what
- * `width: 100%` in belt.css was asking for. Row 3 keeps the message on row 4 so
- * the two cannot collide. */
-.belt-actions { grid-column: 1 / -1; grid-row: 3; }
-.belt-msg:not(:empty) { grid-row: 4; }
+/* The action block now lives in the LEFT rail as its own grid item (see the
+ * #hud placement map at the top of this file). Nothing here may re-place it.
+ * It is deliberately NOT positioned relative to #belt: the two are separate
+ * rail slots now, and the old grid-column/grid-row hints below belonged to
+ * the era when .belt-actions was auto-placed inside #belt's flex column,
+ * where they did nothing at all. */
 
 /* --- satchel ------------------------------------------------------------
  * Now a permanent block INSIDE the header card, in the toolbelt column.
@@ -590,6 +588,7 @@ button.chip { position: relative; }
   #hud { grid-template-columns: var(--rail) minmax(0, 1fr) var(--rail); }
   #season { grid-column: 1; grid-row: 1; width: var(--rail); }
   #gemstrip { grid-column: 2; grid-row: 1; justify-self: center; align-self: start; }
+  #belt-actions { grid-column: 1; grid-row: 2; width: var(--rail); }
   #belt   { grid-column: 3; grid-row: 1; width: var(--rail); }
   .season-grid { gap: var(--s1) var(--s2); }
   .stat .k { font-size: 8px; }

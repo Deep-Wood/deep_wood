@@ -125,14 +125,16 @@
  * so equal-basis gave three buttons 56px each and the widest label truncated --
  * in a column with 440px of unused space right next to it. */
 .belt-actions {
-  /* An even grid, not a ragged flex row. The reference's bottom rail is a row
-     of EQUAL tiles; content-sized buttons left the row ragged and made each
-     button a different width ("buy Wood" 74px next to "buy 1 $DEEPWOOD" 120px).
-     Two equal columns fill the rail and every button lines up. */
+  /* Stacked, not side-by-side. Each action is its own full-width row in the
+     LEFT rail -- the reference stacks its two tool actions vertically rather
+     than squeezing them into a 2-up grid, which truncated "upgrade Bronze"
+     in a rail that had vertical room to spare. */
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--s2);
   width: 100%;
+  /* The buy dropdown anchors here. It used to sit inside #belt; now that
+     #belt-actions is its own rail block it is its own positioned parent. */
   position: relative;
 }
 .belt-actions .act {
