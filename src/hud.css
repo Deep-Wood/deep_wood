@@ -181,7 +181,12 @@ html, body {
 
 /* The left clusters are separate tiles, so the rules that used to divide them
    inside one card (and the card's own padding) are gone. */
-.season-head { margin-bottom: 0; }
+/* The season-head (portrait + PRESEASON title) is pulled UP into the top-left
+   corner. #season carries the icon-row offset (margin-top on the left rail),
+   which pushed this head down below the corner; a matching negative margin
+   lifts just the head back to the corner without moving the rest of #season
+   (the satchel below stays where it is). */
+.season-head { margin-bottom: 0; margin-top: calc(-1 * (var(--icon) + var(--s2))); }
 #satchel     { margin-top: 0; }
 
 /* Player portrait. 32px, circular, in the card head beside the season title.
