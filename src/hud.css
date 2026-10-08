@@ -188,21 +188,10 @@ html, body {
 /* Player portrait. 32px, circular, in the card head beside the season title.
    Deliberately NOT over the game: it is inside the one persistent card, so it
    costs no play area. */
-@media (max-height: 680px) {
-  .avatar { width: 26px; height: 26px; }
-}
-
-/* 24px, not 32px. The avatar is decorative -- it was setting the height of the
- * header row, and a decorative circle was costing the whole card 8px. */
-.avatar {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  object-fit: cover;
-  flex: 0 0 auto;
-  border: 1px solid rgba(196, 154, 76, .55);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, .5);
-}
+/* NOTE: the old bare .avatar rules (24px, and 26px under max-height:680px)
+   were for the player viber portrait, which the brand lockup replaced. They
+   are removed rather than left to rot -- the emblem uses .brand-logo below,
+   which owns its own size and is defined after this point so it wins. */
 
 .season-head {
   display: flex; align-items: center; gap: var(--s1);
@@ -211,32 +200,36 @@ html, body {
   margin-top: calc(-1 * (var(--icon) + var(--s2)));
 }
 /* Brand lockup: the logo + wordmark share the first row; the phase line wraps
-   to its own row beneath (flex-basis:100%). */
+   to its own row beneath (flex-basis:100%). The logo is the full circular
+   DEEPWOOD emblem (deepwood-emblem.jpg), so it carries its own ornate frame --
+   no border/radius needed, the emblem is already a finished round medallion. */
 .brand-logo {
-  width: 44px; height: 44px;
-  border-radius: 10px;         /* matches the favicon's rounded-square mark */
-  object-fit: contain;         /* the SVG already has its own dark backing */
+  width: 48px; height: 48px;
+  border-radius: 50%;          /* circular, matching the emblem's round shape */
+  object-fit: cover;           /* fill the circle with the medallion */
   flex: 0 0 auto;
-  border: 1px solid rgba(196, 154, 76, .55);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, .5);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .6);
 }
-.brand-name {
+.brand-name,
+.season-head .card-title.brand-name {
   font-family: var(--serif);
-  font-size: 28px;
+  font-size: 34px;
   letter-spacing: .02em;
   color: var(--ink);
   font-weight: 700;
 }
-/* The season phase is a small supporting line under the wordmark: dim, mono,
-   full-width so it wraps to the second row. */
+/* The season phase is a small supporting line under the wordmark. LEMON GREEN,
+   matching the emblem's glowing crystal / mossy bioluminescent accent, so the
+   phase reads as part of the same magical identity. */
 .season-phase {
   flex-basis: 100%;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: .06em;
   text-transform: uppercase;
-  color: var(--faint);
-  margin-top: 2px;
+  color: #b6f24a;              /* lemon green */
+  text-shadow: 0 0 6px rgba(182, 242, 74, .35);
+  margin-top: 3px;
 }
 /* The title takes the slack so Connect sits hard against the card's right edge,
    level with the season name rather than tucked beside it. */
