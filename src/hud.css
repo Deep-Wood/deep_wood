@@ -394,7 +394,7 @@ button.chip { position: relative; }
  * at a square aspect so the radius reads as a circle. The reference art puts
  * its back/confirm controls in exactly this shape.
  * ------------------------------------------------------------------------ */
-:root { --icon: 34px; }
+:root { --icon: 44px; }
 
 /* Icon buttons are genuinely 3D PUCKS, not flat circles. Depth comes from four
    stacked layers:
@@ -420,10 +420,10 @@ button.chip { position: relative; }
   box-shadow:
     inset 0 2px 1px rgba(255, 255, 255, .28),   /* top rim catches light */
     inset 0 -2px 3px rgba(0, 0, 0, .55),        /* bottom edge of the face */
-    0 5px 0 #0a1710,                            /* thick extruded base */
-    0 7px 0 #060d09,                            /* second base tier for depth */
-    0 8px 10px rgba(0, 0, 0, .55),              /* ambient contact shadow */
-    0 2px 6px rgba(0, 0, 0, .4);                /* close shadow under the base */
+    0 6px 0 #0a1710,                            /* thick extruded base */
+    0 9px 0 #060d09,                            /* second base tier for depth */
+    0 11px 14px rgba(0, 0, 0, .55),             /* ambient contact shadow */
+    0 3px 8px rgba(0, 0, 0, .4);                /* close shadow under the base */
 }
 .icon-btn:hover {
   background: linear-gradient(to bottom, #3a6e46 0%, #22492e 45%, #122a1a 100%);
@@ -450,7 +450,7 @@ button.chip { position: relative; }
   gap: 4px;
 }
 .rail-action-label {
-  font-size: 8.5px;
+  font-size: 9.5px;
   font-weight: 700;
   letter-spacing: .12em;
   text-transform: uppercase;      /* small caps */
