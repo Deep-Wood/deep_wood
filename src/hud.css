@@ -396,32 +396,46 @@ button.chip { position: relative; }
  * ------------------------------------------------------------------------ */
 :root { --icon: 34px; }
 
+/* Icon buttons are genuinely 3D PUCKS, not flat circles. Depth comes from four
+   stacked layers:
+     1. A thick solid dark-green BASE sits below the face (0 4px 0 ...), so the
+        button reads as an extruded puck standing off the scene -- this is the
+        "extruded lip" that makes it look raised, not painted on.
+     2. The face is a bright top-lit gradient (inset highlight at the very top
+        rim, deep at the bottom) so light appears to come from above.
+     3. Inner rim bevels: a 2px inset white line on top, inset dark on the
+        bottom edge of the face, giving the polished edge.
+     4. An ambient drop shadow beneath the base for contact grounding.
+   On :active the puck presses down -- the base collapses and the shadow
+   tightens, so it physically depresses into the scene. */
 .icon-btn {
   width: var(--icon); height: var(--icon);
   display: inline-flex; align-items: center; justify-content: center;
   padding: 0; cursor: pointer;
   font-family: inherit;
-  color: var(--ink);
-  background: linear-gradient(to bottom, #1c3a24 0%, #0d1a10 100%);
-  border: 1px solid var(--edge);
+  color: #eef7e6;
+  background: linear-gradient(to bottom, #2e5a38 0%, #1a3a24 45%, #0e2114 100%);
+  border: 1px solid #4c8a58;
   border-radius: 50%;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .18),
-    inset 0 -1px 0 rgba(0, 0, 0, .6),
-    0 2px 0 rgba(0, 0, 0, .55),
-    0 6px 12px rgba(0, 0, 0, .3);
+    inset 0 2px 1px rgba(255, 255, 255, .28),   /* top rim catches light */
+    inset 0 -2px 3px rgba(0, 0, 0, .55),        /* bottom edge of the face */
+    0 5px 0 #0a1710,                            /* thick extruded base */
+    0 7px 0 #060d09,                            /* second base tier for depth */
+    0 8px 10px rgba(0, 0, 0, .55),              /* ambient contact shadow */
+    0 2px 6px rgba(0, 0, 0, .4);                /* close shadow under the base */
 }
 .icon-btn:hover {
-  background: linear-gradient(to bottom, #274a30 0%, #14261a 100%);
+  background: linear-gradient(to bottom, #3a6e46 0%, #22492e 45%, #122a1a 100%);
   border-color: var(--gold);
 }
 .icon-btn:active {
-  transform: translateY(2px);
+  transform: translateY(4px);          /* press the puck down into the base */
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .10),
-    inset 0 -1px 0 rgba(0, 0, 0, .5),
-    0 0 0 rgba(0, 0, 0, .55),
-    0 2px 4px rgba(0, 0, 0, .25);
+    inset 0 2px 3px rgba(0, 0, 0, .45),
+    inset 0 -1px 1px rgba(255, 255, 255, .08),
+    0 1px 0 #0a1710,                    /* base nearly collapsed */
+    0 2px 4px rgba(0, 0, 0, .45);
 }
 .icon-btn svg { display: block; pointer-events: none; }
 /* Leaderboard rail action: the icon stays a TRUE 3D CIRCLE (the base .icon-btn
