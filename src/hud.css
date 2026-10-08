@@ -96,7 +96,7 @@ html, body {
    content sizes itself and the right rail matches, which is what stops the two
    sides drifting into different widths. */
 #season { grid-column: 1; grid-row: 1; width: var(--rail); }
-#gemstrip { grid-column: 2; grid-row: 1; justify-self: center; align-self: start; }
+#gemstrip { grid-column: 2; grid-row: 1; justify-self: center; align-self: start; margin-top: 64px; }
 #belt-actions { grid-column: 1; grid-row: 2; width: var(--rail); }
 .rail-actions { grid-column: 3; grid-row: 2; width: var(--rail); justify-self: end; }
 /* Right-aligned so the signal/leaderboard button lines up with the right
@@ -579,7 +579,7 @@ button.chip { position: relative; }
      forest open between them. */
   #hud { grid-template-columns: var(--rail) minmax(0, 1fr) var(--rail); }
   #season { grid-column: 1; grid-row: 1; width: var(--rail); }
-  #gemstrip { grid-column: 2; grid-row: 1; justify-self: center; align-self: start; }
+  #gemstrip { grid-column: 2; grid-row: 1; justify-self: center; align-self: start; margin-top: 48px; }
   #belt-actions { grid-column: 1; grid-row: 2; width: var(--rail); }
   .rail-actions { grid-column: 3; grid-row: 2; width: var(--rail); justify-self: end; }
   #belt   { grid-column: 3; grid-row: 1; width: var(--rail); }
