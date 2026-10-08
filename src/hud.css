@@ -514,7 +514,7 @@ button.chip { position: relative; }
    full rail width and left-align its contents, which beats centering without
    a magic pixel offset -- it works at every viewport (the desktop grid AND the
    single-column phone layout). */
-.rail-action-item.settle-item {
+.rail-action-item.rail-action-icon {
   margin-top: 18px;
   width: 100%;
   align-items: flex-start;   /* left-align the icon within the stretched item */
@@ -522,7 +522,7 @@ button.chip { position: relative; }
 }
 /* REPAIR is a gem action, so it wears STEEL BLUE instead of the gold settle or
    the forest-green default: blue face, darker blue extruded base. Same 3D puck
-   construction as its siblings, and it shares the .settle-item column layout. */
+   construction as its siblings, and it shares the .rail-action-icon column layout. */
 .icon-btn.repair {
   background: linear-gradient(to bottom, #6d8fa8 0%, #4a6b82 45%, #33495a 100%);
   border-color: #8fb0c6;
@@ -571,6 +571,34 @@ button.chip { position: relative; }
     0 2px 4px rgba(0, 0, 0, .45);
 }
 .icon-btn.sell:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+  filter: grayscale(.4);
+}
+/* BUY/UPGRADE acquires a tool, so it wears the forest GREEN base (the brand
+   primary) with a pickaxe glyph. Same 3D puck construction, same column. The
+   payment dropdown opens under the icon when the token rail is configured. */
+.icon-btn.buy {
+  background: linear-gradient(to bottom, #2e5a38 0%, #1a3a24 45%, #0e2114 100%);
+  border-color: #4c8a58;
+  color: #eef7e6;
+  box-shadow:
+    inset 0 2px 1px rgba(255, 255, 255, .28),
+    inset 0 -2px 3px rgba(0, 0, 0, .55),
+    0 6px 0 #0a1710,
+    0 9px 0 #060d09,
+    0 11px 14px rgba(0, 0, 0, .55),
+    0 3px 8px rgba(0, 0, 0, .4);
+}
+.icon-btn.buy:hover { border-color: var(--gold); }
+.icon-btn.buy:active {
+  box-shadow:
+    inset 0 2px 3px rgba(0, 0, 0, .45),
+    inset 0 -1px 1px rgba(255, 255, 255, .08),
+    0 1px 0 #0a1710,
+    0 2px 4px rgba(0, 0, 0, .45);
+}
+.icon-btn.buy:disabled {
   opacity: .5;
   cursor: not-allowed;
   filter: grayscale(.4);

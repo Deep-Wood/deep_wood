@@ -1493,26 +1493,35 @@ export class ForestScene extends Phaser.Scene {
 
     // --- buy tool / upgrade tool (single button, dropdown for payment method)
     const nt = nextTier(p);
+    // BUY/UPGRADE wraps the icon in a .rail-action-item.rail-action-icon column
+    // (like sell/repair/settle) so the "buy"/"upgrade" label sits beneath the
+    // icon. It wears the forest GREEN base and a hammer/pickaxe glyph. The
+    // payment dropdown (when the token rail is configured) is positioned
+    // absolutely against this wrapper, not the whole rail, so it opens under
+    // the icon.
+    const bwrap = document.createElement('div');
+    bwrap.className = 'rail-action-item rail-action-icon';
     const buy = document.createElement('button');
-    buy.className = 'chip btn act';
+    buy.className = 'icon-btn buy';
     buy.id = 'belt-buy';
+    // A pickaxe/hammer glyph: acquiring a tool.
+    const PICKAXE = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">'
+      + '<path d="M14.2 4.2a3.2 3.2 0 0 1 4.4 4.4L12.6 14.6l-2.2 5.9a1.3 1.3 0 0 1-2.4 0l-1-2.6-2.6-1a1.3 1.3 0 0 1 0-2.4l5.9-2.2 3.9-8.1Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>'
+      + '<path d="M11.4 11.4 9.2 14.2l-.4 1.4 1.6 1.6 1.4-.4 2.8-2.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>'
+      + '</svg>';
     if (nt > 5) {
-      buy.textContent = 'MAX TIER';
+      buy.innerHTML = PICKAXE;
       buy.disabled = true;
+      buy.title = 'MAX TIER';
     } else {
       const cost = toolPrice(nt);
       const chk = canBuyTool(p, nt, balance);
-      const trimEth = (w) => String(Number(w) / 1e18).replace(/0+$/, '').replace(/\.$/, '');
       const shortLabel = `${buyOrUpgradeLabel(p)} ${toolName(nt)} ${fmtEth(cost)}`;
-      const rowW = (el.getBoundingClientRect().width) || window.innerWidth;
-      const threeUp = p.left === 0 || rowW < 260;
-      const nm = toolName(nt);
-      const tier = nm;
       const verb = buyOrUpgradeLabel(p).startsWith('upgrade') ? 'upgrade' : 'buy';
-      buy.textContent = threeUp
-        ? `${verb} ${tier}`
-        : `${verb} ${tier} ${trimEth(cost)}`;
-      buy.title = `${shortLabel}` + (chk.ok ? '' : '\n' + chk.reason);
+      const nm = toolName(nt);
+      buy.innerHTML = PICKAXE;
+      buy.setAttribute('aria-label', `${verb} ${nm}`);
+      buy.title = shortLabel + (chk.ok ? '' : '\n' + chk.reason);
       buy.disabled = !chk.ok;
       if (!chk.ok) buy.title = chk.reason;
 
@@ -1552,11 +1561,22 @@ export class ForestScene extends Phaser.Scene {
 
         // Position the dropdown below the button. The button is inside
         // #belt-actions (position:relative), so offsetParent is that container.
-        // Using offsetTop/offsetLeft avoids a getBoundingClientRect() call that
-        // would be wrong if the page has scrolled between layout and click.
+        // Buy now sits inside a .rail-action-icon wrapper (icon + label), so the
+        // dropdown must open below the WRAPPER (icon + label), not just the icon
+        // -- otherwise it covers the "buy"/"upgrade" label. The wrapper is not
+        // yet in the DOM at this point (it is appended further down), so
+        // offsetTop/offsetLeft would read 0. Compute against the rail instead:
+        // the wrapper is a direct child placed after any prior buttons, so its
+        // top is the rail's content height. Use getBoundingClientRect on a
+        // fresh measurement after layout by deferring to the click handler is
+        // overkill; instead position relative to the rail's current bottom.
         dd.style.position = 'absolute';
-        dd.style.top = (buy.offsetTop + buy.offsetHeight + 4) + 'px';
-        dd.style.left = buy.offsetLeft + 'px';
+        // Defer measurement until after the wrapper is laid out: read it lazily
+        // on first open. Until then, park it just below the rail so it is never
+        // stranded over the label.
+        dd.style.top = 'auto';
+        dd.style.bottom = '0px';
+        dd.style.left = '0px';
         dd.style.minWidth = buy.offsetWidth + 'px';
 
         el.appendChild(dd);
@@ -1566,6 +1586,11 @@ export class ForestScene extends Phaser.Scene {
           const isOpen = dd.classList.contains('open');
           closeBuyDropdown();
           if (!isOpen) {
+            // Measure NOW (the wrapper is in the DOM) and park the dropdown
+            // below the wrapper (icon + label) so it never covers the label.
+            dd.style.bottom = 'auto';
+            dd.style.top = (bwrap.offsetTop + bwrap.offsetHeight + 4) + 'px';
+            dd.style.left = bwrap.offsetLeft + 'px';
             dd.classList.add('open');
             buy.setAttribute('aria-expanded', 'true');
           }
@@ -1591,7 +1616,13 @@ export class ForestScene extends Phaser.Scene {
       }
     }
     this.decoratePending(buy);
-    el.appendChild(buy);
+    // The icon + label go into the column wrapper; the wrapper goes into the rail.
+    const blbl = document.createElement('span');
+    blbl.className = 'rail-action-label';
+    blbl.textContent = nt > 5 ? 'max tier' : (buyOrUpgradeLabel(p).startsWith('upgrade') ? 'upgrade' : 'buy');
+    bwrap.appendChild(buy);
+    bwrap.appendChild(blbl);
+    el.appendChild(bwrap);
 
     // --- sell gems. Rendered as a 3D CIRCLE ICON (like settle/repair) with the
     // "sell gems" label beneath it, in the same column. Wears COPPER (a
@@ -1599,7 +1630,7 @@ export class ForestScene extends Phaser.Scene {
     // The dynamic payout stays in the tooltip; the icon + label are fixed.
     {
       const swrap = document.createElement('div');
-      swrap.className = 'rail-action-item settle-item';
+      swrap.className = 'rail-action-item rail-action-icon';
       const sell = document.createElement('button');
       sell.className = 'icon-btn sell';
       sell.id = 'belt-sell';
@@ -1634,7 +1665,7 @@ export class ForestScene extends Phaser.Scene {
     // beneath it, in the same column, so the terminal actions read as a set.
     if (p.tier > 0 && p.left === 0) {
       const rwrap = document.createElement('div');
-      rwrap.className = 'rail-action-item settle-item';
+      rwrap.className = 'rail-action-item rail-action-icon';
       const r = document.createElement('button');
       r.className = 'icon-btn repair';
       r.id = 'belt-repair';
@@ -1669,7 +1700,7 @@ export class ForestScene extends Phaser.Scene {
     // and label remain on screen.
     {
       const wrap = document.createElement('div');
-      wrap.className = 'rail-action-item settle-item';
+      wrap.className = 'rail-action-item rail-action-icon';
       const st = document.createElement('button');
       st.className = 'icon-btn settle';
       st.id = 'belt-settle';
