@@ -97,7 +97,6 @@ html, body {
    sides drifting into different widths. */
 #season { grid-column: 1; grid-row: 1; width: var(--rail); }
 #gemstrip { grid-column: 2; grid-row: 1; justify-self: center; align-self: start; }
-#status { grid-column: 2; grid-row: 2; justify-self: center; }
 #belt   { grid-column: 3; grid-row: 1; width: var(--rail); }
 
 /* Icon buttons ride the outer top corners, level with the panels. Circular,
@@ -235,12 +234,29 @@ html, body {
 }
 
 /* --- status chip ---------------------------------------------------------
- * A single centred chip under the top edge. It is no longer a column inside
- * the season card, so it carries its own panel treatment. */
+ * The chain state ("live · 0x7d57…c548") pinned to the BOTTOM centre of the
+ * viewport, outside the #hud grid.
+ *
+ * It was a top-centre row under the gemstrip, where it competed with the
+ * gemstrip and the icon row for the same band of screen. Bottom-centre puts
+ * it where the eye lands when the game needs explaining, and it is clear of
+ * the d-pad (bottom-left) and HUNT (bottom-right) by construction -- both are
+ * 46px/76px wide, so the chip at the exact centre has the whole gap.
+ *
+ * It stays INSIDE #hud (which has pointer-events:none with auto children) so
+ * the Phaser window-touch shield still covers it: a tap on the chip must not
+ * leak into the canvas. pointer-events:auto is re-enabled on it so the retry
+ * onClick (offline state) still works.
+ * ------------------------------------------------------------------------ */
 #status {
+  position: fixed;
+  left: 50%;
+  bottom: var(--s3);
+  transform: translateX(-50%);
+  z-index: 10;
   display: flex; flex-direction: row; align-items: center;
-  flex-wrap: wrap; gap: var(--s2);
-  margin-top: calc(var(--icon) + var(--s2));
+  flex-wrap: wrap; justify-content: center; gap: var(--s2);
+  pointer-events: auto;
 }
 
 .chip {
@@ -574,7 +590,6 @@ button.chip { position: relative; }
   #hud { grid-template-columns: var(--rail) minmax(0, 1fr) var(--rail); }
   #season { grid-column: 1; grid-row: 1; width: var(--rail); }
   #gemstrip { grid-column: 2; grid-row: 1; justify-self: center; align-self: start; }
-  #status { grid-column: 2; grid-row: 2; justify-self: center; }
   #belt   { grid-column: 3; grid-row: 1; width: var(--rail); }
   .season-grid { gap: var(--s1) var(--s2); }
   .stat .k { font-size: 8px; }
