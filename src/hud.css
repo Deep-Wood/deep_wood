@@ -113,6 +113,17 @@ html, body {
 #season { grid-column: 1; grid-row: 1; width: var(--rail); }
 #gemstrip { grid-column: 2; grid-row: 1; justify-self: center; align-self: start; margin-top: 64px; }
 #belt-actions { grid-column: 1; grid-row: 2; width: var(--rail); }
+/* The action buttons are independent icon wrappers, laid out as a WRAPPING ROW
+   so two icons sit side by side on one row when they fit. The settle wrapper is
+   CSS-ordered directly after the sell wrapper (order below) so SELL and SETTLE
+   share one row -- settle to the RIGHT of sell -- regardless of whether the
+   conditional repair button renders between them in the DOM. */
+#belt-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s2) 14px; }
+#belt-actions .rail-action-item { flex: 0 0 auto; }
+#belt-actions .order-buy    { order: 1; }
+#belt-actions .order-sell   { order: 2; }
+#belt-actions .order-settle { order: 3; }
+#belt-actions .order-repair { order: 4; }
 .rail-actions { grid-column: 3; grid-row: 2; width: var(--rail); justify-self: end; }
 /* Right-aligned so the signal/leaderboard button lines up with the right
  * edge of the belt above it, exactly as the action buttons line up with the
@@ -516,9 +527,16 @@ button.chip { position: relative; }
    single-column phone layout). */
 .rail-action-item.rail-action-icon {
   margin-top: 18px;
-  width: 100%;
-  align-items: flex-start;   /* left-align the icon within the stretched item */
+  align-items: flex-start;   /* left-align the icon within the item */
   align-self: start;
+}
+/* In the wrapping flex row, each icon sizes to its CONTENT (not full width) so
+   two fit side by side; the icon+label column is a fixed width so the pairing
+   is predictable. The width:100% from the old stacked layout is overridden here
+   because flex items in a row must shrink-wrap. */
+#belt-actions .rail-action-item.rail-action-icon {
+  width: auto;
+  min-width: 52px;   /* icon (44) + a little slack; label may be wider and that's fine */
 }
 /* REPAIR is a gem action, so it wears STEEL BLUE instead of the gold settle or
    the forest-green default: blue face, darker blue extruded base. Same 3D puck

@@ -1500,7 +1500,7 @@ export class ForestScene extends Phaser.Scene {
     // absolutely against this wrapper, not the whole rail, so it opens under
     // the icon.
     const bwrap = document.createElement('div');
-    bwrap.className = 'rail-action-item rail-action-icon';
+    bwrap.className = 'rail-action-item rail-action-icon order-buy';
     const buy = document.createElement('button');
     buy.className = 'icon-btn buy';
     buy.id = 'belt-buy';
@@ -1630,7 +1630,7 @@ export class ForestScene extends Phaser.Scene {
     // The dynamic payout stays in the tooltip; the icon + label are fixed.
     {
       const swrap = document.createElement('div');
-      swrap.className = 'rail-action-item rail-action-icon';
+      swrap.className = 'rail-action-item rail-action-icon order-sell';
       const sell = document.createElement('button');
       sell.className = 'icon-btn sell';
       sell.id = 'belt-sell';
@@ -1665,7 +1665,7 @@ export class ForestScene extends Phaser.Scene {
     // beneath it, in the same column, so the terminal actions read as a set.
     if (p.tier > 0 && p.left === 0) {
       const rwrap = document.createElement('div');
-      rwrap.className = 'rail-action-item rail-action-icon';
+      rwrap.className = 'rail-action-item rail-action-icon order-repair';
       const r = document.createElement('button');
       r.className = 'icon-btn repair';
       r.id = 'belt-repair';
@@ -1700,7 +1700,7 @@ export class ForestScene extends Phaser.Scene {
     // and label remain on screen.
     {
       const wrap = document.createElement('div');
-      wrap.className = 'rail-action-item rail-action-icon';
+      wrap.className = 'rail-action-item rail-action-icon order-settle';
       const st = document.createElement('button');
       st.className = 'icon-btn settle';
       st.id = 'belt-settle';
