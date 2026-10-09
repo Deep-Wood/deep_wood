@@ -748,11 +748,16 @@ export async function getTokensPerEth(rpcUrl, fallbackRpcUrls, poolManager, pool
  * Get the player's current buy nonce.
  */
 export async function getBuyNonce(rpcUrl, fallbackRpcUrls, gameAddress, player) {
+  // rpcFirst returns j.result directly (the hex string), not a {result}
+  // wrapper -- decode `result` itself. BigInt(result.result) was reading a
+  // property off a string and threw "Cannot convert undefined to a BigInt".
+  // Only accept a non-empty hex word so an empty '0x' answer from one
+  // endpoint falls through to the next instead of failing BigInt().
   const result = await rpcFirst(rpcUrl, fallbackRpcUrls, 'eth_call', [
     { to: gameAddress, data: '0xe40afab2' + player.slice(2).padStart(64, '0') },
     'latest'
-  ]);
-  return BigInt(result.result);
+  ], (r) => typeof r === 'string' && /^0x[0-9a-fA-F]+$/.test(r));
+  return BigInt(result);
 }
 
 /**
