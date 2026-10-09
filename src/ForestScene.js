@@ -1274,38 +1274,14 @@ export class ForestScene extends Phaser.Scene {
     // (a 200px bar plus a tier line) and that copy is removed -- one source of
     // truth for tool state, in the DOM, where the panel already shows it.
 
-    // Show only the last 2 finds. Five lines of monospace text piled up on the
-    // left side of the screen and read as clutter -- the satchel already shows
-    // what you hold, so the log only needs to confirm the most recent action.
-    // Auto-fade after 3s so it doesn't sit there permanently.
-    const lines = this.finds.slice(-2).map((f) => {
-      const name = RARITY_NAME[f.rarity] || 'Quartz';
-      return `found ${name} x${f.count}  =  ${(Number(f.valueWei) / 1e18).toFixed(5)} ETH`;
-    });
-    // The wrap width is fixed at construction from the width at that moment, so
-    // a rotate or a window resize would leave it stale and the line would crop
-    // again. Re-clamp whenever the HUD text is rebuilt. The applied width is
-    // tracked here rather than read back off the Text: Phaser does not expose
-    // wordWrap as a readable property, and `this.logText.wordWrap.width` threw
-    // "Cannot read properties of undefined" and took the whole scene down.
-    const logMax = Math.max(120, this.scale.width - 40);
-    if (this._logWrap !== logMax) {
-      this._logWrap = logMax;
-      this.logText.setWordWrapWidth(logMax, true);
-    }
-    this.logText.setText(lines.join('\n'));
+    // The find log is gone. It printed "found Quartz x5 = 0.00025 ETH" into
+    // this.logText, which DUPLICATED the floating x5 label already drawn over
+    // the gem sprite in revealGems(). Two renderings of the same count on
+    // every single dig read as a bug (or a double-credit). The sprite label is
+    // the confirmation; the satchel strip shows the running total. Nothing is
+    // lost by dropping the log line -- it never carried information the player
+    // could not get from the two places that matter.
 
-    // Auto-fade the find log after 3s. It is a transient confirmation, not a
-    // permanent readout -- the satchel already shows what you hold. Without
-    // this the last two finds sat on screen forever, piling up visually with
-    // every dig and reading as clutter.
-    this.logText.setAlpha(1);
-    clearTimeout(this._logFadeTimer);
-    if (lines.length) {
-      this._logFadeTimer = setTimeout(() => {
-        this.logText.setAlpha(0);
-      }, 3000);
-    }
   }
 
   /* ---------------- season leaderboard ---------------- */
@@ -1766,6 +1742,13 @@ export class ForestScene extends Phaser.Scene {
       // leaderboard column); the top is set below so it sits on the SAME row as
       // the sell button, which is measured from the live layout.
       const hud = document.getElementById('hud');
+      // The settle wrapper lives in #hud (not #belt-actions) so it can break
+      // out to the far-right edge. syncActionDom clears #belt-actions only, so
+      // a stale settle wrapper from a previous render would linger and a new
+      // one would stack on top of it -- visible as a duplicated button. Remove
+      // any prior settle wrapper before appending the fresh one.
+      const stale = hud && hud.querySelector('.settle-right');
+      if (stale) stale.remove();
       (hud || el).appendChild(wrap);
       // Align settle's vertical position to the SELL button's row. Settle is
       // position:absolute against #hud, so its top is relative to the HUD's top

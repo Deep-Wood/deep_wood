@@ -192,27 +192,76 @@ class Rpc {
 
   async call(to, data) {
     const id = ++this.id;
-    const res = await fetch(this.url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id, method: 'eth_call', params: [{ to, data }, 'latest'] }),
-    });
-    const j = await res.json();
-    if (j.error) throw new Error(`eth_call failed: ${j.error.message}`);
-    return j.result;
+    // Per-call transport retry. readEconomy issues ~20 sequential eth_calls and
+    // the testnet RPCs intermittently drop one outright (bare "Failed to
+    // fetch"); without a retry here a single drop aborted the whole boot and
+    // the site fell back to the offline simulation. A JSON-RPC error object is
+    // a real revert and is thrown immediately, not retried.
+    let lastErr;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const res = await fetch(this.url, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', id, method: 'eth_call', params: [{ to, data }, 'latest'] }),
+        });
+        if (!res.ok && res.status >= 500) throw new Error(`eth_call: HTTP ${res.status}`);
+        const j = await res.json();
+        if (j.error) throw new Error(`eth_call failed: ${j.error.message}`);
+        return j.result;
+      } catch (e) {
+        lastErr = e;
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 120 * (attempt + 1)));
+      }
+    }
+    throw lastErr;
   }
 }
 
-/** Single JSON-RPC POST with an explicit error surface. */
-export async function rawRpc(rpcUrl, method, params) {
+/**
+ * A single JSON-RPC POST, retried on TRANSPORT failure.
+ *
+ * The testnet endpoints (rpc.testnet.chain.robinhood.com / drpc) intermittently
+ * drop a request outright -- fetch rejects with a bare TypeError ("Failed to
+ * fetch"), not an HTTP error. rawRpc previously made ONE attempt, so a single
+ * dropped request killed the caller. readEconomy issues ~20 sequential calls,
+ * so one drop anywhere aborted the whole boot and the site reported "offline"
+ * while the contract was perfectly healthy.
+ *
+ * Two retries with short backoff survive the drops without masking a real
+ * outage: a genuinely dead endpoint still fails after all attempts and falls
+ * through to rpcFirst's next-endpoint logic as before. Only transport-level
+ * failures (fetch threw, or a non-2xx/network response) are retried -- a
+ * JSON-RPC error object is a REAL answer from the chain and is returned, not
+ * retried, because re-sending it would just get the same revert.
+ */
+async function fetchOnce(rpcUrl, method, params) {
   const res = await fetch(rpcUrl, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 0, method, params }),
   });
-  const j = await res.json();
-  if (j.error) throw new Error(`${method} failed: ${j.error.message}`);
-  return j;
+  // A 502/503 from an edge proxy is a transport problem, not an RPC answer.
+  if (!res.ok && res.status >= 500) {
+    throw new Error(`${method}: HTTP ${res.status}`);
+  }
+  return res;
+}
+
+export async function rawRpc(rpcUrl, method, params) {
+  let lastErr;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetchOnce(rpcUrl, method, params);
+      const j = await res.json();
+      if (j.error) throw new Error(`${method} failed: ${j.error.message}`);
+      return j;
+    } catch (e) {
+      lastErr = e;
+      if (attempt < 2) await new Promise((r) => setTimeout(r, 120 * (attempt + 1)));
+    }
+  }
+  throw lastErr;
 }
 
 // --- decoding -------------------------------------------------------------
@@ -540,20 +589,23 @@ export async function connect({ rpcUrl, address, player, fallbackRpcUrls = [] })
         baseSlots: w[5],
         maxSlots: w[6],
       };
-      const tiers = {};
-      for (const t of [1, 2, 3, 4]) {
+      // All four tiers in parallel. The testnet RPC is ~800ms per call from a
+      // browser (CORS preflight + slow node), so four sequential tiers plus
+      // five sequential rarities pushed the whole read past the 12s boot
+      // deadline and the site reported "offline · retry" while the contract
+      // was healthy. Promise.all cuts the wall time to one call's latency.
+      const tierData = await Promise.all([1, 2, 3, 4].map(async (t) => {
         const [cost, dur, rep, hunt, table] = await Promise.all([
           chain.toolCost(t), chain.durabilityOf(t), chain.repairCost(t),
           chain.huntCostWei(t), chain.dropTable(t),
         ]);
-        tiers[t] = { cost, dur, rep, hunt, table };
-      }
-      const price = [];
-      const weight = [];
-      for (let r = 0; r < 5; r++) {
-        price.push(await chain.priceOf(r));
-        weight.push(await chain.rarityWeight(r));
-      }
+        return [t, { cost, dur, rep, hunt, table }];
+      }));
+      const tiers = Object.fromEntries(tierData);
+      const [price, weight] = await Promise.all([
+        Promise.all([0, 1, 2, 3, 4].map((r) => chain.priceOf(r))),
+        Promise.all([0, 1, 2, 3, 4].map((r) => chain.rarityWeight(r))),
+      ]);
       // Season gate. A CLOSED season is a legitimate state, not an error --
       // it used to be invisible to the client, which is how the footer ended up
       // advertising settlement against a shut season. Read it alongside the rest.
