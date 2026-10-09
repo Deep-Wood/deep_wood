@@ -80,14 +80,14 @@ function deadline(promise, ms, label) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
-// 12s, not 6s. The deadline exists to catch a promise that NEVER settles, not
-// to race a legitimately slow read: bootChain makes several sequential calls
-// (eth_chainId, then the season reads, then the seed), and a cold browser
-// connection with DNS + TLS + CORS preflight measured ~5-6s for the whole
-// sequence. A 6s ceiling turned a healthy chain into a FALSE "offline - retry",
-// which is worse than a slow chip: it tells the player the contract is gone.
-// A true hang still costs one attempt, not the session.
-export async function withRetry(fn, attempts = 3, baseMs = 400, attemptMs = 12000) {
+// 30s, not 12s. The deadline exists to catch a promise that NEVER settles, not
+// to race a legitimately slow read. The testnet RPC is ~800ms per call from a
+// browser (CORS preflight + slow node), and bootChain makes a sequence of reads
+// (chainId, paused, then readEconomy's ~30 calls). Measured at ~28s wall time
+// for the full read; a 12s ceiling turned a healthy chain into a FALSE
+// "offline · retry", which is worse than a slow chip. A true hang still costs
+// one attempt, not the session.
+export async function withRetry(fn, attempts = 3, baseMs = 400, attemptMs = 30000) {
   let last;
   for (let i = 0; i < attempts; i++) {
     if (i > 0) {

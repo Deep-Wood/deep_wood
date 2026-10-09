@@ -589,20 +589,23 @@ export async function connect({ rpcUrl, address, player, fallbackRpcUrls = [] })
         baseSlots: w[5],
         maxSlots: w[6],
       };
-      const tiers = {};
-      for (const t of [1, 2, 3, 4]) {
+      // All four tiers in parallel. The testnet RPC is ~800ms per call from a
+      // browser (CORS preflight + slow node), so four sequential tiers plus
+      // five sequential rarities pushed the whole read past the 12s boot
+      // deadline and the site reported "offline · retry" while the contract
+      // was healthy. Promise.all cuts the wall time to one call's latency.
+      const tierData = await Promise.all([1, 2, 3, 4].map(async (t) => {
         const [cost, dur, rep, hunt, table] = await Promise.all([
           chain.toolCost(t), chain.durabilityOf(t), chain.repairCost(t),
           chain.huntCostWei(t), chain.dropTable(t),
         ]);
-        tiers[t] = { cost, dur, rep, hunt, table };
-      }
-      const price = [];
-      const weight = [];
-      for (let r = 0; r < 5; r++) {
-        price.push(await chain.priceOf(r));
-        weight.push(await chain.rarityWeight(r));
-      }
+        return [t, { cost, dur, rep, hunt, table }];
+      }));
+      const tiers = Object.fromEntries(tierData);
+      const [price, weight] = await Promise.all([
+        Promise.all([0, 1, 2, 3, 4].map((r) => chain.priceOf(r))),
+        Promise.all([0, 1, 2, 3, 4].map((r) => chain.rarityWeight(r))),
+      ]);
       // Season gate. A CLOSED season is a legitimate state, not an error --
       // it used to be invisible to the client, which is how the footer ended up
       // advertising settlement against a shut season. Read it alongside the rest.
