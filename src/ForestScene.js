@@ -69,6 +69,7 @@ import {
   TOP_N,
 } from './season.js';
 import { fetchChainLeaderboard } from './leaderboard.js';
+import { playFootstep, playPick, playReveal, startAmbient, resumeAudio, isMuted, toggleMute } from './audio.js';
 import {
   initCommitment, commitSeason, verifySeason, seasonState, rollSeason,
 } from './commitment.js';
@@ -2816,6 +2817,7 @@ export class ForestScene extends Phaser.Scene {
       if (time - (this._lastStep || 0) > 180) {
         this._lastStep = time;
         this.dust.emitParticleAt(this.player.x, this.player.y + 14);
+        playFootstep();
       }
     } else {
       this.animateIdle(vx, vy);
@@ -3190,6 +3192,7 @@ export class ForestScene extends Phaser.Scene {
       // Later strikes hit harder, so the last one is visibly the decisive blow.
       const power = 0.55 + (m.done / MINER_STRIKES) * 0.6;
       this.strike(m.node, power);
+      playPick(power);
       this.updateMiningLabel();
 
       if (m.done >= MINER_STRIKES) this.finishDig();
@@ -3515,10 +3518,16 @@ export class ForestScene extends Phaser.Scene {
     window.dispatchEvent(new CustomEvent('deepwood:find', {
       detail: { counts: result.counts, valueWei: result.valueWei.toString() },
     }));
+    // The DOM shell is the only place that renders the find as text (the
+    // satchel readout). It previously ALSO rendered a second copy through the
+    // deepwood:find listener's own innerHTML write, so every dig drew "x5"
+    // twice -- once in the satchel strip and once in a floating label. Remove
+    // the duplicate: the satchel is the single source of truth for the count.
 
     if (topRarity >= 2) {
       this.flash(`${RARITY_NAME[topRarity]}!  ${(Number(result.valueWei) / 1e18).toFixed(5)} ETH`);
     }
+    playReveal(topRarity);
 
     this.updateHud();
     this.busy = false;

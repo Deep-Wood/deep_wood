@@ -53,6 +53,33 @@ game.events.once('ready', () => {
     // Wired here, where the scene is guaranteed to exist.
     document.getElementById('leaderboard-btn')
       ?.addEventListener('click', () => s.toggleLeaderboard());
+    // SOUND toggle: round 3D button, mirrors the leaderboard control. Starts
+    // ambient audio on first interaction (browser autoplay policy requires a
+    // gesture before AudioContext can run).
+    const soundBtn = document.getElementById('sound-toggle');
+    if (soundBtn) {
+      const setIcon = (muted) => {
+        const on = soundBtn.querySelector('.icon-sound-on');
+        const off = soundBtn.querySelector('.icon-sound-off');
+        if (on) on.style.display = muted ? 'none' : '';
+        if (off) off.style.display = muted ? '' : 'none';
+      };
+      setIcon(isMuted());
+      soundBtn.addEventListener('click', () => {
+        resumeAudio();
+        const nowMuted = toggleMute();
+        setIcon(nowMuted);
+        if (!nowMuted) startAmbient();
+      });
+      // Start ambient on ANY first interaction with the page, not just the
+      // toggle. The toggle is the explicit control; this is the implicit one.
+      const kick = () => {
+        resumeAudio();
+        if (!isMuted()) startAmbient();
+        window.removeEventListener('pointerdown', kick);
+      };
+      window.addEventListener('pointerdown', kick);
+    }
     // A wallet sync that ran while the scene was unpublished skipped it, so
     // re-run it now that the chain's tool/gems/balance can be applied.
     window.__syncBalance?.();
