@@ -1766,6 +1766,13 @@ export class ForestScene extends Phaser.Scene {
       // leaderboard column); the top is set below so it sits on the SAME row as
       // the sell button, which is measured from the live layout.
       const hud = document.getElementById('hud');
+      // The settle wrapper lives in #hud (not #belt-actions) so it can break
+      // out to the far-right edge. syncActionDom clears #belt-actions only, so
+      // a stale settle wrapper from a previous render would linger and a new
+      // one would stack on top of it -- visible as a duplicated button. Remove
+      // any prior settle wrapper before appending the fresh one.
+      const stale = hud && hud.querySelector('.settle-right');
+      if (stale) stale.remove();
       (hud || el).appendChild(wrap);
       // Align settle's vertical position to the SELL button's row. Settle is
       // position:absolute against #hud, so its top is relative to the HUD's top
