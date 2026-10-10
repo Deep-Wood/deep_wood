@@ -94,13 +94,21 @@ game.events.once('ready', () => {
     // two-pass measurement settle itself uses.
     const placeSound = () => {
       const sound = document.querySelector('.sound-toggle-wrap');
-      const settle = document.querySelector('.settle-right');
+      const settleWrap = document.querySelector('.settle-right');
+      const settleBtn = document.getElementById('belt-settle');
       const hud = document.getElementById('hud');
-      if (!sound || !settle || !hud) return;
+      if (!sound || !settleWrap || !settleBtn || !hud) return;
       const hudRect = hud.getBoundingClientRect();
-      const settleRect = settle.getBoundingClientRect();
+      const settleRect = settleWrap.getBoundingClientRect();
+      const settleBtnRect = settleBtn.getBoundingClientRect();
       const gap = 18; // matches .rail-action-icon margin-top:18px row rhythm
       sound.style.top = Math.round(settleRect.bottom - hudRect.top + gap) + 'px';
+      // Align the ICON columns, not the wrappers: settle's label ('settle
+      // hunt') is wider than its 44px icon, so its wrapper stretch makes the
+      // icon sit 15px inside the far-right edge. Aligning wrappers would push
+      // the sound icon 15px right of settle's icon -- the misaligned column
+      // the user reported. Align icon-right to icon-right instead.
+      sound.style.right = Math.round(hudRect.right - settleBtnRect.right) + 'px';
     };
     // Settle is (re)created by syncActionDom, so re-run after each render.
     // The scene emits 'ready' once, but syncActionDom runs on every HUD sync.
