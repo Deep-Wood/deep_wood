@@ -59,7 +59,7 @@ const fail = (code, reason) => ({ ok: false, code, reason });
  * Poll `read()` until it returns a value that satisfies `moved`, or give up.
  * @returns {Promise<{changed: boolean, value: any, waited: number}>}
  */
-async function pollUntilChanged(read, before, moved) {
+export async function pollUntilChanged(read, before, moved) {
   for (let i = 0; i < POLL_ATTEMPTS; i++) {
     await sleep(POLL_INTERVAL_MS);
     let value;

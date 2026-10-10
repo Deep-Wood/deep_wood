@@ -1989,7 +1989,8 @@ export class ForestScene extends Phaser.Scene {
     // Get on-chain price
     this.beltMsg('Reading pool price…', 'busy');
     const { getEthPerToken, getBuyNonce, getAllowance, getTokenBalance } = await import('./chain.js');
-    const { getState } = await import('./wallet.js');
+    const { getState, sendTo } = await import('./wallet.js');
+    const { getReader, pollUntilChanged } = await import('./onchain.js');
     const ethPerToken = await getEthPerToken(
       this.rpcUrl,
       this.fallbackRpcUrls,
@@ -2041,7 +2042,8 @@ export class ForestScene extends Phaser.Scene {
       const approveData = approveTokenTx(this.gameAddress, tokenCost);
       let approveResult;
       try {
-        approveResult = await this.sendTx(approveData);
+        // approve goes to the TOKEN contract, not the game
+        approveResult = await sendTo(this.tokenAddress, approveData);
       } finally {
         this.clearTxPending();
       }
@@ -2080,12 +2082,12 @@ export class ForestScene extends Phaser.Scene {
     this.beltMsg('Confirm in wallet…', 'busy');
     this.setTxPending('belt-buy-token', 'buying');
     const { buyToolWithTokenTx } = await import('./chain.js');
-    const before = await this.getReader()?.toolOf(account);
+    const before = await getReader()?.toolOf(account);
 
     let r;
     try {
       const txData = buyToolWithTokenTx(tier, tokenCost, quoteExpiresAt, nonce);
-      r = await this.sendTx(txData);
+      r = await sendTo(this.gameAddress, txData);
     } finally {
       this.clearTxPending();
     }
@@ -2096,8 +2098,8 @@ export class ForestScene extends Phaser.Scene {
     }
 
     // Wait for confirmation
-    const after = await this.pollUntilChanged(
-      () => this.getReader()?.toolOf(account),
+    const after = await pollUntilChanged(
+      () => getReader()?.toolOf(account),
       before,
       (b, a) => a.tier > b.tier
     );

@@ -808,9 +808,14 @@ function hideSigning() {
 
 /** eth_sendTransaction with a typed result and no throw. */
 async function send(data, { valueWei } = {}) {
+  return sendTo(config.gameAddress, data, { valueWei });
+}
+
+/** eth_sendTransaction to an arbitrary contract (e.g. the token for approve). */
+export async function sendTo(to, data, { valueWei } = {}) {
   const blocked = notReady();
   if (blocked) return blocked;
-  const tx = { from: state.account, to: config.gameAddress, data: "0x" + data };
+  const tx = { from: state.account, to, data: "0x" + data };
   if (valueWei !== undefined) tx.value = toQuantity(valueWei);
   // Show the centred "Confirm in wallet" flash for the WHOLE time the wallet is
   // open (signature request -> user approves -> hash back). It is hidden in the
@@ -821,7 +826,7 @@ async function send(data, { valueWei } = {}) {
       method: "eth_sendTransaction",
       params: [tx],
     });
-    return { ok: true, hash, from: state.account, to: config.gameAddress, tx };
+    return { ok: true, hash, from: state.account, to, tx };
   } catch (e) {
     const code = errCode(e);
     return {
