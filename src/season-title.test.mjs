@@ -33,8 +33,10 @@ test('no hardcoded season name remains in the markup', () => {
 test('the initial phase line admits it has not read the chain yet', () => {
   // Anything else is a claim about chain state before any chain state is read.
   // The phase line starts empty; paintSeasonTitle() fills it from phase().
+  // The static wordmark is PRESEASON (commit 75527cf renamed it from
+  // DEEPWOOD); this asserts a static title exists, not a season name.
   assert.match(html, /id="season-phase"/, 'the phase line must exist for the renderer');
-  assert.match(html, /id="season-title">DeepWood/i, 'the brand wordmark is the static title');
+  assert.match(html, /id="season-title">PRESEASON</i, 'the brand wordmark is the static title');
   assert.match(html, /id="season-phase"/, 'the phase line exists (hidden until placed)');
 });
 

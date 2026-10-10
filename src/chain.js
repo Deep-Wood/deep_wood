@@ -551,6 +551,24 @@ export async function connect({ rpcUrl, address, player, fallbackRpcUrls = [] })
 
     maxBatch: async () => dUint(await rpc.call(to, sel('MAX_BATCH()'))),
 
+    // --- redemption quotes ---
+    // redeemQuote(uint8,uint256) view returns (uint256 payout, bool aboveFloor)
+    // The sell flow quotes BEFORE sending so the button can explain a
+    // below-floor redemption instead of letting the player sign and revert.
+    // The selector exists in the table above; the reader method was missing
+    // and every gem redemption threw `redeemQuote is not a function`.
+    redeemQuote: async (rarity = 0, count = 1n) => {
+      const raw = await rpc.call(
+        to,
+        sel('redeemQuote(uint8,uint256)') + arg8(rarity) + argUint(count)
+      );
+      // wordsOf returns BigInt words; dBool takes a hex STRING, so test the
+      // word directly instead of round-tripping through a decoder.
+      const w = wordsOf(raw);
+      return [w[0], w[1] !== 0n];
+    },
+    minRedeemWei: async () => dUint(await rpc.call(to, sel('minRedeemWei()'))),
+
     // --- per-player ---
     // The settlement confirmation signal: settleHunt increments this, so
     // poll-until-changed on it proves the chain applied the write.
