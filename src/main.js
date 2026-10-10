@@ -31,7 +31,7 @@ const game = new Phaser.Game(config);
 // localStorage remembers the dismissal. Shown once the canvas exists so the
 // forest is visible behind the dimmer.
 import { maybeShowTutorial } from './tutorial.js';
-import { isMuted, toggleMute, resumeAudio, startAmbient, busEnabled, setBusEnabled, anyBusOn, attachMusic } from './audio.js';
+import { isMuted, toggleMute, resumeAudio, startAmbient, busEnabled, setBusEnabled, anyBusOn, attachMusic, startMusic } from './audio.js';
 game.events.once('ready', () => {
   maybeShowTutorial();
 });
@@ -107,16 +107,27 @@ game.events.once('ready', () => {
       // sound controls. MUST be a CAPTURE listener: the #hud shield
       // stopPropagation()s every pointerdown inside the HUD, so a
       // bubble-phase listener on window never fires for any HUD tap.
+      //
+      // The music needs REPEATED tries on mobile: the element routes
+      // through the AudioContext, which may still be suspended during the
+      // first gesture, so the first play() can reject. Rather than one
+      // shot, every gesture retries startMusic() until the track is
+      // actually audible -- the user should never have to toggle the pill.
+      const bg = document.getElementById('bg-music');
       const kick = () => {
         resumeAudio();
         if (anyBusOn()) startAmbient();
-        // Music: attach the <audio> element to the music bus on the first
-        // gesture (preload=none means the file has not been fetched until
-        // now, so first paint stays fast). attachMusic only plays it when
-        // the music pill is ON.
-        const bg = document.getElementById('bg-music');
-        if (bg) attachMusic(bg);
-        window.removeEventListener('pointerdown', kick, true);
+        if (bg) {
+          if (typeof window.__musicAttached === 'undefined') {
+            window.__musicAttached = true;
+            attachMusic(bg);
+          }
+          startMusic();
+        }
+        if (bg && !bg.paused) {
+          // Music is rolling: stop listening entirely.
+          window.removeEventListener('pointerdown', kick, true);
+        }
       };
       window.addEventListener('pointerdown', kick, true);
     }

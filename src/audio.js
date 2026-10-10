@@ -89,9 +89,10 @@ export function setBusEnabled(name, on) {
     if (ctx) b.gain.gain.setTargetAtTime(on ? 1 : 0, ctx.currentTime, 0.04);
   }
   // Music is an element: pause/resume it with the switch so it does not
-  // silently chew CPU while muted.
+  // silently chew CPU while muted. startMusic() handles the suspended-
+  // context case (mobile) instead of a raw play().
   if (name === 'music' && musicEl) {
-    if (on) musicEl.play().catch(() => {});
+    if (on) startMusic();
     else musicEl.pause();
   }
 }
@@ -374,6 +375,15 @@ export function playReveal(rarity = 0) {
  * Wire an <audio> element as the background music. Called once the music
  * file lands in the build; until then the bus + toggle exist and remember
  * the user's choice, but nothing plays.
+ *
+ * MOBILE autoplay subtlety: the element routes through the AudioContext
+ * (MediaElementAudioSourceNode), so `play()` only works once the context
+ * is RUNNING. On Android Chrome the context starts suspended and its
+ * resume() is asynchronous -- calling play() in the same gesture tick
+ * gets a rejected promise which the old code swallowed, leaving the music
+ * dead until the pill was toggled off and on. So: play() is retried here
+ * every call until it succeeds, and callers keep calling attachMusic on
+ * every gesture until the music is heard.
  */
 export function attachMusic(el) {
   const c = ensureCtx();
@@ -385,5 +395,20 @@ export function attachMusic(el) {
     musicEl.loop = true;
     musicEl.volume = 0.4;
   }
-  if (buses.music.enabled) musicEl.play().catch(() => {});
+  startMusic();
+}
+
+/** Start (or resume) the music if its bus is on. Safe to call repeatedly. */
+export function startMusic() {
+  const c = ensureCtx();
+  if (!c || !musicEl) return;
+  if (!buses.music.enabled) return;
+  if (!musicEl.paused) return; // already playing
+  if (c.state !== 'running') {
+    // Context still suspended: resume it, THEN try play() -- and if it
+    // still fails, the next gesture's startMusic() retries.
+    c.resume().then(() => musicEl.play().catch(() => {})).catch(() => {});
+    return;
+  }
+  musicEl.play().catch(() => {});
 }
