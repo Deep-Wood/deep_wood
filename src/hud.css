@@ -130,6 +130,19 @@ html, body {
   align-items: flex-end;  /* right-align the icon within the item */
   align-self: start;
 }
+/* SOUND toggle: placed BELOW the SETTLE button in the right rail.
+   SETTLE is at top:152px with a 44px icon + 14px gap + ~14px label = ~72px.
+   Sound goes 8px below that. */
+.sound-toggle-wrap {
+  margin-top: 0;
+  position: absolute;
+  right: 0;
+  left: auto !important;
+  top: 230px;
+  width: auto !important;
+  align-items: flex-end;
+  align-self: start;
+}
 /* BUY is the FIRST action in the rail, so it must not carry the 18px top margin
    that spaces the subsequent rows -- otherwise it sits 18px below the rail's top
    and never lines up with the leaderboard button (same rail row, no margin). */

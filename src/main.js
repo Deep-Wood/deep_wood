@@ -73,12 +73,16 @@ game.events.once('ready', () => {
       });
       // Start ambient on ANY first interaction with the page, not just the
       // toggle. The toggle is the explicit control; this is the implicit one.
+      // MUST be a CAPTURE listener: the #hud shield stopPropagation()s every
+      // pointerdown inside the HUD, so a bubble-phase listener on window never
+      // fires for any HUD tap (SETTLE, Sound, d-pad, etc). Capture runs
+      // BEFORE the shield, so ambient starts on the first tap anywhere.
       const kick = () => {
         resumeAudio();
         if (!isMuted()) startAmbient();
-        window.removeEventListener('pointerdown', kick);
+        window.removeEventListener('pointerdown', kick, true);
       };
-      window.addEventListener('pointerdown', kick);
+      window.addEventListener('pointerdown', kick, true);
     }
     // A wallet sync that ran while the scene was unpublished skipped it, so
     // re-run it now that the chain's tool/gems/balance can be applied.
