@@ -131,14 +131,15 @@ html, body {
   align-self: start;
 }
 /* SOUND toggle: placed BELOW the SETTLE button in the right rail.
-   SETTLE is at top:152px with a 44px icon + 14px gap + ~14px label = ~72px.
-   Sound goes 8px below that. */
+   SETTLE renders at hud-relative top ~204px with a 44px icon + label ≈ 67px
+   tall (measured: bottom 271). Other rail rows space at 18px, so:
+   sound top = 271 + 18 = 289px. */
 .sound-toggle-wrap {
   margin-top: 0;
   position: absolute;
   right: 0;
   left: auto !important;
-  top: 230px;
+  top: 289px;
   width: auto !important;
   align-items: flex-end;
   align-self: start;
