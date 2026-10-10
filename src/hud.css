@@ -130,16 +130,16 @@ html, body {
   align-items: flex-end;  /* right-align the icon within the item */
   align-self: start;
 }
-/* SOUND toggle: placed BELOW the SETTLE button in the right rail.
-   SETTLE renders at hud-relative top ~204px with a 44px icon + label ≈ 67px
-   tall (measured: bottom 271). Other rail rows space at 18px, so:
-   sound top = 271 + 18 = 289px. */
+/* SOUND toggle: placed BELOW the SETTLE button in the right rail. The exact
+   top is set at runtime by main.js placeSound() (same two-pass measurement
+   settle uses), because settle's own top is computed from the live layout.
+   This rule only anchors the column: far-right edge, same as settle. */
 .sound-toggle-wrap {
   margin-top: 0;
   position: absolute;
   right: 0;
   left: auto !important;
-  top: 289px;
+  top: 289px; /* runtime-measured fallback until placeSound() lands */
   width: auto !important;
   align-items: flex-end;
   align-self: start;

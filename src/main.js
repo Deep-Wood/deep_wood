@@ -31,6 +31,7 @@ const game = new Phaser.Game(config);
 // localStorage remembers the dismissal. Shown once the canvas exists so the
 // forest is visible behind the dimmer.
 import { maybeShowTutorial } from './tutorial.js';
+import { isMuted, toggleMute, resumeAudio, startAmbient } from './audio.js';
 game.events.once('ready', () => {
   maybeShowTutorial();
 });
@@ -84,6 +85,34 @@ game.events.once('ready', () => {
       };
       window.addEventListener('pointerdown', kick, true);
     }
+
+    // SOUND button position: it must sit in the SAME column as settle
+    // (far-right) and exactly one row-gap (18px) below it. Settle's own top is
+    // computed at runtime by aligning to the sell button (see ForestScene
+    // syncActionDom), so a hardcoded CSS top cannot track it. Instead measure
+    // the live settle wrapper and place sound relative to it -- same
+    // two-pass measurement settle itself uses.
+    const placeSound = () => {
+      const sound = document.querySelector('.sound-toggle-wrap');
+      const settle = document.querySelector('.settle-right');
+      const hud = document.getElementById('hud');
+      if (!sound || !settle || !hud) return;
+      const hudRect = hud.getBoundingClientRect();
+      const settleRect = settle.getBoundingClientRect();
+      const gap = 18; // matches .rail-action-icon margin-top:18px row rhythm
+      sound.style.top = Math.round(settleRect.bottom - hudRect.top + gap) + 'px';
+    };
+    // Settle is (re)created by syncActionDom, so re-run after each render.
+    // The scene emits 'ready' once, but syncActionDom runs on every HUD sync.
+    // NOTE: uses the OUTER `s` (the scene) -- do not shadow it here; a local
+    // `const s = window.__scene` inside publish() would throw TDZ and kill
+    // the whole boot path (this exact bug shipped once already).
+    const origSync = s.syncActionDom?.bind(s);
+    if (origSync) s.syncActionDom = () => { origSync(); placeSound(); };
+    // Initial placement + a settle re-check once fonts/layout settle.
+    placeSound();
+    setTimeout(placeSound, 500);
+    setTimeout(placeSound, 2000);
     // A wallet sync that ran while the scene was unpublished skipped it, so
     // re-run it now that the chain's tool/gems/balance can be applied.
     window.__syncBalance?.();
