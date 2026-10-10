@@ -1,35 +1,64 @@
 /**
  * Procedural audio for DeepWood. Everything is synthesized with the Web Audio
- * API -- no audio files, no loading, no codec support issues.
+ * API -- no audio files, no loading, no codec support issues (music excepted,
+ * which arrives as a real file wired into its own bus).
  *
- * Layers:
- *   - Ambient: gusting wind (NOT a constant shhh -- it swells and dies),
- *     rustling leaves, and a bird chorus (songbirds, warbles, two-note
- *     calls, distant crows, owls).
- *   - Footstep: leaf crunch + heel thud, fired ON the walk-cycle contact
- *     frames so it matches the sprite's feet.
- *   - Pick: metallic clang + rock impact on each dig strike.
- *   - Reveal: chime when a gem is found.
+ * THREE CATEGORY BUSES, each with its own on/off switch (the pill toggles):
+ *   sfx   - dig strikes + footsteps + gem reveal chime
+ *   amb   - wind gusts + leaves + approved bird chorus
+ *   music - background music (file attached later via attachMusic())
  *
- * A single master gain node feeds the toggle. Muting is one gain write, not
- * a teardown of the whole graph.
+ * master -> [sfx, amb, music] -> destination. Muting one category is one
+ * gain write on its bus; the other two keep playing. Choices persist in
+ * localStorage (dw-sound-prefs) and survive reloads.
+ *
+ * Bird call types are the user-approved samples from the audio review:
+ * chirp (1), warble (2), twoNote (3), distant twitter (6). Crow and owl
+ * were rejected. Wind is a gusting cycle (sample 9) -- never a constant shhh.
  */
 
 let ctx = null;
 let master = null;
+const buses = {};          // name -> { gain, enabled }
 let ambientRunning = false;
-let muted = false;
 let ambientTimers = [];
+let musicEl = null;        // <audio> element for the music file
+let musicSrcNode = null;   // MediaElementAudioSourceNode, created once
+let _prefs = null;
 
-/** Lazily create the AudioContext. Must be called from a user gesture. */
+/** Category defaults; persisted to localStorage as dw-sound-prefs. */
+const BUS_DEFAULTS = { sfx: true, amb: true, music: true };
+
+function loadPrefs() {
+  try {
+    const raw = localStorage.getItem('dw-sound-prefs');
+    if (raw) return { ...BUS_DEFAULTS, ...JSON.parse(raw) };
+  } catch (_) { /* corrupted prefs fall back to defaults */ }
+  return { ...BUS_DEFAULTS };
+}
+function savePrefs() {
+  try { localStorage.setItem('dw-sound-prefs', JSON.stringify(_prefs)); } catch (_) {}
+}
+function prefs() {
+  if (!_prefs) _prefs = loadPrefs();
+  return _prefs;
+}
+
+/** Lazily create the AudioContext + the three buses. Call from a gesture. */
 function ensureCtx() {
   if (ctx) return ctx;
   const AC = window.AudioContext || window.webkitAudioContext;
   if (!AC) return null;
   ctx = new AC();
   master = ctx.createGain();
-  master.gain.value = muted ? 0 : 0.5;
+  master.gain.value = 0.5;
   master.connect(ctx.destination);
+  for (const name of Object.keys(BUS_DEFAULTS)) {
+    const gain = ctx.createGain();
+    gain.gain.value = prefs()[name] ? 1 : 0;
+    gain.connect(master);
+    buses[name] = { gain, enabled: prefs()[name] };
+  }
   return ctx;
 }
 
@@ -44,18 +73,32 @@ export function audioReady() {
   return !!(ctx && ctx.state === 'running');
 }
 
-/** Current mute state. */
-export function isMuted() {
-  return muted;
+/** Read a category switch. Works before the context exists (reads prefs). */
+export function busEnabled(name) {
+  return buses[name] ? buses[name].enabled : (prefs()[name] ?? true);
 }
 
-/** Toggle mute. Returns the new state. */
-export function toggleMute() {
-  muted = !muted;
-  if (master && ctx) {
-    master.gain.setTargetAtTime(muted ? 0 : 0.5, ctx.currentTime, 0.05);
+/** Flip a category switch. Persists and ramps the bus gain. */
+export function setBusEnabled(name, on) {
+  on = !!on;
+  prefs()[name] = on;
+  savePrefs();
+  const b = buses[name];
+  if (b) {
+    b.enabled = on;
+    if (ctx) b.gain.gain.setTargetAtTime(on ? 1 : 0, ctx.currentTime, 0.04);
   }
-  return muted;
+  // Music is an element: pause/resume it with the switch so it does not
+  // silently chew CPU while muted.
+  if (name === 'music' && musicEl) {
+    if (on) musicEl.play().catch(() => {});
+    else musicEl.pause();
+  }
+}
+
+/** True if any category is on -- drives the main sound button's icon. */
+export function anyBusOn() {
+  return Object.keys(BUS_DEFAULTS).some((n) => busEnabled(n));
 }
 
 /** One shared white-noise buffer, reused by every noise voice. */
@@ -71,19 +114,20 @@ function noiseBuf() {
 }
 
 // ---------------------------------------------------------------------------
-// Ambient forest bed
+// AMBIENT bus: gusting wind, leaves, approved bird chorus
 // ---------------------------------------------------------------------------
 
 /**
- * Start the ambient soundscape. The wind GUSTS: each of two voices swells
- * from near-silence to a soft peak over 3-6s, holds, then dies over 4-9s --
- * so the forest breathes rather than hissing constantly. Leaves rustle in
- * the same rhythm, quieter. Birds call on their own clocks.
+ * Start the ambient soundscape (idempotent). The wind GUSTS: each of two
+ * voices swells from near-silence to a soft peak over 3-6s, then dies over
+ * 4-9s -- the forest breathes rather than hissing. Leaves rustle in the
+ * same rhythm, quieter. Birds call on their own clock.
  */
 export function startAmbient() {
   const c = ensureCtx();
   if (!c || ambientRunning) return;
   ambientRunning = true;
+  const amb = buses.amb.gain;
 
   // Two wind voices, crossfaded by their own gust clocks.
   for (let v = 0; v < 2; v++) {
@@ -96,9 +140,8 @@ export function startAmbient() {
     lp.Q.value = 0.4;
     const g = c.createGain();
     g.gain.value = 0; // starts SILENT; only gusts bring it up
-    src.connect(lp).connect(g).connect(master);
+    src.connect(lp).connect(g).connect(amb);
     src.start();
-    src.__keep = true;
 
     const gustCycle = () => {
       if (!ctx || !ambientRunning) return;
@@ -122,7 +165,7 @@ export function startAmbient() {
   leafHP.frequency.value = 2600;
   const leafG = c.createGain();
   leafG.gain.value = 0;
-  leafSrc.connect(leafHP).connect(leafG).connect(master);
+  leafSrc.connect(leafHP).connect(leafG).connect(amb);
   leafSrc.start();
   const leafCycle = () => {
     if (!ctx || !ambientRunning) return;
@@ -133,13 +176,12 @@ export function startAmbient() {
   };
   ambientTimers.push(setTimeout(leafCycle, 2500));
 
-  // Birds: four call types the user approved from the audio review samples --
-  // chirp (1), warble (2), twoNote (3), distant twitter (6). Crow and owl
-  // were rejected.
+  // Birds: approved call types only -- chirp (1), warble (2), twoNote (3),
+  // distant twitter (6). Crow and owl were rejected in the review.
   const CHORUS = ['chirp', 'chirp', 'warble', 'twoNote', 'distant'];
   const chorus = () => {
     if (!ctx || !ambientRunning) return;
-    if (!muted) birdCall(CHORUS[(Math.random() * CHORUS.length) | 0]);
+    if (buses.amb.enabled) birdCall(CHORUS[(Math.random() * CHORUS.length) | 0]);
     ambientTimers.push(setTimeout(chorus, 3000 + Math.random() * 8000));
   };
   ambientTimers.push(setTimeout(chorus, 1200));
@@ -161,7 +203,7 @@ function birdCall(type) {
   const dist = 0.25 + Math.random() * 0.55;
   const out = ctx.createGain();
   out.gain.value = 1 - dist * 0.75;
-  pan.connect(out).connect(master);
+  pan.connect(out).connect(buses.amb.gain);
 
   const osc = ctx.createOscillator();
   const g = osc.frequency;
@@ -210,7 +252,7 @@ function birdCall(type) {
 }
 
 // ---------------------------------------------------------------------------
-// Footstep
+// SFX bus: footsteps, pick strikes, gem reveal
 // ---------------------------------------------------------------------------
 
 /**
@@ -221,7 +263,7 @@ function birdCall(type) {
 let stepSide = 0;
 export function playFootstep() {
   const c = ensureCtx();
-  if (!c || muted) return;
+  if (!c || !buses.sfx.enabled) return;
   const t = c.currentTime;
   stepSide = 1 - stepSide;
 
@@ -243,7 +285,7 @@ export function playFootstep() {
   g.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
   const pan = c.createStereoPanner();
   pan.pan.value = stepSide * 0.3 - 0.15;
-  src.connect(bp).connect(g).connect(pan).connect(master);
+  src.connect(bp).connect(g).connect(pan).connect(buses.sfx.gain);
   src.start(t);
 
   // Low thump (heel)
@@ -254,14 +296,10 @@ export function playFootstep() {
   const og = c.createGain();
   og.gain.setValueAtTime(0.1, t);
   og.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
-  osc.connect(og).connect(master);
+  osc.connect(og).connect(buses.sfx.gain);
   osc.start(t);
   osc.stop(t + 0.08);
 }
-
-// ---------------------------------------------------------------------------
-// Pick strike
-// ---------------------------------------------------------------------------
 
 /**
  * Play a pickaxe strike. Metallic ping + rock impact noise.
@@ -269,7 +307,7 @@ export function playFootstep() {
  */
 export function playPick(power = 0.5) {
   const c = ensureCtx();
-  if (!c || muted) return;
+  if (!c || !buses.sfx.enabled) return;
   const t = c.currentTime;
   const vol = 0.1 + power * 0.15;
 
@@ -278,10 +316,10 @@ export function playPick(power = 0.5) {
   osc.type = 'square';
   osc.frequency.setValueAtTime(1200 + power * 400, t);
   osc.frequency.exponentialRampToValueAtTime(200, t + 0.1);
-  const og = c.createGain();
+  const og = ctx.createGain();
   og.gain.setValueAtTime(vol * 0.6, t);
   og.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
-  osc.connect(og).connect(master);
+  osc.connect(og).connect(buses.sfx.gain);
   osc.start(t);
   osc.stop(t + 0.15);
 
@@ -297,23 +335,19 @@ export function playPick(power = 0.5) {
   const lp = c.createBiquadFilter();
   lp.type = 'lowpass';
   lp.frequency.value = 2000 + power * 1000;
-  const g = c.createGain();
+  const g = ctx.createGain();
   g.gain.setValueAtTime(vol, t);
   g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
-  src.connect(lp).connect(g).connect(master);
+  src.connect(lp).connect(g).connect(buses.sfx.gain);
   src.start(t);
 }
-
-// ---------------------------------------------------------------------------
-// Gem reveal chime
-// ---------------------------------------------------------------------------
 
 /**
  * Play a short chime when a gem is revealed. Higher rarity = brighter tone.
  */
 export function playReveal(rarity = 0) {
   const c = ensureCtx();
-  if (!c || muted) return;
+  if (!c || !buses.sfx.enabled) return;
   const t = c.currentTime;
   const baseFreq = 400 + rarity * 200;
 
@@ -321,13 +355,35 @@ export function playReveal(rarity = 0) {
     const osc = c.createOscillator();
     osc.type = 'sine';
     osc.frequency.value = baseFreq * (1 + i * 0.5);
-    const g = c.createGain();
+    const g = ctx.createGain();
     const start = t + i * 0.06;
     g.gain.setValueAtTime(0, start);
     g.gain.linearRampToValueAtTime(0.08 - i * 0.02, start + 0.01);
     g.gain.exponentialRampToValueAtTime(0.001, start + 0.3);
-    osc.connect(g).connect(master);
+    osc.connect(g).connect(buses.sfx.gain);
     osc.start(start);
     osc.stop(start + 0.35);
   }
+}
+
+// ---------------------------------------------------------------------------
+// MUSIC bus: background music (file arrives separately)
+// ---------------------------------------------------------------------------
+
+/**
+ * Wire an <audio> element as the background music. Called once the music
+ * file lands in the build; until then the bus + toggle exist and remember
+ * the user's choice, but nothing plays.
+ */
+export function attachMusic(el) {
+  const c = ensureCtx();
+  if (!c || !el) return;
+  musicEl = el;
+  if (!musicSrcNode) {
+    musicSrcNode = c.createMediaElementSource(musicEl);
+    musicSrcNode.connect(buses.music.gain);
+    musicEl.loop = true;
+    musicEl.volume = 0.4;
+  }
+  if (buses.music.enabled) musicEl.play().catch(() => {});
 }

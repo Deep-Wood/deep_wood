@@ -31,7 +31,7 @@ const game = new Phaser.Game(config);
 // localStorage remembers the dismissal. Shown once the canvas exists so the
 // forest is visible behind the dimmer.
 import { maybeShowTutorial } from './tutorial.js';
-import { isMuted, toggleMute, resumeAudio, startAmbient } from './audio.js';
+import { isMuted, toggleMute, resumeAudio, startAmbient, busEnabled, setBusEnabled, anyBusOn } from './audio.js';
 game.events.once('ready', () => {
   maybeShowTutorial();
 });
@@ -54,33 +54,62 @@ game.events.once('ready', () => {
     // Wired here, where the scene is guaranteed to exist.
     document.getElementById('leaderboard-btn')
       ?.addEventListener('click', () => s.toggleLeaderboard());
-    // SOUND toggle: round 3D button, mirrors the leaderboard control. Starts
-    // ambient audio on first interaction (browser autoplay policy requires a
-    // gesture before AudioContext can run).
+    // SOUND button: opens the sound panel (three pill toggles: game sounds,
+    // ambience, music) instead of toggling a single mute. Starts audio on
+    // first interaction (browser autoplay policy requires a gesture).
     const soundBtn = document.getElementById('sound-toggle');
-    if (soundBtn) {
-      const setIcon = (muted) => {
+    const soundPanel = document.getElementById('sound-panel');
+    if (soundBtn && soundPanel) {
+      const setIcon = (anyOn) => {
         const on = soundBtn.querySelector('.icon-sound-on');
         const off = soundBtn.querySelector('.icon-sound-off');
-        if (on) on.style.display = muted ? 'none' : '';
-        if (off) off.style.display = muted ? '' : 'none';
+        if (on) on.style.display = anyOn ? '' : 'none';
+        if (off) off.style.display = anyOn ? 'none' : '';
       };
-      setIcon(isMuted());
-      soundBtn.addEventListener('click', () => {
-        resumeAudio();
-        const nowMuted = toggleMute();
-        setIcon(nowMuted);
-        if (!nowMuted) startAmbient();
+      setIcon(anyBusOn());
+
+      // Pill states from persisted prefs; each click flips its bus.
+      const rows = [...soundPanel.querySelectorAll('.sound-row')];
+      const syncRow = (row) => {
+        const bus = row.dataset.bus;
+        const on = busEnabled(bus);
+        row.querySelector('.pill-toggle').setAttribute('aria-checked', on ? 'true' : 'false');
+        setIcon(anyBusOn());
+      };
+      rows.forEach((row) => {
+        syncRow(row);
+        row.querySelector('.pill-toggle').addEventListener('click', () => {
+          resumeAudio();
+          setBusEnabled(row.dataset.bus, !busEnabled(row.dataset.bus));
+          syncRow(row);
+          startAmbient(); // no-op if already running
+        });
       });
-      // Start ambient on ANY first interaction with the page, not just the
-      // toggle. The toggle is the explicit control; this is the implicit one.
-      // MUST be a CAPTURE listener: the #hud shield stopPropagation()s every
-      // pointerdown inside the HUD, so a bubble-phase listener on window never
-      // fires for any HUD tap (SETTLE, Sound, d-pad, etc). Capture runs
-      // BEFORE the shield, so ambient starts on the first tap anywhere.
+
+      // Open/close the panel from the button; close on outside tap/Escape.
+      const open = (e) => {
+        e.stopPropagation();
+        resumeAudio();
+        startAmbient();
+        soundPanel.classList.toggle('hidden');
+      };
+      soundBtn.addEventListener('click', open);
+      document.addEventListener('pointerdown', (e) => {
+        if (soundPanel.classList.contains('hidden')) return;
+        if (soundPanel.contains(e.target) || soundBtn.contains(e.target)) return;
+        soundPanel.classList.add('hidden');
+      }, true);
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') soundPanel.classList.add('hidden');
+      });
+
+      // Start audio on ANY first interaction with the page, not just the
+      // sound controls. MUST be a CAPTURE listener: the #hud shield
+      // stopPropagation()s every pointerdown inside the HUD, so a
+      // bubble-phase listener on window never fires for any HUD tap.
       const kick = () => {
         resumeAudio();
-        if (!isMuted()) startAmbient();
+        if (anyBusOn()) startAmbient();
         window.removeEventListener('pointerdown', kick, true);
       };
       window.addEventListener('pointerdown', kick, true);

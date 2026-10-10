@@ -203,10 +203,11 @@
     </div>
 
     <!-- SOUND toggle: round 3D button, placed BELOW the SETTLE button in the
-         right rail. Not stacked with Leaderboard -- the user asked for it
-         directly under SETTLE. -->
+         right rail. Tapping it opens the sound panel with THREE pill toggles
+         (matching the reference art: red OFF / green ON with a white 3D knob):
+         game sounds (dig+steps), ambience (birds+wind), music. -->
     <div class="rail-action-item sound-toggle-wrap">
-      <button type="button" id="sound-toggle" class="icon-btn" aria-label="Toggle sound" title="Sound on/off">
+      <button type="button" id="sound-toggle" class="icon-btn" aria-label="Sound options" title="Sound options">
         <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="icon-sound-on">
           <path d="M3 9v6h4l5 5V4L7 9H3z" fill="currentColor"/>
           <path d="M16.5 12a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z" fill="currentColor"/>
@@ -219,6 +220,34 @@
         </svg>
       </button>
       <span class="rail-action-label">Sound</span>
+    </div>
+
+    <!-- SOUND PANEL: three iOS-style pill toggles (red OFF / green ON, white
+         3D knob with center dimple), opened by the sound button. Each row =
+         one audio category bus. Closes on outside tap or Escape. -->
+    <div id="sound-panel" class="sound-panel hidden" role="dialog" aria-label="Sound settings">
+      <div class="sound-panel-title">SOUND</div>
+      <div class="sound-row" data-bus="sfx">
+        <span class="sound-row-label">Game sounds</span>
+        <button type="button" class="pill-toggle" role="switch" aria-label="Toggle game sounds (dig, footsteps)">
+          <span class="pill-track"><span class="pill-text pill-text-off">OFF</span><span class="pill-text pill-text-on">ON</span></span>
+          <span class="pill-knob"><span class="pill-knob-dimple"></span></span>
+        </button>
+      </div>
+      <div class="sound-row" data-bus="amb">
+        <span class="sound-row-label">Forest ambience</span>
+        <button type="button" class="pill-toggle" role="switch" aria-label="Toggle forest ambience (birds, wind)">
+          <span class="pill-track"><span class="pill-text pill-text-off">OFF</span><span class="pill-text pill-text-on">ON</span></span>
+          <span class="pill-knob"><span class="pill-knob-dimple"></span></span>
+        </button>
+      </div>
+      <div class="sound-row" data-bus="music">
+        <span class="sound-row-label">Music</span>
+        <button type="button" class="pill-toggle" role="switch" aria-label="Toggle background music">
+          <span class="pill-track"><span class="pill-text pill-text-off">OFF</span><span class="pill-text pill-text-on">ON</span></span>
+          <span class="pill-knob"><span class="pill-knob-dimple"></span></span>
+        </button>
+      </div>
     </div>
 
     <!-- The wallet (connect) button rides the outer top-right corner, as it
