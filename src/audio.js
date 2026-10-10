@@ -133,30 +133,24 @@ export function startAmbient() {
   };
   ambientTimers.push(setTimeout(leafCycle, 2500));
 
-  // Birds: main chorus clock + a slow owl clock.
+  // Birds: the original single songbird chirp. The expanded chorus
+  // (warble/twoNote/crow/distant/owl) was reverted -- the synthesized calls
+  // read as odd electronic tones, not birds.
   const chorus = () => {
     if (!ctx || !ambientRunning) return;
-    if (!muted) birdCall(WEIGHTED[(Math.random() * WEIGHTED.length) | 0]);
-    ambientTimers.push(setTimeout(chorus, 2500 + Math.random() * 6000));
+    if (!muted) birdCall('chirp');
+    ambientTimers.push(setTimeout(chorus, 3000 + Math.random() * 8000));
   };
   ambientTimers.push(setTimeout(chorus, 1200));
-
-  const owlClock = () => {
-    if (!ctx || !ambientRunning) return;
-    if (!muted) birdCall('owl');
-    ambientTimers.push(setTimeout(owlClock, 45000 + Math.random() * 45000));
-  };
-  ambientTimers.push(setTimeout(owlClock, 20000));
 }
 
 /**
- * Bird call types. WEIGHTED favors small birds; owls get their own slower
- * clock on top of this, so the mix isn't owl-dominated.
+ * The bird call: the ORIGINAL songbird chirp the user liked -- two quick
+ * sine syllables with an up-down sweep. Panned to a random side, distant =
+ * quieter. The expanded chorus types (warble/twoNote/crow/distant/owl) were
+ * removed -- they read as odd electronic tones, not birds.
  */
-const WEIGHTED = ['chirp', 'chirp', 'chirp', 'warble', 'twoNote', 'twoNote', 'crow', 'distant'];
-
-/** One bird call, synthesized per type. Panned to a random side, distant = quieter. */
-function birdCall(type) {
+function birdCall() {
   const t = ctx.currentTime + Math.random() * 0.25;
   const pan = ctx.createStereoPanner();
   pan.pan.value = (Math.random() * 2 - 1) * 0.75;
@@ -167,84 +161,19 @@ function birdCall(type) {
 
   const osc = ctx.createOscillator();
   const g = osc.frequency;
-
-  if (type === 'chirp') {
-    // Songbird: two quick syllables, up-down sweep
-    osc.type = 'sine';
-    const f0 = 2300 + Math.random() * 1700;
-    g.setValueAtTime(f0, t);
-    g.exponentialRampToValueAtTime(f0 * 1.4, t + 0.05);
-    g.exponentialRampToValueAtTime(f0 * 0.85, t + 0.1);
-    osc.connect(pan);
-    osc.start(t); osc.stop(t + 0.12);
-    const o2 = ctx.createOscillator();
-    o2.type = 'sine';
-    o2.frequency.setValueAtTime(f0 * 1.12, t + 0.15);
-    o2.frequency.exponentialRampToValueAtTime(f0 * 0.8, t + 0.25);
-    o2.connect(pan);
-    o2.start(t + 0.15); o2.stop(t + 0.27);
-  } else if (type === 'warble') {
-    // Fast up-down wobble, descending slightly (like a wren)
-    osc.type = 'triangle';
-    const f0 = 1700 + Math.random() * 1300;
-    g.setValueAtTime(f0, t);
-    for (let i = 0; i < 6; i++) {
-      g.exponentialRampToValueAtTime(f0 * (i % 2 ? 1.35 : 0.72), t + 0.045 * (i + 1));
-    }
-    osc.connect(pan);
-    osc.start(t); osc.stop(t + 0.3);
-  } else if (type === 'twoNote') {
-    // Low-then-high (towhee-ish)
-    osc.type = 'sine';
-    g.setValueAtTime(880, t);
-    g.setValueAtTime(880, t + 0.1);
-    g.setValueAtTime(1320, t + 0.15);
-    g.setValueAtTime(1320, t + 0.28);
-    osc.connect(pan);
-    osc.start(t); osc.stop(t + 0.3);
-  } else if (type === 'crow') {
-    // Rough distant caw, two syllables
-    osc.type = 'sawtooth';
-    g.setValueAtTime(640, t);
-    g.exponentialRampToValueAtTime(430, t + 0.16);
-    osc.connect(pan);
-    osc.start(t); osc.stop(t + 0.2);
-    const o2 = ctx.createOscillator();
-    o2.type = 'sawtooth';
-    o2.frequency.setValueAtTime(600, t + 0.24);
-    o2.frequency.exponentialRampToValueAtTime(390, t + 0.4);
-    o2.connect(pan);
-    o2.start(t + 0.24); o2.stop(t + 0.42);
-  } else if (type === 'owl') {
-    // Soft round hoo-hoo: sine ~340Hz, lowpassed, gentle envelope
-    const lp = ctx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.value = 800;
-    const env = ctx.createGain();
-    g.setValueAtTime(340, t);
-    g.exponentialRampToValueAtTime(312, t + 0.22);
-    env.gain.setValueAtTime(0, t);
-    env.gain.linearRampToValueAtTime(0.055, t + 0.05);
-    env.gain.linearRampToValueAtTime(0, t + 0.28);
-    osc.connect(env).connect(lp).connect(pan);
-    osc.start(t); osc.stop(t + 0.3);
-
-    const o2 = ctx.createOscillator();
-    o2.frequency.setValueAtTime(335, t + 0.42);
-    o2.frequency.exponentialRampToValueAtTime(300, t + 0.6);
-    o2.connect(env);
-    o2.start(t + 0.42); o2.stop(t + 0.64);
-  } else if (type === 'distant') {
-    // Far-off generic twitter: three tiny descending blips, very quiet
-    osc.type = 'sine';
-    const f0 = 2600 + Math.random() * 1400;
-    for (let i = 0; i < 3; i++) {
-      const ts = t + i * 0.09;
-      g.setValueAtTime(f0 * (1 - i * 0.12), ts);
-    }
-    osc.connect(pan);
-    osc.start(t); osc.stop(t + 0.32);
-  }
+  osc.type = 'sine';
+  const f0 = 2300 + Math.random() * 1700;
+  g.setValueAtTime(f0, t);
+  g.exponentialRampToValueAtTime(f0 * 1.4, t + 0.05);
+  g.exponentialRampToValueAtTime(f0 * 0.85, t + 0.1);
+  osc.connect(pan);
+  osc.start(t); osc.stop(t + 0.12);
+  const o2 = ctx.createOscillator();
+  o2.type = 'sine';
+  o2.frequency.setValueAtTime(f0 * 1.12, t + 0.15);
+  o2.frequency.exponentialRampToValueAtTime(f0 * 0.8, t + 0.25);
+  o2.connect(pan);
+  o2.start(t + 0.15); o2.stop(t + 0.27);
 }
 
 // ---------------------------------------------------------------------------
