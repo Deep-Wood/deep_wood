@@ -3,6 +3,7 @@ node_modules
 .git
 dist/
 .env.local
+.vercel-token
 
 
 # .env.production IS committed: it holds only public addresses and a public
