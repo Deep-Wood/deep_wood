@@ -31,7 +31,7 @@ const game = new Phaser.Game(config);
 // localStorage remembers the dismissal. Shown once the canvas exists so the
 // forest is visible behind the dimmer.
 import { maybeShowTutorial } from './tutorial.js';
-import { isMuted, toggleMute, resumeAudio, startAmbient, busEnabled, setBusEnabled, anyBusOn } from './audio.js';
+import { isMuted, toggleMute, resumeAudio, startAmbient, busEnabled, setBusEnabled, anyBusOn, attachMusic } from './audio.js';
 game.events.once('ready', () => {
   maybeShowTutorial();
 });
@@ -110,6 +110,12 @@ game.events.once('ready', () => {
       const kick = () => {
         resumeAudio();
         if (anyBusOn()) startAmbient();
+        // Music: attach the <audio> element to the music bus on the first
+        // gesture (preload=none means the file has not been fetched until
+        // now, so first paint stays fast). attachMusic only plays it when
+        // the music pill is ON.
+        const bg = document.getElementById('bg-music');
+        if (bg) attachMusic(bg);
         window.removeEventListener('pointerdown', kick, true);
       };
       window.addEventListener('pointerdown', kick, true);

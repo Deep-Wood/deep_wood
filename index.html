@@ -250,6 +250,12 @@
       </div>
     </div>
 
+    <!-- Background music: "Beyond the Treeline" (user-provided track).
+         Loops on the music bus; the pill toggle in the sound panel mutes it.
+         preload=none so it never competes with the game bundle on first load;
+         it is fetched on the first user gesture (same as the AudioContext). -->
+    <audio id="bg-music" src="/audio/beyond-the-treeline.mp3" loop preload="none"></audio>
+
     <!-- The wallet (connect) button rides the outer top-right corner, as it
          always has. Circular, matching the reference art's round controls.
          The glyph is a proper Web3 WALLET (card in a fold-over case with a
