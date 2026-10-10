@@ -133,24 +133,28 @@ export function startAmbient() {
   };
   ambientTimers.push(setTimeout(leafCycle, 2500));
 
-  // Birds: the original single songbird chirp. The expanded chorus
-  // (warble/twoNote/crow/distant/owl) was reverted -- the synthesized calls
-  // read as odd electronic tones, not birds.
+  // Birds: four call types the user approved from the audio review samples --
+  // chirp (1), warble (2), twoNote (3), distant twitter (6). Crow and owl
+  // were rejected.
+  const CHORUS = ['chirp', 'chirp', 'warble', 'twoNote', 'distant'];
   const chorus = () => {
     if (!ctx || !ambientRunning) return;
-    if (!muted) birdCall('chirp');
+    if (!muted) birdCall(CHORUS[(Math.random() * CHORUS.length) | 0]);
     ambientTimers.push(setTimeout(chorus, 3000 + Math.random() * 8000));
   };
   ambientTimers.push(setTimeout(chorus, 1200));
 }
 
 /**
- * The bird call: the ORIGINAL songbird chirp the user liked -- two quick
- * sine syllables with an up-down sweep. Panned to a random side, distant =
- * quieter. The expanded chorus types (warble/twoNote/crow/distant/owl) were
- * removed -- they read as odd electronic tones, not birds.
+ * The bird call. Approved types only (from the audio review samples):
+ *   chirp   -- sample 1, two quick sine syllables, up-down sweep
+ *   warble  -- sample 2, fast up-down wobble (wren-like)
+ *   twoNote -- sample 3, low-then-high call
+ *   distant -- sample 6, far-off descending twitter, very quiet
+ * Crow and owl were rejected by the user. Panned to a random side,
+ * distant = quieter.
  */
-function birdCall() {
+function birdCall(type) {
   const t = ctx.currentTime + Math.random() * 0.25;
   const pan = ctx.createStereoPanner();
   pan.pan.value = (Math.random() * 2 - 1) * 0.75;
@@ -161,19 +165,48 @@ function birdCall() {
 
   const osc = ctx.createOscillator();
   const g = osc.frequency;
-  osc.type = 'sine';
-  const f0 = 2300 + Math.random() * 1700;
-  g.setValueAtTime(f0, t);
-  g.exponentialRampToValueAtTime(f0 * 1.4, t + 0.05);
-  g.exponentialRampToValueAtTime(f0 * 0.85, t + 0.1);
-  osc.connect(pan);
-  osc.start(t); osc.stop(t + 0.12);
-  const o2 = ctx.createOscillator();
-  o2.type = 'sine';
-  o2.frequency.setValueAtTime(f0 * 1.12, t + 0.15);
-  o2.frequency.exponentialRampToValueAtTime(f0 * 0.8, t + 0.25);
-  o2.connect(pan);
-  o2.start(t + 0.15); o2.stop(t + 0.27);
+
+  if (type === 'chirp') {
+    osc.type = 'sine';
+    const f0 = 2300 + Math.random() * 1700;
+    g.setValueAtTime(f0, t);
+    g.exponentialRampToValueAtTime(f0 * 1.4, t + 0.05);
+    g.exponentialRampToValueAtTime(f0 * 0.85, t + 0.1);
+    osc.connect(pan);
+    osc.start(t); osc.stop(t + 0.12);
+    const o2 = ctx.createOscillator();
+    o2.type = 'sine';
+    o2.frequency.setValueAtTime(f0 * 1.12, t + 0.15);
+    o2.frequency.exponentialRampToValueAtTime(f0 * 0.8, t + 0.25);
+    o2.connect(pan);
+    o2.start(t + 0.15); o2.stop(t + 0.27);
+  } else if (type === 'warble') {
+    osc.type = 'triangle';
+    const f0 = 1700 + Math.random() * 1300;
+    g.setValueAtTime(f0, t);
+    for (let i = 0; i < 6; i++) {
+      g.exponentialRampToValueAtTime(f0 * (i % 2 ? 1.35 : 0.72), t + 0.045 * (i + 1));
+    }
+    osc.connect(pan);
+    osc.start(t); osc.stop(t + 0.3);
+  } else if (type === 'twoNote') {
+    osc.type = 'sine';
+    g.setValueAtTime(880, t);
+    g.setValueAtTime(880, t + 0.1);
+    g.setValueAtTime(1320, t + 0.15);
+    g.setValueAtTime(1320, t + 0.28);
+    osc.connect(pan);
+    osc.start(t); osc.stop(t + 0.3);
+  } else if (type === 'distant') {
+    osc.type = 'sine';
+    const f0 = 2600 + Math.random() * 1400;
+    for (let i = 0; i < 3; i++) {
+      const ts = t + i * 0.09;
+      g.setValueAtTime(f0 * (1 - i * 0.12), ts);
+    }
+    osc.connect(pan);
+    osc.start(t); osc.stop(t + 0.32);
+  }
 }
 
 // ---------------------------------------------------------------------------
