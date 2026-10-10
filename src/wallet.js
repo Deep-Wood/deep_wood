@@ -815,7 +815,7 @@ async function send(data, { valueWei } = {}) {
 export async function sendTo(to, data, { valueWei } = {}) {
   const blocked = notReady();
   if (blocked) return blocked;
-  const tx = { from: state.account, to, data: "0x" + data };
+  const tx = { from: state.account, to, data: data.startsWith("0x") ? data : "0x" + data };
   if (valueWei !== undefined) tx.value = toQuantity(valueWei);
   // Show the centred "Confirm in wallet" flash for the WHOLE time the wallet is
   // open (signature request -> user approves -> hash back). It is hidden in the
