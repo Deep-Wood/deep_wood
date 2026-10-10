@@ -102,6 +102,9 @@ export const SIGS = {
   'settleHunt(address,uint8,uint256[5],uint256,bytes)': '0x2ded79da',
   'setToken(address)': '0x144fa6d7',
   'setTokenRail(bool)': '0x57ffbeff',
+  'setTreasury(address)': '0xf0f44260',
+  'redeemQuoteToken(uint8,uint256)': '0x5156bf21',
+  'tokenBacking()': '0xb1cb1a67',
   'shortOfFloor(address)': '0x2cd21481',
   'skillOf(address)': '0x8955cd0c',
   'startSeasonOne()': '0x89e411c3',
@@ -828,6 +831,20 @@ export async function getBuyNonce(rpcUrl, fallbackRpcUrls, gameAddress, player) 
     'latest'
   ], (r) => typeof r === 'string' && /^0x[0-9a-fA-F]+$/.test(r));
   return BigInt(result);
+}
+
+/**
+ * Set the treasury address (owner-only on-chain).
+ * Treasury was immutable in V4.1; now mutable so fees can be redirected
+ * without a redeploy.
+ */
+export function setTreasuryTx(treasury) {
+  // setTreasury(address)
+  const selector = '0xf0f44260';
+  const params = [
+    treasury.slice(2).toLowerCase().padStart(64, '0')
+  ].join('');
+  return selector + params;
 }
 
 /**
