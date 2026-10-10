@@ -177,9 +177,8 @@ export function startAmbient() {
   };
   ambientTimers.push(setTimeout(leafCycle, 2500));
 
-  // Birds: approved call types only -- chirp (1), warble (2), twoNote (3),
-  // distant twitter (6). Crow and owl were rejected in the review.
-  const CHORUS = ['chirp', 'chirp', 'warble', 'twoNote', 'distant'];
+  // Birds: only distant twitter and songbird chirp (user request).
+  const CHORUS = ['distant', 'chirp'];
   const chorus = () => {
     if (!ctx || !ambientRunning) return;
     if (buses.amb.enabled) birdCall(CHORUS[(Math.random() * CHORUS.length) | 0]);
