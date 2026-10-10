@@ -393,6 +393,15 @@ export function attachMusic(el) {
     musicSrcNode.connect(buses.music.gain);
     musicEl.loop = true;
     musicEl.volume = 0.4;
+    // Mobile Chrome m4a + MediaElementAudioSourceNode: the loop attribute
+    // is unreliable. Add an ended listener as a fallback that seeks back
+    // to 0 and replays when the track finishes.
+    musicEl.addEventListener('ended', () => {
+      if (musicEl) {
+        musicEl.currentTime = 0;
+        musicEl.play().catch(() => {});
+      }
+    });
   }
   startMusic();
 }
