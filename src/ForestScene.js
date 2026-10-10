@@ -2814,12 +2814,17 @@ export class ForestScene extends Phaser.Scene {
     if (moving) {
       // pick the dominant axis for the sprite direction
       this.animatePlayer(vx, vy);
-      if (time - (this._lastStep || 0) > 180) {
-        this._lastStep = time;
+      // Footstep fires ON the walk-cycle contact frames (0 and 2 of the 4-frame
+      // row) so the sound lands exactly when the sprite's foot strikes the
+      // ground -- not on a wall-clock timer that drifts against the animation.
+      const frame = this.player.anims.currentFrame?.index ?? 0;
+      if ((frame === 0 || frame === 2) && frame !== this._lastStepFrame) {
+        this._lastStepFrame = frame;
         this.dust.emitParticleAt(this.player.x, this.player.y + 14);
         playFootstep();
       }
     } else {
+      this._lastStepFrame = -1;
       this.animateIdle(vx, vy);
     }
 
