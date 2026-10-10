@@ -1988,7 +1988,7 @@ export class ForestScene extends Phaser.Scene {
 
     // Get on-chain price
     this.beltMsg('Reading pool price…', 'busy');
-    const { getEthPerToken, getBuyNonce } = await import('./chain.js');
+    const { getEthPerToken, getBuyNonce, getAllowance, getTokenBalance } = await import('./chain.js');
     const { getState } = await import('./wallet.js');
     const ethPerToken = await getEthPerToken(
       this.rpcUrl,
@@ -2013,6 +2013,47 @@ export class ForestScene extends Phaser.Scene {
       this.beltMsg('Token buy requires a connected wallet', 'bad');
       return;
     }
+
+    // Check token balance
+    const tokenBalance = await getTokenBalance(
+      this.rpcUrl,
+      this.fallbackRpcUrls,
+      this.tokenAddress,
+      account
+    );
+    if (tokenBalance < tokenCost) {
+      this.beltMsg(`Not enough $DEEPWOOD (need ${(Number(tokenCost)/1e18).toFixed(2)}, have ${(Number(tokenBalance)/1e18).toFixed(2)})`, 'bad');
+      return;
+    }
+
+    // Check allowance — if insufficient, approve first
+    const allowance = await getAllowance(
+      this.rpcUrl,
+      this.fallbackRpcUrls,
+      this.tokenAddress,
+      account,
+      this.gameAddress
+    );
+    if (allowance < tokenCost) {
+      this.beltMsg('Approving $DEEPWOOD spend…', 'busy');
+      this.setTxPending('belt-buy-token', 'approving');
+      const { approveTokenTx } = await import('./chain.js');
+      const approveData = approveTokenTx(this.gameAddress, tokenCost);
+      let approveResult;
+      try {
+        approveResult = await this.sendTx(approveData);
+      } finally {
+        this.clearTxPending();
+      }
+      if (!approveResult?.ok) {
+        this.beltMsg(approveResult?.reason || 'approval failed', 'bad');
+        return;
+      }
+      this.beltMsg('Approved! Confirm purchase in wallet…', 'busy');
+      // Small delay for the approval to propagate
+      await new Promise(r => setTimeout(r, 2000));
+    }
+
     const nonce = await getBuyNonce(
       this.rpcUrl,
       this.fallbackRpcUrls,

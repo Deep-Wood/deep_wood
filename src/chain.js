@@ -831,6 +831,41 @@ export async function getBuyNonce(rpcUrl, fallbackRpcUrls, gameAddress, player) 
 }
 
 /**
+ * Approve the game contract to spend $DEEPWOOD tokens.
+ * Must be called before buyToolWithToken — transferFrom reverts without it.
+ */
+export function approveTokenTx(spender, amount) {
+  // approve(address,uint256)
+  const selector = '0x095ea7b3';
+  const params = [
+    spender.slice(2).toLowerCase().padStart(64, '0'),
+    amount.toString(16).padStart(64, '0')
+  ].join('');
+  return selector + params;
+}
+
+/**
+ * Get $DEEPWOOD token balance of an address.
+ */
+export async function getTokenBalance(rpcUrl, fallbackRpcUrls, tokenAddress, owner) {
+  const selector = '0x70a08231' + owner.slice(2).toLowerCase().padStart(64, '0');
+  const result = await rpcFirst(rpcUrl, fallbackRpcUrls, 'eth_call', [{ to: tokenAddress, data: selector }, 'latest']);
+  return BigInt(result);
+}
+
+/**
+ * Get $DEEPWOOD token allowance for a spender.
+ */
+export async function getAllowance(rpcUrl, fallbackRpcUrls, tokenAddress, owner, spender) {
+  // allowance(address,address) = 0xdd62ed3e
+  const selector = '0xdd62ed3e' +
+    owner.slice(2).toLowerCase().padStart(64, '0') +
+    spender.slice(2).toLowerCase().padStart(64, '0');
+  const result = await rpcFirst(rpcUrl, fallbackRpcUrls, 'eth_call', [{ to: tokenAddress, data: selector }, 'latest']);
+  return BigInt(result);
+}
+
+/**
  * Buy tool with $DEEPWOOD token at 10% discount.
  * Returns a transaction to be signed by the wallet.
  */
