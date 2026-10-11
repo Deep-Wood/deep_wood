@@ -29,6 +29,7 @@ await page.evaluateOnNewDocument(() => {
   try { localStorage.setItem('dw-tutorial-v1', '1'); } catch { /* ignore */ }
 });
 
+await page.evaluateOnNewDocument(() => { window.__E2E_TEST__ = true; });
 await page.goto(`${URL}?cb=${Math.random().toString(36).slice(2)}`, {
   // domcontentloaded, NOT networkidle: the page streams background music and
   // polls the chain forever, so "idle" never arrives and the navigation times

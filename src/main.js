@@ -1,13 +1,41 @@
 import Phaser from 'phaser';
 import { ForestScene } from './ForestScene.js';
 
+// WebGL detection: on weak GPUs the framebuffer is unsupported and Phaser
+// throws "Framebuffer status: Framebuffer Unsupported". Fall back to Canvas
+// instead of crashing.
+function detectRenderer() {
+  try {
+    const c = document.createElement('canvas');
+    const gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+    if (!gl) return Phaser.CANVAS;
+    // Test framebuffer support
+    const fb = gl.createFramebuffer();
+    if (!fb) return Phaser.CANVAS;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    const tex = gl.createTexture();
+    if (!tex) { gl.deleteFramebuffer(fb); return Phaser.CANVAS; }
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+    gl.deleteTexture(tex);
+    gl.deleteFramebuffer(fb);
+    return status === gl.FRAMEBUFFER_COMPLETE ? Phaser.AUTO : Phaser.CANVAS;
+  } catch {
+    return Phaser.CANVAS;
+  }
+}
+
 const config = {
-  type: Phaser.AUTO,
+  type: detectRenderer(),
   parent: 'game',
   backgroundColor: '#0d1a10',
   pixelArt: true,
   // Required for the headless smoke test to read back rendered pixels.
-  preserveDrawingBuffer: true,
+  // Disabled in production: on some mobile GPUs it causes "Framebuffer status:
+  // Framebuffer Unsupported". Only the e2e test needs it.
+  preserveDrawingBuffer: typeof window !== 'undefined' && window.__E2E_TEST__ === true,
   // The ForestScene uses this.physics.add.sprite and this.physics.world.
   // Without arcade physics enabled the scene threw on
   // `this.physics.world.setBounds(...)` and rendered an empty canvas.
@@ -31,7 +59,7 @@ const game = new Phaser.Game(config);
 // localStorage remembers the dismissal. Shown once the canvas exists so the
 // forest is visible behind the dimmer.
 import { maybeShowTutorial } from './tutorial.js';
-import { isMuted, toggleMute, resumeAudio, startAmbient, busEnabled, setBusEnabled, anyBusOn, attachMusic, startMusic } from './audio.js';
+import { resumeAudio, startAmbient, busEnabled, setBusEnabled, anyBusOn, attachMusic, startMusic } from './audio.js';
 game.events.once('ready', () => {
   maybeShowTutorial();
 });

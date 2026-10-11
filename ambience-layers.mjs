@@ -14,6 +14,7 @@ const URL = process.argv[2] || 'http://127.0.0.1:5173/';
 const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
 const page = await browser.newPage();
 await page.setViewport({ width: 390, height: 844 });
+await page.evaluateOnNewDocument(() => { window.__E2E_TEST__ = true; });
 await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
 await page.waitForFunction('window.__scene && window.__scene.player', { timeout: 30000 });
 await new Promise((r) => setTimeout(r, 1500));

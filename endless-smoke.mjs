@@ -24,6 +24,7 @@ const errs = [];
 page.on('pageerror', (e) => errs.push('pageerror: ' + e.message));
 page.on('console', (m) => m.type() === 'error' && errs.push(m.text()));
 
+await page.evaluateOnNewDocument(() => { window.__E2E_TEST__ = true; });
 await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
 await page.waitForFunction('window.__scene && window.__scene.player', { timeout: 30000 });
 await new Promise((r) => setTimeout(r, 1200));

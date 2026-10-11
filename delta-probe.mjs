@@ -27,6 +27,7 @@ await page.setViewport({ width: 1280, height: 800 });
 
 // NOT networkidle2: the game polls the chain continuously so the network never
 // goes idle and the navigation times out.
+await page.evaluateOnNewDocument(() => { window.__E2E_TEST__ = true; });
 await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
 await page.waitForSelector('#game canvas', { timeout: 30000 }).catch(() => {});
 

@@ -70,7 +70,7 @@ import {
   TOP_N,
 } from './season.js';
 import { fetchChainLeaderboard } from './leaderboard.js';
-import { playFootstep, playPick, playReveal, startAmbient, resumeAudio, isMuted, toggleMute } from './audio.js';
+import { playFootstep, playPick, playReveal, startAmbient, resumeAudio } from './audio.js';
 import {
   initCommitment, commitSeason, verifySeason, seasonState, rollSeason,
 } from './commitment.js';
@@ -3510,12 +3510,12 @@ export class ForestScene extends Phaser.Scene {
         this.busy = false;
         return false;
       }
-      this.queue.push(preview.counts, preview.bestSingleWei);
+      this.queue.push(preview.counts, preview.bestSingleWei ?? 0n);
       result = {
         counts: preview.counts.map((n) => Number(n)),
-        bestSingleWei: preview.bestSingleWei,
+        bestSingleWei: preview.bestSingleWei ?? 0n,
         total: preview.counts.reduce((a, b) => a + Number(b), 0),
-        valueWei: preview.bestSingleWei,
+        valueWei: preview.bestSingleWei ?? 0n,
         pending: true,
       };
       this.huntIndex += 1;

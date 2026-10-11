@@ -22,7 +22,8 @@ const errs = [];
 page.on('console', (m) => m.type() === 'error' && errs.push(m.text()));
 page.on('pageerror', (e) => errs.push('pageerror: ' + e.message));
 
-const res = await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
+const res = await page.evaluateOnNewDocument(() => { window.__E2E_TEST__ = true; });
+await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
 check('serves 200', res.status() === 200, 'got ' + res.status());
 check('title is DeepWood', (await page.title()) === 'DeepWood', await page.title());
 

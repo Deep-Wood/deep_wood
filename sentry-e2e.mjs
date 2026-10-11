@@ -38,6 +38,10 @@ page.on('request', (req) => {
 const inbox = [];
 page.on('request', (req) => { if (req.url().includes('/envelope/')) inbox.push(Date.now()); });
 
+await page.evaluateOnNewDocument(() => {
+  window.__E2E_TEST__ = true;
+});
+
 await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
 await page.waitForFunction('window.__reporter', { timeout: 20000 });
 await new Promise((r) => setTimeout(r, 4000));
