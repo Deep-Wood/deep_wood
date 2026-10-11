@@ -335,16 +335,16 @@ export async function upgradeSkillOnchain(level, currentSkill) {
 }
 
 /**
- * Cash gems out for ETH.
+ * Cash gems out for $DEEPWOOD.
  *
- * Confirmation signal: the gem balance FELL by the amount redeemed. The ETH
- * arrives asynchronously in the same transaction, so there is nothing to poll
- * on the ETH side -- and the payout is the contract's, not the client's, so it
- * must never be computed locally or shown as guaranteed.
+ * Confirmation signal: the gem balance FELL by the amount redeemed. The token
+ * arrives in the same transaction, so there is nothing to poll on the token
+ * side -- and the payout is the contract's, not the client's, so it must never
+ * be computed locally or shown as guaranteed.
  *
- * The 0.005 ETH floor is enforced on chain with BelowMinRedeem. Ask the
- * contract's own `redeemQuote` before sending so the button can explain why a
- * redemption is too small, rather than letting the player sign and fail.
+ * The floor is enforced on chain with BelowMinRedeem. Ask the contract's own
+ * `redeemQuoteToken` before sending so the button can explain why a redemption
+ * is too small, rather than letting the player sign and fail.
  */
 export async function redeemGemsOnchain(rarity, count) {
   const r = await getReader();
@@ -367,13 +367,30 @@ export async function redeemGemsOnchain(rarity, count) {
     );
   }
 
-  // Quote first: the floor is a real rejection, not a formality.
-  const [payout, aboveFloor] = await r.redeemQuote(rarity, count);
-  if (!aboveFloor) {
-    return fail(
-      "below-floor",
-      `that redeems for ${payout} wei, below the ${r.minRedeemWei?.() ?? "minimum"} minimum`,
-    );
+  // Quote first: the floor is a real rejection, not a formality. The token
+  // rail is the only rail V4 pays from, so the token quote is the one that
+  // decides whether the contract would accept this redemption.
+  let payout = 0n;
+  try {
+    const q = await r.redeemQuoteToken(rarity, count);
+    payout = q.tokens ?? 0n;
+    if (!q.aboveFloor) {
+      return fail(
+        "below-floor",
+        `that redeems for ${payout} $DEEPWOOD, below the contract's minimum`,
+      );
+    }
+  } catch {
+    // A reader without the token quote (older contract) falls through to the
+    // ETH quote below, which is the pre-token-rail behaviour.
+    const [ethPayout, aboveFloor] = await r.redeemQuote(rarity, count);
+    payout = ethPayout;
+    if (!aboveFloor) {
+      return fail(
+        "below-floor",
+        `that redeems for ${ethPayout} wei, below the contract's minimum`,
+      );
+    }
   }
 
   const sent = await wRedeemGems(rarity, count);

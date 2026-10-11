@@ -250,6 +250,46 @@
       </div>
     </div>
 
+    <!-- REDEMPTION CARD: pick ONE rarity and an amount, redeem it for
+         $DEEPWOOD. Opened by the "sell gems" rail action. The contract redeems
+         a single rarity per call, so the card is single-rarity by design: a
+         multi-select would need several signatures and would quote a total the
+         contract never charges. Closes on outside tap, Escape, or the X. -->
+    <div id="redeem-card" class="redeem-card hidden" role="dialog" aria-modal="true" aria-label="Redeem gems">
+      <div class="redeem-head">
+        <span class="redeem-title">Redeem gems</span>
+        <button type="button" class="redeem-x" id="redeem-close" aria-label="Close">&#215;</button>
+      </div>
+
+      <div class="redeem-body">
+        <!-- Rarity picker. Five fixed rows, empty ones disabled, so the card
+             does not reflow as balances change under the player's finger. -->
+        <div class="redeem-label">Choose a gem</div>
+        <div class="redeem-rarities" id="redeem-rarities" role="radiogroup" aria-label="Gem to redeem"></div>
+
+        <!-- Amount. Percentage chips plus a free-text field; both write the
+             same number, so there is one source of truth for what is being
+             redeemed. -->
+        <div class="redeem-label">Amount</div>
+        <div class="redeem-amount">
+          <input type="text" id="redeem-input" class="redeem-input" inputmode="numeric"
+                 autocomplete="off" spellcheck="false" aria-label="Amount to redeem">
+          <span class="redeem-of" id="redeem-of">of 0</span>
+        </div>
+        <div class="redeem-pcts" id="redeem-pcts"></div>
+
+        <!-- What it pays. Read from the contract's own redeemQuoteToken so the
+             card can never quote a number the contract would refuse. -->
+        <div class="redeem-quote">
+          <span class="redeem-quote-label">You receive</span>
+          <span class="redeem-quote-val" id="redeem-quote">--</span>
+        </div>
+        <div class="redeem-msg" id="redeem-msg" role="status"></div>
+
+        <button type="button" class="redeem-btn" id="redeem-go" disabled>Redeem</button>
+      </div>
+    </div>
+
     <!-- Background music: "Beyond the Treeline" (user-provided track).
          Stream-copied from the source AAC (no transcoding loss). Loops on
          the music bus; the pill toggle in the sound panel mutes it.

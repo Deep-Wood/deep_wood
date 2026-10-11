@@ -33,6 +33,7 @@ const SAFE = (() => {
 /** Whether the per-chunk decoration layers load at all. */
 const DECORATE = SAFE !== 1 && SAFE !== 3;
 import { rollHunt, RARITY_NAME } from './engine.js';
+import { createRedeemCard } from './redeemcard.js';
 import { HuntQueue, MAX_BATCH } from './queue.js';
 import {
   CHUNK, chunkOf, describeChunk, nodeKey,
@@ -1670,17 +1671,27 @@ export class ForestScene extends Phaser.Scene {
         + '<path d="M6.5 10.5h11" fill="none" stroke="currentColor" stroke-width="1.6"/>'
         + '<path d="M9 7l1.4 3.5M15 7l-1.4 3.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>'
         + '</svg>';
-      sell.setAttribute('aria-label', 'Sell gems');
-      sell.title = held > 0 ? `sell ${held} gems for ${shortVal} ${payoutLabel}` : 'no gems to sell';
-      const rchk = canRedeem(p);
-      sell.disabled = !rchk.ok;
-      if (!rchk.ok) sell.title = rchk.reason;
-      sell.onclick = () => this.doSellGems();
+      sell.setAttribute('aria-label', 'Redeem gems');
+      sell.title = held > 0 ? `redeem gems for ${payoutLabel}` : 'no gems to redeem';
+      // The card is the gate now, not `canRedeem`. canRedeem checks the
+      // AGGREGATE satchel against the ETH floor, which would grey the button
+      // for a player whose 1600 quartz alone is fine but whose total is under
+      // the floor -- and more importantly the floor applies PER REDEMPTION,
+      // which the card enforces with the contract's own quote. Disabling here
+      // would make the card unreachable for exactly the player it was built
+      // for.
+      sell.disabled = held <= 0;
+      if (held <= 0) sell.title = 'no gems to redeem';
+      // Opens the redemption CARD rather than dumping the whole satchel. The
+      // old one-tap behaviour redeemed every rarity in sequence, which meant a
+      // player with 1600 quartz could not take out 1500 -- they either took
+      // all of it or none.
+      sell.onclick = () => this.openRedeemCard();
       this.decoratePending(sell);
       swrap.appendChild(sell);
       const slbl = document.createElement('span');
       slbl.className = 'rail-action-label';
-      slbl.textContent = 'sell gems';
+      slbl.textContent = 'redeem';
       swrap.appendChild(slbl);
       el.appendChild(swrap);
     }
@@ -1921,6 +1932,16 @@ export class ForestScene extends Phaser.Scene {
       if (!account) return;
       const held = await Promise.all(ALL_RARITIES.map((x) => r.gemsOf(account, x)));
       this.econ.gems = held.map((n) => Number(n ?? 0));
+      // Whether the token rail has opened. The redemption card gates on this:
+      // before graduation the contract reverts TokenRailLocked, so the card
+      // must say "opens when the season graduates" rather than let the player
+      // sign a guaranteed revert. Read here because this already runs on every
+      // connect/hunt/buy/repair/sell cycle.
+      try {
+        this._tokenRailActive = await r.tokenRedemptionActive();
+      } catch {
+        this._tokenRailActive = false;
+      }
       // These five numbers ARE the satchel -- one per rarity, straight off the
       // contract. There is no second tally (no lifetime 'found', no mirror that
       // could drift): the tiles are read from this array and the array is read
@@ -1929,6 +1950,7 @@ export class ForestScene extends Phaser.Scene {
       // window.renderGems reads this same array but only repaints when someone
       // calls it, and refreshChainGems used to be a headless write.
       window.renderGems?.();
+      this._redeemCard?.refresh();
     } catch {
       // Leave the mirror alone: an unreadable balance is not an empty one.
     }
@@ -2436,7 +2458,54 @@ export class ForestScene extends Phaser.Scene {
    * The payout is ALWAYS the chain's own quote. Computing 90% of face value
    * locally and showing it as guaranteed is exactly the kind of number that
    * turns out to be wrong at the moment the player relies on it.
+   *
+   * Superseded by the redemption card for player-initiated flows: a player who
+   * wants to take out 1500 of 1600 quartz cannot express that as "sell all".
+   * Kept because the card's own fallback path and the sim-mode branch still
+   * route through it.
    */
+  /**
+   * Open the redemption card.
+   *
+   * The card is created lazily and cached: it reads the LIVE gem balance on
+   * every render, so there is nothing to keep in sync between openings, and
+   * building it once avoids re-attaching listeners on every tap.
+   */
+  openRedeemCard() {
+    if (!this._redeemCard) {
+      this._redeemCard = createRedeemCard({
+        getBalances: () => this.econ.gems ?? [0, 0, 0, 0, 0],
+        railActive: () => this._tokenRailActive === true,
+        onQuote: async (rarity, amount) => {
+          const { getReader } = await import('./onchain.js');
+          const r = await getReader();
+          if (!r?.redeemQuoteToken) return null;
+          return r.redeemQuoteToken(rarity, BigInt(amount));
+        },
+        onRedeem: async (rarity, amount) => {
+          const { redeemGemsOnchain } = await import('./onchain.js');
+          const res = await redeemGemsOnchain(rarity, amount);
+          if (res.ok) {
+            // The chain moved; pull the authoritative balances back so the
+            // satchel, the strip and the card all agree with it.
+            await this.refreshChainBalance();
+            this.refreshBelt();
+            window.renderGems?.();
+            this.updateHud();
+          }
+          return res;
+        },
+        onStatus: (msg, kind) => this.beltMsg(msg, kind),
+      });
+    }
+    if (!this._redeemCard) {
+      this.beltMsg('Redemption is unavailable on this build.', 'bad');
+      return;
+    }
+    this._redeemCard.refresh();
+    this._redeemCard.open();
+  }
+
   async doSellGems() {
     if (this.txBusy) return;
     this.txBusy = true;

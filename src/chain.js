@@ -572,6 +572,19 @@ export async function connect({ rpcUrl, address, player, fallbackRpcUrls = [] })
     },
     minRedeemWei: async () => dUint(await rpc.call(to, sel('minRedeemWei()'))),
 
+    // redeemQuoteToken(uint8,uint256) view returns (uint256 tokens, bool aboveFloor)
+    // The token rail's quote. Same shape as redeemQuote, but the payout is in
+    // $DEEPWOOD at the live pool price -- the card displays THIS number, so it
+    // can never promise a payout the contract would refuse.
+    redeemQuoteToken: async (rarity = 0, count = 1n) => {
+      const raw = await rpc.call(
+        to,
+        sel('redeemQuoteToken(uint8,uint256)') + arg8(rarity) + argUint(count)
+      );
+      const w = wordsOf(raw);
+      return { tokens: w[0], aboveFloor: w[1] !== 0n };
+    },
+
     // --- per-player ---
     // The settlement confirmation signal: settleHunt increments this, so
     // poll-until-changed on it proves the chain applied the write.
