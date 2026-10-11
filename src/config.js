@@ -51,7 +51,21 @@ export const config = {
     .split(',')
     .map((u) => u.trim())
     .filter((u) => u && u !== DEFAULTS.rpcUrl),
-  gameAddress: (env.VITE_GAME_ADDRESS || '0xabcb9bc1c5dff2875be528460f7396a07cb76216').trim(),
+  /**
+   * Deployed game address.
+   *
+   * The fallback is deliberately EMPTY rather than a hardcoded address. It used
+   * to default to an old deploy, which meant a build that lost its env vars
+   * silently read a dead contract -- and because the old contract answers some
+   * of the same selectors, it looked plausible instead of failing. Worse, the
+   * live tests loaded `.env.local` (a stale address) ahead of `.env.production`
+   * and so passed against the wrong contract for weeks.
+   *
+   * Empty makes `isConfigured()` false, which is a loud, correct failure:
+   * the site reports "offline" and the live tests SKIP rather than assert
+   * against something that is not the game.
+   */
+  gameAddress: (env.VITE_GAME_ADDRESS || '').trim(),
   /**
    * Block the game contract was deployed at. The event scan (leaderboard) only
    * needs to cover deploy..latest, but the chain is ~133M blocks old and the
