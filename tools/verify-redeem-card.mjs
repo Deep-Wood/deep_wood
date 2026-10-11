@@ -95,11 +95,20 @@ if (opened.ok && !opened.hidden) {
     const inp = document.getElementById('redeem-input');
     inp.value = '1500';
     inp.dispatchEvent(new Event('input', { bubbles: true }));
-    await new Promise((r) => setTimeout(r, 300));
-    const quote = document.getElementById('redeem-quote')?.textContent;
-    const msg = document.getElementById('redeem-msg')?.textContent;
-    const goDisabled = document.getElementById('redeem-go')?.disabled;
-    return { quote, msg, goDisabled, of: document.getElementById('redeem-of')?.textContent };
+    // The quote is a live RPC round-trip (~800ms on this testnet, plus a cold
+    // start), so poll rather than assuming one fixed wait is enough.
+    let quote = '--';
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 500));
+      quote = document.getElementById('redeem-quote')?.textContent ?? '--';
+      if (quote && quote !== '--') break;
+    }
+    return {
+      quote,
+      msg: document.getElementById('redeem-msg')?.textContent,
+      goDisabled: document.getElementById('redeem-go')?.disabled,
+      of: document.getElementById('redeem-of')?.textContent,
+    };
   });
   console.log('TYPED:', JSON.stringify(typed));
 }
