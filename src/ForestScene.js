@@ -1536,6 +1536,12 @@ export class ForestScene extends Phaser.Scene {
       buy.title = shortLabel + (chk.ok ? '' : '\n' + chk.reason);
       buy.disabled = !chk.ok;
       if (!chk.ok) buy.title = chk.reason;
+      // When the tool is not broken and an upgrade is attempted, show a
+      // clear message instead of silently disabling the button -- the player
+      // needs to know WHY they cannot upgrade yet.
+      if (!chk.ok && chk.reason && chk.reason.startsWith('Use up your')) {
+        this.beltMsg(chk.reason, 'bad');
+      }
 
       // Dropdown: one button, two payment options.
       // "pay eth" always available; "pay DeepWood 10% off" only when the token
@@ -1624,7 +1630,15 @@ export class ForestScene extends Phaser.Scene {
         }
       } else {
         // No token rail: single action, no dropdown.
-        buy.onclick = () => this.doBuyTool(nt);
+        // If the tool is not broken, show a message instead of silently
+        // doing nothing -- the player needs to know WHY they cannot upgrade.
+        buy.onclick = () => {
+          if (!chk.ok && chk.reason && chk.reason.startsWith('Use up your')) {
+            this.beltMsg(chk.reason, 'bad');
+            return;
+          }
+          this.doBuyTool(nt);
+        };
       }
     }
     this.decoratePending(buy);

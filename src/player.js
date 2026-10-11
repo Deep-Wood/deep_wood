@@ -94,6 +94,13 @@ export function canBuyTool(p, tier, balance = 0n) {
   if (tier > p.tier + 1) {
     return { ok: false, reason: `${toolName(tier - 1)} first` };
   }
+  // An upgrade REPLACES the tool, so it is only available on a broken one.
+  // Upgrading a working tool would let a player abandon the durability ladder
+  // they are supposed to climb -- the contract enforces the same rule, this is
+  // the mirror that stops the wallet prompt from opening on a doomed signature.
+  if (p.tier > 0 && p.left > 0) {
+    return { ok: false, reason: `Use up your ${toolName(p.tier)} first (it still has ${p.left} uses left)` };
+  }
   const cost = toolPrice(tier);
   if (balance < cost) {
     return { ok: false, reason: `Need ${fmtEth(cost)}, have ${fmtEth(balance)}`, short: true };
@@ -113,6 +120,11 @@ export function canBuyTool(p, tier, balance = 0n) {
 export function buyTool(p, tier, balance = 0n) {
   const check = canBuyTool(p, tier, balance);
   if (!check.ok) return check;
+
+  // Broken-only upgrade guard (mirrors the contract's NotBroken revert).
+  if (p.tier > 0 && p.left > 0) {
+    return { ok: false, reason: `Use up your ${toolName(p.tier)} first (it still has ${p.left} uses left)` };
+  }
 
   const cost = toolPrice(tier);
   const fee = treasuryFee(cost);
