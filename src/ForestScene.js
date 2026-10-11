@@ -3506,6 +3506,32 @@ export class ForestScene extends Phaser.Scene {
     const FAN = 1;
     const baseX = node.x;
 
+    // Full-haul text label: show EVERY rarity in the haul, not just the top one.
+    // The sprite fan-out was cut to one gem (the highest rarity) for visual
+    // clarity, but that hid lower-rarity finds -- a player who rolled 1 quartz
+    // + 3 sapphires saw only "x3" on a sapphire and was surprised when the
+    // satchel showed the quartz after settling. This label closes that gap.
+    const haulParts = [];
+    result.counts.forEach((c, r) => { if (c > 0) haulParts.push(`${c}${'QASRD'[r]}`); });
+    if (haulParts.length > 0) {
+      const haulLabel = this.add.text(baseX, w.y + 44, haulParts.join(' + '), {
+        fontFamily: 'ui-monospace, monospace',
+        fontSize: '11px',
+        color: '#c8e8c8',
+        stroke: '#0b1512',
+        strokeThickness: 3,
+      }).setOrigin(0.5).setDepth(60001).setAlpha(0.95);
+      this.tweens.add({
+        targets: haulLabel,
+        y: w.y - 20,
+        alpha: 0,
+        duration: 1200,
+        delay: 300,
+        ease: 'Sine.in',
+        onComplete: () => haulLabel.destroy(),
+      });
+    }
+
     shown.slice(0, FAN).forEach((s, i) => {
       // The GENERATED cut gem, loaded from art/gem-*.png as 'gen-gem-N'.
       // Source art has its longest edge at 192px, so GEM_SCALE brings a gem to
