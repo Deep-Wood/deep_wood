@@ -31,6 +31,18 @@ export function createRedeemCard({
   const card = document.getElementById('redeem-card');
   if (!card) return null;
 
+  // The card ships inside #hud, which is a stacking context (z-index: 9) AND
+  // has pointer-events: none with auto only for its direct children. Two
+  // consequences, both bugs:
+  //   1. The card's own z-index is scoped to #hud, so the backdrop (z-index 70
+  //      on <body>) painted OVER it -- and the backdrop's backdrop-filter:blur
+  //      then blurred the card. The whole dialog read as "blurred out".
+  //   2. A nested element inherits the pointer-events: none, so its controls
+  //      were not clickable.
+  // Reparenting to <body> puts both on the root stacking context, where their
+  // z-indexes mean what they say.
+  document.body.appendChild(card);
+
   const backdrop = document.createElement('div');
   backdrop.className = 'redeem-backdrop hidden';
   document.body.appendChild(backdrop);

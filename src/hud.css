@@ -1241,6 +1241,11 @@ button.chip { position: relative; }
 .redeem-card {
   position: fixed;
   z-index: 71;
+  /* Explicit, because this element is created inside #hud (pointer-events:
+     none, auto only for direct children) before being reparented to <body>.
+     If it is ever left in place, the card must still be operable rather than
+     silently unclickable. */
+  pointer-events: auto;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
