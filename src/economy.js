@@ -52,8 +52,8 @@ export const MAX_TIER = 5;
 /** Wood / Bronze / Iron / Steel / Gold. */
 export const TIER_NAME = ['', 'Wood', 'Bronze', 'Iron', 'Steel', 'Gold'];
 
-/** Drop table per tier, per 10,000 hunts. Index is rarity.
- *  Gold additionally requires Skill 4 -- see gatedDropTable(). */
+/** Drop table per tier, per 10,000 hunts. Index is rarity. This is the
+ *  tier's CEILING -- skill can only lower it. See dropTable(). */
 export const DROP_TABLE = {
   1: [10000, 0, 0, 0, 0],
   2: [6000, 4000, 0, 0, 0],
@@ -62,12 +62,25 @@ export const DROP_TABLE = {
   5: [3000, 3000, 2500, 1300, 200],
 };
 
-/** Gold without Skill 4: no Diamond at all (SPEC section 2). */
-const GOLD_NO_SKILL4 = [3000, 3000, 3000, 1000, 0];
-
-export function dropTable(tier, skill = 1) {
-  if (tier === 5 && skill < 4) return GOLD_NO_SKILL4;
-  return DROP_TABLE[tier];
+/**
+ * dropTable(tier, skill) mirrored in JS: a tier's own table with every rarity
+ * above the unlocked ceiling folded DOWN into Quartz.
+ *
+ * Mirrors DeepWoodV4.dropTable. Locked weight is REDIRECTED, not dropped, so
+ * the row always sums to 10,000 and an unskilled hunter is 100% Quartz at
+ * every tier -- they always earn something and can always dig out.
+ *
+ * This replaces an earlier special case that only gated Gold's Diamond band
+ * (`if (tier === 5 && skill < 4) return GOLD_NO_SKILL4`). The gate is now
+ * general: skill N unlocks Rarity(N), so a tier-3 tool at skill 0 mines pure
+ * Quartz rather than rolling Sapphire the contract would then reject.
+ */
+export function dropTable(tier, skill = 0) {
+  const t = (DROP_TABLE[tier] ?? DROP_TABLE[1]).slice();
+  for (let r = 1; r <= 4; r++) {
+    if (r > skill) { t[0] += t[r]; t[r] = 0; }
+  }
+  return t;
 }
 
 // --- section 4: durability and tool prices -------------------------------
@@ -133,21 +146,23 @@ export function repairCostWei(tier) {
 // --- section 6: skill -----------------------------------------------------
 
 /**
- * Quartz burned to reach each skill level. `cost = 500 * targetSkill` in
+ * Quartz burned to reach each skill level. `cost = 200 * targetSkill` in
  * DeepWoodV4.upgradeSkill -- the contract charges COMMON (Quartz) only, one
- * level at a time.
+ * level at a time, and a level is only purchasable up to the tier you hold.
  *
- * This used to be a per-rarity table ({2: 40 Sapphire, 3: 15 Ruby, 4: 5
- * Diamond}) which matched no deployed contract: upgradeSkill() has always
- * burned Quartz at 500/level. Nothing imported the old constant, so it was
- * invisible -- but the moment a skill UI is built on it, it would quote a
- * price ~25x too low and every upgrade would revert InsufficientGems.
- * Keep this in lockstep with the contract's `500 * targetSkill`.
+ * Keep this in lockstep with the contract's `skillCost()`. It was 500/level,
+ * which at the honest phase rates is ~4,400 hunts to full unlock; a skill
+ * level DILUTES quartz (it opens a rarer gem, taking weight off the quartz
+ * band), so the last levels were the slowest. 200/level puts full unlock at
+ * ~1,760 hunts with break-even around skill 3.
+ *
+ * Read the live value from `chain.skillCost(level)` when you can -- this table
+ * exists so the UI can render a price before any RPC round trip.
  */
-export const SKILL_COST_QUARTZ = { 2: 1000, 3: 1500, 4: 2000 };
+export const SKILL_COST_QUARTZ = { 1: 200, 2: 400, 3: 600, 4: 800 };
 
-/** Total Quartz to reach each level from skill 1 (cumulative). */
-export const SKILL_TOTAL_QUARTZ = { 2: 1000, 3: 2500, 4: 4500 };
+/** Total Quartz to reach each level from skill 0 (cumulative). */
+export const SKILL_TOTAL_QUARTZ = { 1: 200, 2: 600, 3: 1200, 4: 2000 };
 
 /** Quartz burned to go from `cur` to the next level, or null when maxed. */
 export function skillUpCostQuartz(cur) {
@@ -155,10 +170,35 @@ export function skillUpCostQuartz(cur) {
   return SKILL_COST_QUARTZ[next] ?? null;
 }
 
-/** Rarity each skill level unlocks. Skill 2 -> Sapphire, 3 -> Ruby,
- *  4 -> Diamond. Skill 1 unlocks nothing: Quartz and Amber are the free
- *  baseline so a new player is never locked out of the first hunt. */
-export const SKILL_UNLOCKS = { 1: 0, 2: 2, 3: 3, 4: 4 };
+/**
+ * The rarity each skill level unlocks. Skill N -> Rarity(N): 1=Amber,
+ * 2=Sapphire, 3=Ruby, 4=Diamond.
+ *
+ * A level is INERT until the tool catches up. Skill 1 unlocks Amber, but a
+ * Wood tool's table is 100% Quartz, so a Wood hunter who buys skill 1 sees no
+ * change until they upgrade to Bronze. The skill is the PERMISSION to mine the
+ * next rarity; the tool is the ABILITY.
+ */
+export const SKILL_UNLOCKS = { 1: 1, 2: 2, 3: 3, 4: 4 };
+
+/**
+ * The highest skill level a player may buy, given the tool they hold.
+ * One level per tier: upgradeSkill requires targetSkill <= heldTier.
+ */
+export function maxBuyableSkill(toolTier) {
+  if (!toolTier || toolTier < 1) return 0;
+  return Math.min(4, toolTier);
+}
+
+/**
+ * The lowest skill level a player may hold at a given tool tier -- the
+ * interlock floor. buyTool requires skillOf >= tier-1, so holding tier T means
+ * skill T-1 or T. Below this the player cannot climb.
+ */
+export function minSkillForTier(toolTier) {
+  if (!toolTier || toolTier < 2) return 0;
+  return Math.min(4, toolTier - 1);
+}
 
 // --- section 7: redemption -----------------------------------------------
 
