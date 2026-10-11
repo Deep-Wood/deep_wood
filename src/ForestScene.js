@@ -3567,52 +3567,21 @@ export class ForestScene extends Phaser.Scene {
     });
     burst.explode(8);
 
-    // The reveal shows THE gem that was mined, not every rarity in the haul.
+    // The reveal shows THE gem that was mined, with its count.
     //
-    // The fan-out this replaces was my own mistake, reported back as "when it
-    // claims a gem that is not quartz, it shows both the gem and the quartz
-    // gem". The cause is in engine.js: a hunt rolls 3-5 gems INDEPENDENTLY from
-    // the drop table, and quartz is the common tier, so counts[0] is non-zero in
-    // almost every single haul. Fanning out all non-zero rarities therefore put
-    // a quartz sprite on screen next to the ruby that actually mattered, every
-    // time. Quartz was not a bug in the roll; it was the roll working correctly
-    // and the presentation failing to prioritise it.
+    // A hunt rolls ONE rarity, 1-5 copies of it (engine.js rollHunt, mirroring
+    // the contract's _rollHunt). Rarities are never mixed in a single dig, so
+    // there is exactly one non-zero entry in counts[] and the "highest rarity"
+    // is simply the one that was rolled.
     //
-    // So: one sprite, for the highest rarity in the haul (`topRarity`, computed
-    // above). That is the stone the player was hunting for, and it is the one
-    // worth drawing. The full haul is not lost -- it is already credited to
-    // the player's balance and recorded on the season board, and the satchel lists
-    // every rarity with its count. If the haul is pure quartz, topRarity is 0
-    // and a quartz sprite shows, which is correct.
+    // History: this used to fan out every non-zero rarity, which put a quartz
+    // sprite next to the ruby that mattered -- because an older engine rolled
+    // 3-5 gems independently and quartz was near-guaranteed. The engine no
+    // longer does that, so the fan-out and its "full haul" text label are both
+    // gone. One sprite, one count.
     const shown = [{ rarity: topRarity, count: result.counts[topRarity] }];
     const FAN = 1;
     const baseX = node.x;
-
-    // Full-haul text label: show EVERY rarity in the haul, not just the top one.
-    // The sprite fan-out was cut to one gem (the highest rarity) for visual
-    // clarity, but that hid lower-rarity finds -- a player who rolled 1 quartz
-    // + 3 sapphires saw only "x3" on a sapphire and was surprised when the
-    // satchel showed the quartz after settling. This label closes that gap.
-    const haulParts = [];
-    result.counts.forEach((c, r) => { if (c > 0) haulParts.push(`${c}${'QASRD'[r]}`); });
-    if (haulParts.length > 0) {
-      const haulLabel = this.add.text(baseX, node.y + 44, haulParts.join(' + '), {
-        fontFamily: 'ui-monospace, monospace',
-        fontSize: '11px',
-        color: '#c8e8c8',
-        stroke: '#0b1512',
-        strokeThickness: 3,
-      }).setOrigin(0.5).setDepth(60001).setAlpha(0.95);
-      this.tweens.add({
-        targets: haulLabel,
-        y: node.y - 20,
-        alpha: 0,
-        duration: 1200,
-        delay: 300,
-        ease: 'Sine.in',
-        onComplete: () => haulLabel.destroy(),
-      });
-    }
 
     shown.slice(0, FAN).forEach((s, i) => {
       // The GENERATED cut gem, loaded from art/gem-*.png as 'gen-gem-N'.

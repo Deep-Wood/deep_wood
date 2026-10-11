@@ -158,6 +158,9 @@ game.events.once('ready', () => {
         }
       };
       window.addEventListener('pointerdown', kick, true);
+      // Diagnostics hook: lets a browser test read the live audio graph
+      // (element paused-state, bus gains, context state) instead of guessing.
+      import('./audio.js').then((m) => { window.__audioDebug = m.audioDebug; });
     }
 
     // SOUND button position: it must sit in the SAME column as settle

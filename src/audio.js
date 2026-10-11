@@ -483,6 +483,32 @@ export function startMusic() {
   musicEl.play().catch(() => {});
 }
 
+/**
+ * Snapshot of the live audio graph. Diagnostics only -- lets a test (or the
+ * console) see WHY something is silent instead of guessing: a paused element,
+ * a zeroed bus gain and a suspended context all sound identical.
+ */
+export function audioDebug() {
+  return {
+    ctxState: ctx ? ctx.state : 'none',
+    ambientRunning,
+    buses: Object.fromEntries(
+      Object.entries(buses).map(([n, b]) => [n, {
+        enabled: b.enabled,
+        gain: b.gain.gain.value,
+      }]),
+    ),
+    music: musicEl
+      ? { paused: musicEl.paused, t: +musicEl.currentTime.toFixed(2), vol: musicEl.volume, readyState: musicEl.readyState, err: musicEl.error?.code ?? null }
+      : null,
+    beds: bedEls.map((e) => ({
+      paused: e.paused, t: +e.currentTime.toFixed(2), vol: e.volume,
+      readyState: e.readyState, loop: e.loop, err: e.error?.code ?? null,
+      src: e.src.split('/').pop(),
+    })),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Tab visibility: mute everything when the app is minimized/hidden, restore
 // on return. Saves battery and CPU; browsers also throttle rAF in hidden
