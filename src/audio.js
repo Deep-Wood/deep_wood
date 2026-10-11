@@ -90,10 +90,16 @@ export function setBusEnabled(name, on) {
   }
   // Music is an element: pause/resume it with the switch so it does not
   // silently chew CPU while muted. startMusic() handles the suspended-
-  // context case (mobile) instead of a raw play().
+  // context case (mobile) instead of a raw play(). The ambience beds are
+  // elements for the same reason and need the same treatment -- without this
+  // the amb pill would zero the bus gain but leave both beds decoding.
   if (name === 'music' && musicEl) {
     if (on) startMusic();
     else musicEl.pause();
+  }
+  if (name === 'amb') {
+    if (on) startBeds();
+    else for (const el of bedEls) el.pause();
   }
 }
 
@@ -222,10 +228,34 @@ function startAmbientBed() {
   const src2 = ctx.createMediaElementSource(bed2);
   src2.connect(amb);
 
-  bed1.play().catch(() => {});
-  bed2.play().catch(() => {});
-
   bedEls = [bed1, bed2];
+  startBeds();
+}
+
+/**
+ * Start (or resume) the ambience beds if the amb bus is on. Safe to call
+ * repeatedly, and it MUST be called on every gesture.
+ *
+ * The beds route through the AudioContext, so on mobile Chrome their first
+ * play() rejects while the context is still resuming -- same race the music
+ * element has. startMusic() is retried on every gesture for exactly this
+ * reason; the beds were fired once with the rejection swallowed and
+ * `bedEls.length > 0` made startAmbientBed() a no-op afterwards, so a lost
+ * first race left the ambience permanently silent while the music played.
+ * A paused element and a zeroed bus gain sound identical, so it read as
+ * "music and ambience do not play together".
+ */
+export function startBeds() {
+  if (!ctx || bedEls.length === 0) return;
+  if (!buses.amb.enabled) return;
+  if (ctx.state !== 'running') {
+    ctx.resume().then(() => startBeds()).catch(() => {});
+    return;
+  }
+  for (const el of bedEls) {
+    if (!el.paused) continue; // already rolling
+    el.play().catch(() => {});
+  }
 }
 
 // ---------------------------------------------------------------------------

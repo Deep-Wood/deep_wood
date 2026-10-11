@@ -59,7 +59,7 @@ const game = new Phaser.Game(config);
 // localStorage remembers the dismissal. Shown once the canvas exists so the
 // forest is visible behind the dimmer.
 import { maybeShowTutorial } from './tutorial.js';
-import { resumeAudio, startAmbient, busEnabled, setBusEnabled, anyBusOn, attachMusic, startMusic } from './audio.js';
+import { resumeAudio, startAmbient, startBeds, busEnabled, setBusEnabled, anyBusOn, attachMusic, startMusic } from './audio.js';
 game.events.once('ready', () => {
   maybeShowTutorial();
 });
@@ -145,6 +145,10 @@ game.events.once('ready', () => {
       const kick = () => {
         resumeAudio();
         if (anyBusOn()) startAmbient();
+        // The beds have the same suspended-context race as the music, so they
+        // are retried on every gesture too -- startAmbient() alone is a no-op
+        // after the first call, which left them silent for good.
+        startBeds();
         if (bg) {
           if (typeof window.__musicAttached === 'undefined') {
             window.__musicAttached = true;
