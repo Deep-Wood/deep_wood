@@ -3596,7 +3596,7 @@ export class ForestScene extends Phaser.Scene {
     const haulParts = [];
     result.counts.forEach((c, r) => { if (c > 0) haulParts.push(`${c}${'QASRD'[r]}`); });
     if (haulParts.length > 0) {
-      const haulLabel = this.add.text(baseX, w.y + 44, haulParts.join(' + '), {
+      const haulLabel = this.add.text(baseX, node.y + 44, haulParts.join(' + '), {
         fontFamily: 'ui-monospace, monospace',
         fontSize: '11px',
         color: '#c8e8c8',
@@ -3605,7 +3605,7 @@ export class ForestScene extends Phaser.Scene {
       }).setOrigin(0.5).setDepth(60001).setAlpha(0.95);
       this.tweens.add({
         targets: haulLabel,
-        y: w.y - 20,
+        y: node.y - 20,
         alpha: 0,
         duration: 1200,
         delay: 300,
