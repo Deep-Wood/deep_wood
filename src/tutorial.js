@@ -4,17 +4,21 @@
  * Design constraints (user, 2026-10-05):
  *   - step-by-step: one instruction at a time, click the screen to advance
  *   - a SKIP button at every step, skipping the whole tutorial entirely
- *   - covers: move, dig, settle (the V3 batch concept), sell, advance/repair,
- *     and the obstacles (trees block you, water edges the world)
+ *   - covers: move, dig, settle (the batch concept), skill (the rarity gate),
+ *     durability and repair, redeem ($DEEPWOOD, not ETH), and the obstacles
+ *     (trees block you, water edges the world)
  *
- * Storage: localStorage 'dw-tutorial-v1'. The overlay is pure DOM -- no
+ * Storage: localStorage 'dw-tutorial-v2'. The overlay is pure DOM -- no
  * Phaser dependency -- so it works before the scene is ready and never
  * touches gameplay state. It is a dimmer plus a centered card; clicks land
  * on the CARD to advance (not anywhere, or a click meant for the game
  * would silently eat steps), and skip clears the flag and hides everything.
  */
 
-const KEY = "dw-tutorial-v1";
+// v2: added the skill step, corrected durability to the tier range, and
+// switched the sell step from ETH to $DEEPWOOD. Returning players should see
+// the corrected version, so the key is bumped rather than reused.
+const KEY = "dw-tutorial-v2";
 
 const STEPS = [
   {
@@ -31,15 +35,19 @@ const STEPS = [
   },
   {
     title: "Settle when you choose",
-    body: "Digs are queued, not settled one by one. When you press SETTLE, every queued hunt is written to the chain in ONE transaction. Warning: reload or leave with hunts queued and they are lost — settle before you go.",
+    body: "Digs are queued, not settled one by one. When you press SETTLE, up to 20 queued hunts are written to the chain in ONE transaction. Warning: reload or leave with hunts queued and they are lost — settle before you go.",
+  },
+  {
+    title: "Skill unlocks rarities",
+    body: "Skill N unlocks the next gem tier: Amber, Sapphire, Ruby, Diamond. A level only takes effect once you hold the matching tool — skill 1 gives you nothing until you buy Bronze. Skill costs Quartz, which you always mine.",
   },
   {
     title: "The tool wears out",
-    body: "Twenty digs and the pick is spent. SETTLE your batch, then repair it with gems or upgrade to the next tier. A broken pick digs nothing.",
+    body: "A tool lasts 20–40 digs depending on tier. SETTLE your batch, then repair it with gems or upgrade to the next tier. Higher tiers need rarer gems to repair — keep your skill high enough to mine them. A broken pick digs nothing.",
   },
   {
-    title: "Sell",
-    body: "Gems in your satchel sell for ETH any time. The satchel always shows your real on-chain balance per rarity.",
+    title: "Redeem",
+    body: "Gems in your satchel can be redeemed any time for $DEEPWOOD tokens, not ETH. The satchel always shows your real on-chain balance per rarity.",
   },
   {
     title: "Watch the forest",
