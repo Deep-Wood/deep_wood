@@ -190,6 +190,63 @@ export function startAmbient() {
     ambientTimers.push(setTimeout(chorus, 3000 + Math.random() * 8000));
   };
   ambientTimers.push(setTimeout(chorus, 1200));
+
+  // Ambient bed: two looping forest soundscape files, very quiet.
+  startAmbientBed();
+
+  // One-off forest sounds: occasional short clips on their own timer.
+  ambientTimers.push(setTimeout(playOneOff, 8000 + Math.random() * 10000));
+}
+
+// ---------------------------------------------------------------------------
+// AMBIENT BED: looping forest soundscape files (user-provided)
+// ---------------------------------------------------------------------------
+
+let bedEls = [];
+
+function startAmbientBed() {
+  if (bedEls.length > 0) return;
+  const amb = buses.amb.gain;
+
+  const bed1 = new Audio('/audio/forest-bed-1.mp3');
+  bed1.loop = true;
+  bed1.volume = 0.15;
+
+  const bed2 = new Audio('/audio/forest-bed-2.mp3');
+  bed2.loop = true;
+  bed2.volume = 0.12;
+
+  // Route through Web Audio so the amb bus gain controls them.
+  const src1 = ctx.createMediaElementSource(bed1);
+  src1.connect(amb);
+  const src2 = ctx.createMediaElementSource(bed2);
+  src2.connect(amb);
+
+  bed1.play().catch(() => {});
+  bed2.play().catch(() => {});
+
+  bedEls = [bed1, bed2];
+}
+
+// ---------------------------------------------------------------------------
+// ONE-OFF forest sounds: occasional short clips (user-provided)
+// ---------------------------------------------------------------------------
+
+const ONEOFF_FILES = [
+  '/audio/forest-oneoff-1.mp3',
+  '/audio/forest-oneoff-2.mp3',
+];
+
+function playOneOff() {
+  if (!ctx || !ambientRunning) return;
+  if (buses.amb.enabled) {
+    const url = ONEOFF_FILES[(Math.random() * ONEOFF_FILES.length) | 0];
+    const el = new Audio(url);
+    el.volume = 0.25 + Math.random() * 0.15;
+    el.play().catch(() => {});
+    el.addEventListener('ended', () => el.remove());
+  }
+  ambientTimers.push(setTimeout(playOneOff, 12000 + Math.random() * 18000));
 }
 
 /**
