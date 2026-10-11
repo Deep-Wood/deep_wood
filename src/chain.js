@@ -149,22 +149,61 @@ async function rpcFirst(rpcUrl, fallbacks, method, params, ok) {
  * the blocks mined since the first.
  */
 const __logCache = new Map(); // key -> { block, logs }
+
+/**
+ * The endpoint rejects any single eth_getLogs spanning more than this many
+ * blocks: "query spans N blocks, but only 10000000 are allowed for this
+ * request; narrow the block range". 2M was chosen well under it, which turned
+ * a scan into ~134 sequential round trips (each with its own CORS preflight in
+ * a browser) when 14 would do.
+ */
+const MAX_LOG_SPAN = 10_000_000;
+
+/**
+ * How far back to look when the deploy block is unknown. The alternative was
+ * block 0, which on this chain means 133M blocks of provably-empty history.
+ */
+const DEFAULT_LOOKBACK = 2_000_000;
+
+/**
+ * Chunks per wave. Sequential is what made this slow: the requests are
+ * independent, so batching them collapses the wall time to roughly one
+ * round trip per wave instead of one per chunk.
+ */
+const LOG_CONCURRENCY = 8;
+
 export async function ethGetLogsChunked(rpcUrl, fallbackRpcUrls, filter, {
-  chunkSize = 2_000_000,
-  fromHex = '0x0',
+  chunkSize = MAX_LOG_SPAN,
+  fromHex = null,
+  lookback = DEFAULT_LOOKBACK,
 } = {}) {
   const latestHex = (await rawRpc(rpcUrl, 'eth_blockNumber', [])).result;
   const latest = Number(BigInt(latestHex));
-  const from = Number(BigInt(fromHex));
+  // Start at the contract's deploy block when known. Scanning from 0 on a
+  // ~133M-block chain costs ~26s to open the leaderboard and can never find a
+  // log, because no log exists before the contract did.
+  const from = fromHex !== null
+    ? Number(BigInt(fromHex))
+    : Math.max(0, latest - lookback);
   const key = JSON.stringify([filter.address ?? '', ...(filter.topics ?? [])]);
   const cached = __logCache.get(key) ?? { block: from - 1, logs: [] };
   const all = cached.logs.slice();
+
+  const ranges = [];
   for (let start = Math.max(from, cached.block + 1); start <= latest; start += chunkSize) {
-    const end = Math.min(start + chunkSize - 1, latest);
-    const f = { ...filter, fromBlock: '0x' + start.toString(16), toBlock: '0x' + end.toString(16) };
-    const logs = await ethGetLogs(rpcUrl, fallbackRpcUrls, f);
-    if (logs.length) all.push(...logs);
-    cached.block = end;
+    ranges.push([start, Math.min(start + chunkSize - 1, latest)]);
+  }
+
+  for (let i = 0; i < ranges.length; i += LOG_CONCURRENCY) {
+    const wave = ranges.slice(i, i + LOG_CONCURRENCY);
+    const results = await Promise.all(wave.map(async ([start, end]) => {
+      const f = { ...filter, fromBlock: '0x' + start.toString(16), toBlock: '0x' + end.toString(16) };
+      return [end, await ethGetLogs(rpcUrl, fallbackRpcUrls, f)];
+    }));
+    for (const [end, logs] of results) {
+      if (logs.length) all.push(...logs);
+      cached.block = Math.max(cached.block, end);
+    }
   }
   __logCache.set(key, cached);
   return all;

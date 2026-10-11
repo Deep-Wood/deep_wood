@@ -1331,6 +1331,7 @@ export class ForestScene extends Phaser.Scene {
           rpcUrl: r.rpcUrl,
           fallbackRpcUrls: r.fallbackRpcUrls ?? [],
           gameAddress: r.address,
+          deployBlock: config.gameDeployBlock,
         });
         rows = lb.rows;
         phaseLabel = lb.phase === 0 ? 'Preseason'

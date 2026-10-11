@@ -83,16 +83,31 @@ export function setBusEnabled(name, on) {
   on = !!on;
   prefs()[name] = on;
   savePrefs();
+  applyBusLive(name, on);
+}
+
+/**
+ * Mute/unmute a bus WITHOUT touching the saved preference.
+ *
+ * The visibility handler needs this. It used to call setBusEnabled, which
+ * PERSISTS -- so backgrounding the tab wrote {"sfx":false,"amb":false,
+ * "music":false} to localStorage. A graceful return restored it from the
+ * in-memory snapshot, but closing the tab and reopening read those prefs back
+ * and the game came up silent, then "started playing later" whenever a gesture
+ * or a pill toggle happened to re-enable it. A temporary mute must not be a
+ * preference change.
+ */
+export function applyBusLive(name, on) {
+  on = !!on;
   const b = buses[name];
   if (b) {
     b.enabled = on;
     if (ctx) b.gain.gain.setTargetAtTime(on ? 1 : 0, ctx.currentTime, 0.04);
   }
-  // Music is an element: pause/resume it with the switch so it does not
-  // silently chew CPU while muted. startMusic() handles the suspended-
-  // context case (mobile) instead of a raw play(). The ambience beds are
-  // elements for the same reason and need the same treatment -- without this
-  // the amb pill would zero the bus gain but leave both beds decoding.
+  // Music and the ambience beds are elements: pause/resume them with the
+  // switch so they do not silently chew CPU while muted. startMusic()/
+  // startBeds() handle the suspended-context case (mobile) instead of a raw
+  // play().
   if (name === 'music' && musicEl) {
     if (on) startMusic();
     else musicEl.pause();
@@ -556,7 +571,10 @@ function _snapshotPrefs() {
 function _restorePrefs(snap) {
   if (!snap) return;
   for (const name of Object.keys(BUS_DEFAULTS)) {
-    if (snap[name] !== busEnabled(name)) setBusEnabled(name, snap[name]);
+    // applyBusLive, NOT setBusEnabled: restoring after a tab return must not
+    // rewrite the stored preference (that is what made a backgrounded tab
+    // persist "everything muted").
+    if (snap[name] !== busEnabled(name)) applyBusLive(name, snap[name]);
   }
 }
 
@@ -569,7 +587,7 @@ function _onVisibility() {
     _prefSnapshot = null;
   } else {
     _prefSnapshot = _snapshotPrefs();
-    setAllBuses(false);
+    for (const name of Object.keys(BUS_DEFAULTS)) applyBusLive(name, false);
   }
 }
 

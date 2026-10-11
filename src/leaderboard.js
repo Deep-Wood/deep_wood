@@ -32,10 +32,11 @@ const TOPIC_MIGRATION =
  * migrations (a migrated player has V3 state even with zero V3 hunts yet).
  * `topic[1]` holds the indexed player address, padded to 32 bytes.
  */
-export async function enumeratePlayers(rpcUrl, fallbacks, gameAddress) {
+export async function enumeratePlayers(rpcUrl, fallbacks, gameAddress, deployBlock = null) {
+  const fromHex = deployBlock ? '0x' + Number(deployBlock).toString(16) : null;
   const [batches, migrations] = await Promise.all([
-    ethGetLogsChunked(rpcUrl, fallbacks, { address: gameAddress, topics: [TOPIC_BATCH_SETTLED] }),
-    ethGetLogsChunked(rpcUrl, fallbacks, { address: gameAddress, topics: [TOPIC_MIGRATION] }),
+    ethGetLogsChunked(rpcUrl, fallbacks, { address: gameAddress, topics: [TOPIC_BATCH_SETTLED] }, { fromHex }),
+    ethGetLogsChunked(rpcUrl, fallbacks, { address: gameAddress, topics: [TOPIC_MIGRATION] }, { fromHex }),
   ]);
   const players = new Set();
   for (const l of [...batches, ...migrations]) {
@@ -102,8 +103,8 @@ export function rankRows(rows) {
  * the season's own state so the panel can label itself honestly
  * (Preseason vs Season N, open vs closed).
  */
-export async function fetchChainLeaderboard({ rpcUrl, fallbackRpcUrls = [], gameAddress }) {
-  const players = await enumeratePlayers(rpcUrl, fallbackRpcUrls, gameAddress);
+export async function fetchChainLeaderboard({ rpcUrl, fallbackRpcUrls = [], gameAddress, deployBlock = null }) {
+  const players = await enumeratePlayers(rpcUrl, fallbackRpcUrls, gameAddress, deployBlock);
   const chain = await connect({ rpcUrl, address: gameAddress, fallbackRpcUrls });
   const [phaseRaw, current, seasonOpen] = await Promise.all([
     chain.phase().then((h) => Number(BigInt(String(h)))).catch(() => null),

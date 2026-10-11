@@ -52,6 +52,25 @@ export const config = {
     .map((u) => u.trim())
     .filter((u) => u && u !== DEFAULTS.rpcUrl),
   gameAddress: (env.VITE_GAME_ADDRESS || '0xabcb9bc1c5dff2875be528460f7396a07cb76216').trim(),
+  /**
+   * Block the game contract was deployed at. The event scan (leaderboard) only
+   * needs to cover deploy..latest, but the chain is ~133M blocks old and the
+   * contract is a few thousand blocks old -- so scanning from block 0 walks
+   * 133M blocks of history that cannot contain a single relevant log.
+   *
+   * That is not theoretical: it cost ~26s to open the leaderboard, because the
+   * scan issues ~134 sequential getLogs requests and every one of them carries
+   * a browser CORS preflight. With this set, the whole scan is one or two
+   * requests.
+   *
+   * null (unset) falls back to a bounded lookback rather than block 0.
+   */
+  gameDeployBlock: (() => {
+    const raw = env.VITE_GAME_DEPLOY_BLOCK;
+    if (raw === undefined || raw === '') return null;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  })(),
   chainId: Number(env.VITE_CHAIN_ID || DEFAULTS.chainId),
   tokenAddress: (env.VITE_TOKEN_ADDRESS || '').trim(),
   poolManager: (env.VITE_POOL_MANAGER || '0x8366a39cc670b4001a1121b8f6a443a643e40951').trim(),
