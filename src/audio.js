@@ -102,6 +102,11 @@ export function anyBusOn() {
   return Object.keys(BUS_DEFAULTS).some((n) => busEnabled(n));
 }
 
+/** Mute/unmute every bus at once. */
+export function setAllBuses(on) {
+  for (const name of Object.keys(BUS_DEFAULTS)) setBusEnabled(name, on);
+}
+
 /** One shared white-noise buffer, reused by every noise voice. */
 let _noiseBuf = null;
 function noiseBuf() {
@@ -419,4 +424,42 @@ export function startMusic() {
     return;
   }
   musicEl.play().catch(() => {});
+}
+
+// ---------------------------------------------------------------------------
+// Tab visibility: mute everything when the app is minimized/hidden, restore
+// on return. Saves battery and CPU; browsers also throttle rAF in hidden
+// tabs, so sounds would loop pointlessly.
+// ---------------------------------------------------------------------------
+let _wasVisible = !document.hidden;
+let _prefSnapshot = null;
+
+function _snapshotPrefs() {
+  const snap = {};
+  for (const name of Object.keys(BUS_DEFAULTS)) snap[name] = busEnabled(name);
+  return snap;
+}
+
+function _restorePrefs(snap) {
+  if (!snap) return;
+  for (const name of Object.keys(BUS_DEFAULTS)) {
+    if (snap[name] !== busEnabled(name)) setBusEnabled(name, snap[name]);
+  }
+}
+
+function _onVisibility() {
+  const visible = !document.hidden;
+  if (visible === _wasVisible) return;
+  _wasVisible = visible;
+  if (visible) {
+    _restorePrefs(_prefSnapshot);
+    _prefSnapshot = null;
+  } else {
+    _prefSnapshot = _snapshotPrefs();
+    setAllBuses(false);
+  }
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', _onVisibility);
 }
