@@ -1535,14 +1535,18 @@ export class ForestScene extends Phaser.Scene {
       buy.innerHTML = PICKAXE;
       buy.setAttribute('aria-label', `${verb} ${nm}`);
       buy.title = shortLabel + (chk.ok ? '' : '\n' + chk.reason);
-      buy.disabled = !chk.ok;
+      // "Use up your Bronze first" must NOT disable the button: the message
+      // explaining WHY is delivered by the click handler, and a disabled
+      // button never receives the click, so the player would get a dead
+      // control with no explanation. Every other refusal still disables.
+      const needsUses = !chk.ok && !!chk.reason && chk.reason.startsWith('Use up your');
+      buy.disabled = !chk.ok && !needsUses;
       if (!chk.ok) buy.title = chk.reason;
-      // When the tool is not broken and an upgrade is attempted, show a
-      // clear message instead of silently disabling the button -- the player
-      // needs to know WHY they cannot upgrade yet.
-      if (!chk.ok && chk.reason && chk.reason.startsWith('Use up your')) {
-        this.beltMsg(chk.reason, 'bad');
-      }
+      // NO message here. This used to call beltMsg() during render, which meant
+      // "Use up your Bronze first" was painted on every HUD sync -- so it
+      // appeared on every page load, unprompted, before the player had tried to
+      // do anything. It is a response to an ACTION, so it belongs in the click
+      // handlers below, not in the paint path.
 
       // Dropdown: one button, two payment options.
       // "pay eth" always available; "pay DeepWood 10% off" only when the token
@@ -1602,6 +1606,15 @@ export class ForestScene extends Phaser.Scene {
 
         buy.onclick = (e) => {
           e.stopPropagation();
+          // An upgrade attempt while the current tool still has uses. Shown in
+          // the GAME AREA (the centre toast), not the belt: this is feedback
+          // about the thing the player just clicked in the forest, and the
+          // belt's status line is off to the top-right where it reads as a
+          // stray note rather than a reply.
+          if (!chk.ok && chk.reason && chk.reason.startsWith('Use up your')) {
+            window.deepwoodFlash?.(chk.reason);
+            return;
+          }
           const isOpen = dd.classList.contains('open');
           closeBuyDropdown();
           if (!isOpen) {
@@ -1631,11 +1644,11 @@ export class ForestScene extends Phaser.Scene {
         }
       } else {
         // No token rail: single action, no dropdown.
-        // If the tool is not broken, show a message instead of silently
-        // doing nothing -- the player needs to know WHY they cannot upgrade.
+        // An upgrade attempt while the current tool still has uses reports in
+        // the game area, matching the dropdown path above.
         buy.onclick = () => {
           if (!chk.ok && chk.reason && chk.reason.startsWith('Use up your')) {
-            this.beltMsg(chk.reason, 'bad');
+            window.deepwoodFlash?.(chk.reason);
             return;
           }
           this.doBuyTool(nt);
