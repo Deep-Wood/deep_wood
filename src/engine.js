@@ -99,24 +99,24 @@ export function rollHunt(seed, player, huntIndex, toolTier, skill = 1) {
     // so keeping the prefix makes every client render disagree with the chain.
     utf8(String(player).toLowerCase().replace(/^0x/, '')),
   ));
-  const gemCount = 3 + (h[0] % 3);
+  // One rarity per hunt, 1-5 of that same gem -- mirrors the contract's
+  // _rollHunt. Mixing rarities in a single dig made the outcome confusing.
+  const gemCount = 1 + (h[0] % 5);
 
   const counts = [0, 0, 0, 0, 0];
   let valueWei = 0n;
   let highest = 0;
 
-  for (let i = 0; i < gemCount; i++) {
-    const gb = hash(concat(h, toBuf32(toolTier), new Uint8Array([i])));
-    const roll = ((gb[0] << 16) | (gb[1] << 8) | gb[2]) % 10000;
-    let acc = 0, picked = table.length - 1;
-    for (let r = 0; r < table.length; r++) {
-      acc += table[r];
-      if (roll < acc) { picked = r; break; }
-    }
-    counts[picked] += 1;
-    valueWei += PRICE[picked];
-    if (picked > highest) highest = picked;
+  // Pick the rarity for this entire hunt.
+  const rarityRoll = ((h[1] << 16) | (h[2] << 8) | h[3]) % 10000;
+  let acc = 0, picked = table.length - 1;
+  for (let r = 0; r < table.length; r++) {
+    acc += table[r];
+    if (rarityRoll < acc) { picked = r; break; }
   }
+  counts[picked] = gemCount;
+  valueWei = PRICE[picked] * BigInt(gemCount);
+  highest = picked;
 
   return { counts, valueWei, total: gemCount, highest };
 }
