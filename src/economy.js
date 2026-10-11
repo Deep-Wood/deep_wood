@@ -132,7 +132,28 @@ export function repairCostWei(tier) {
 
 // --- section 6: skill -----------------------------------------------------
 
-export const SKILL_COST = { 2: [0, 0, 40, 0, 0], 3: [0, 0, 0, 15, 0], 4: [0, 0, 0, 0, 5] };
+/**
+ * Quartz burned to reach each skill level. `cost = 500 * targetSkill` in
+ * DeepWoodV4.upgradeSkill -- the contract charges COMMON (Quartz) only, one
+ * level at a time.
+ *
+ * This used to be a per-rarity table ({2: 40 Sapphire, 3: 15 Ruby, 4: 5
+ * Diamond}) which matched no deployed contract: upgradeSkill() has always
+ * burned Quartz at 500/level. Nothing imported the old constant, so it was
+ * invisible -- but the moment a skill UI is built on it, it would quote a
+ * price ~25x too low and every upgrade would revert InsufficientGems.
+ * Keep this in lockstep with the contract's `500 * targetSkill`.
+ */
+export const SKILL_COST_QUARTZ = { 2: 1000, 3: 1500, 4: 2000 };
+
+/** Total Quartz to reach each level from skill 1 (cumulative). */
+export const SKILL_TOTAL_QUARTZ = { 2: 1000, 3: 2500, 4: 4500 };
+
+/** Quartz burned to go from `cur` to the next level, or null when maxed. */
+export function skillUpCostQuartz(cur) {
+  const next = cur + 1;
+  return SKILL_COST_QUARTZ[next] ?? null;
+}
 
 /** Rarity each skill level unlocks. Skill 2 -> Sapphire, 3 -> Ruby,
  *  4 -> Diamond. Skill 1 unlocks nothing: Quartz and Amber are the free
