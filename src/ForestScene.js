@@ -1973,7 +1973,7 @@ export class ForestScene extends Phaser.Scene {
       // Repaint the satchel tiles too, not just the belt-counts line --
       // window.renderGems reads this same array but only repaints when someone
       // calls it, and refreshChainGems used to be a headless write.
-      window.renderGems?.();
+      window.renderGems?.(); window.renderHunter?.();
       this._redeemCard?.refresh();
     } catch {
       // Leave the mirror alone: an unreadable balance is not an empty one.
@@ -2178,7 +2178,7 @@ export class ForestScene extends Phaser.Scene {
     recordToolSpend(this.board, this.wallet ?? '0xplayer', cost);
     this.beltMsg(`Bought ${toolName(tier)} with $DEEPWOOD — ${p.left}/${p.max} uses`, 'ok');
     this.refreshBelt();
-    window.renderGems?.();
+    window.renderGems?.(); window.renderHunter?.();
     this.updateHud();
   }
 
@@ -2260,7 +2260,7 @@ export class ForestScene extends Phaser.Scene {
         'ok',
       );
       this.refreshBelt();
-      window.renderGems?.();
+      window.renderGems?.(); window.renderHunter?.();
       this.updateHud();
       return;
     }
@@ -2325,7 +2325,7 @@ export class ForestScene extends Phaser.Scene {
     );
     await this.refreshChainBalance();
     this.refreshBelt();
-    window.renderGems?.();
+    window.renderGems?.(); window.renderHunter?.();
     this.updateHud();
   }
 
@@ -2429,7 +2429,7 @@ export class ForestScene extends Phaser.Scene {
     // gem TILE counts (window.renderGems) only repaint when someone changes
     // them. Call it here so the satchel updates as soon as the batch lands
     // rather than waiting for the next dig.
-    window.renderGems?.();
+    window.renderGems?.(); window.renderHunter?.();
   }
 
   async _doRepair() {
@@ -2453,7 +2453,7 @@ export class ForestScene extends Phaser.Scene {
         'ok',
       );
       this.refreshBelt();
-      window.renderGems?.();
+      window.renderGems?.(); window.renderHunter?.();
       this.updateHud();
       return;
     }
@@ -2466,7 +2466,7 @@ export class ForestScene extends Phaser.Scene {
       'ok',
     );
     this.refreshBelt();
-    window.renderGems?.();
+    window.renderGems?.(); window.renderHunter?.();
     this.updateHud();
   }
 
@@ -2514,7 +2514,7 @@ export class ForestScene extends Phaser.Scene {
             // satchel, the strip and the card all agree with it.
             await this.refreshChainBalance();
             this.refreshBelt();
-            window.renderGems?.();
+            window.renderGems?.(); window.renderHunter?.();
             this.updateHud();
           }
           return res;
@@ -2541,7 +2541,7 @@ export class ForestScene extends Phaser.Scene {
         this.beltMsg(`You are now a ${skillName(level)} — ${skillSubtitle(level)}`, 'ok');
         await this.refreshChainBalance();
         this.refreshBelt();
-        window.renderGems?.();
+        window.renderGems?.(); window.renderHunter?.();
         this.updateHud();
       } else {
         this.beltMsg(res.reason || 'Skill upgrade failed', 'bad');
@@ -2582,7 +2582,7 @@ export class ForestScene extends Phaser.Scene {
       this.simBalance += res.value;
       this.beltMsg(`Sold ${fmtGem(total)} gems for ${fmtEth(res.value)}.`, 'ok');
       this.refreshBelt();
-      window.renderGems?.();
+      window.renderGems?.(); window.renderHunter?.();
       this.updateHud();
       return;
     }
@@ -2626,7 +2626,7 @@ export class ForestScene extends Phaser.Scene {
       this.beltMsg(`Sold ${fmtGem(totalSold)} gems for ${fmtEth(totalPayout)}.`, 'ok');
     }
     this.refreshBelt();
-    window.renderGems?.();
+    window.renderGems?.(); window.renderHunter?.();
     this.updateHud();
   }
 
@@ -3577,7 +3577,7 @@ export class ForestScene extends Phaser.Scene {
     if (!result.pending && !onchainActive()) {
       creditGems(this.econ, result.counts);
     }
-    window.renderGems?.();
+    window.renderGems?.(); window.renderHunter?.();
 
     // Season board. A queued hunt has not happened on-chain yet -- the batch
     // may still be abandoned -- so it must not appear in the ledger until the

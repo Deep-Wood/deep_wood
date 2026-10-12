@@ -515,21 +515,26 @@
     const hunterCard = document.getElementById('hunter-card');
 
     let ladderRow;
-    let hunterWired = false;
+    let hunterHooked = false;
     async function renderHunter() {
       const p = window.__scene?.econ;
-      // The HUD script can run before main.js assigns window.__scene. Retry
-      // until the scene exists rather than returning silently and leaving the
-      // card hidden for the whole session.
-      if (!p && !hunterWired) {
-        hunterWired = true;
-        const scene = () => window.__scene;
-        if (scene()?.events?.once) scene().events.once('ready', () => renderHunter());
-        else setTimeout(renderHunter, 250);
-        setTimeout(() => { if (hunterWired) renderHunter(); }, 1500);
+      if (!p) {
+        // The HUD script runs before main.js assigns window.__scene. Hook the
+        // scene's own CREATE event -- main.js publishes on the same signal --
+        // and poll briefly as a fallback, so the card never depends on which
+        // script happened to win the race.
+        if (!hunterHooked) {
+          hunterHooked = true;
+          const s = window.__scene;
+          if (s?.events?.once) s.events.once('ready', () => renderHunter());
+          const poll = () => {
+            if (window.__scene?.econ) renderHunter();
+            else setTimeout(poll, 200);
+          };
+          setTimeout(poll, 200);
+        }
         return;
       }
-      if (!p) return;
       const { TOOL_AVATARS, SKILL_AVATARS, TIER_NAME, SKILL_NAME } = await import('/src/economy.js');
       if (!ladderRow) {
         ladderRow = (el, avatars, names, current, offset) => {
