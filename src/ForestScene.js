@@ -1673,7 +1673,7 @@ export class ForestScene extends Phaser.Scene {
     // The icon + label go into the column wrapper; the wrapper goes into the rail.
     const blbl = document.createElement('span');
     blbl.className = 'rail-action-label';
-    blbl.textContent = nt > 5 ? 'max tier' : (buyOrUpgradeLabel(p).startsWith('upgrade') ? 'upgrade' : 'buy');
+    blbl.textContent = nt > 5 ? 'max tier' : (buyOrUpgradeLabel(p).startsWith('upgrade') ? 'upgrade tool' : 'buy tool');
     bwrap.appendChild(buy);
     bwrap.appendChild(blbl);
     el.appendChild(bwrap);
@@ -1725,7 +1725,7 @@ export class ForestScene extends Phaser.Scene {
       swrap.appendChild(skill);
       const slbl = document.createElement('span');
       slbl.className = 'rail-action-label';
-      slbl.textContent = isMaxed ? SKILL_NAME_UC[curSkill] : `${SKILL_NAME_UC[curSkill]} · ${curSkill}`;
+      slbl.textContent = isMaxed ? 'max skill' : 'upgrade skill';
       swrap.appendChild(slbl);
       el.appendChild(swrap);
     }

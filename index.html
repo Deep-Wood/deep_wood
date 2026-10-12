@@ -486,10 +486,10 @@
       ).join('') + `</div>`
       + `<div class="gs-row">`
       + '<div class="gem-ic" id="gs-tool">'
-      + '<span class="hunter-gs-av" id="gs-tool-av"></span>'
+      + '<span class="gs-label">Current<br>Tool:</span>'
       + '<span class="gc" id="gs-tool-name">--</span></div>'
       + '<div class="gem-ic" id="gs-skill">'
-      + '<span class="hunter-gs-av" id="gs-skill-av"></span>'
+      + '<span class="gs-label">Current<br>Skill:</span>'
       + '<span class="gc" id="gs-skill-name">--</span></div>'
       + `</div>`;
       renderHunterStrip();
@@ -508,24 +508,22 @@
     // module itself -- the surrounding script is a plain inline one.
     async function renderHunterStrip() {
       const p = window.__scene?.econ;
-      const toolAv = document.getElementById('gs-tool-av');
-      if (!toolAv) return;   // strip not rebuilt yet
+      const toolName = document.getElementById('gs-tool-name');
+      if (!toolName) return;   // strip not rebuilt yet
       if (!p) {
         setTimeout(renderHunterStrip, 200);
         return;
       }
-      const { TOOL_AVATARS, SKILL_AVATARS, TIER_NAME, SKILL_NAME } = await import('/src/economy.js');
-      const toolName = document.getElementById('gs-tool-name');
-      const skillAv = document.getElementById('gs-skill-av');
+      const { TIER_NAME, SKILL_NAME } = await import('/src/economy.js');
       const skillName = document.getElementById('gs-skill-name');
+      const toolIc = document.getElementById('gs-tool');
+      const skillIc = document.getElementById('gs-skill');
       // Tool: tier 0 means no pick yet.
-      toolAv.innerHTML = p.tier >= 1 ? TOOL_AVATARS[p.tier] : '';
       toolName.textContent = p.tier >= 1 ? TIER_NAME[p.tier] : 'None';
-      toolAv.closest('.gem-ic').title = `Tool: ${p.tier >= 1 ? TIER_NAME[p.tier] : 'None'}`;
+      toolIc.title = `Tool: ${p.tier >= 1 ? TIER_NAME[p.tier] : 'None'}`;
       // Skill: 0..4, Greenhorn through Lapidary.
-      skillAv.innerHTML = SKILL_AVATARS[p.skill] || '';
       skillName.textContent = SKILL_NAME[p.skill] || '--';
-      skillAv.closest('.gem-ic').title = `Skill: ${SKILL_NAME[p.skill] || '--'}`;
+      skillIc.title = `Skill: ${SKILL_NAME[p.skill] || '--'}`;
     }
     window.renderHunter = renderHunterStrip;
 
