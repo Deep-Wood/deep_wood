@@ -1528,8 +1528,12 @@ button.chip { position: relative; }
 }
 .hunter-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--s2);
+  /* Stacked, not side-by-side. 140px rail / 2 columns = ~64px each, too
+     narrow for "Skill: Prospector" without truncation. Stacked, each row
+     gets the full width and the longest skill name (Prospector, 10px ≈ 52px
+     + label 22px + avatar 24px + gaps ≈ 116px) fits with room to spare. */
+  grid-template-columns: 1fr;
+  gap: var(--s1);
   margin-top: var(--s2);
 }
 .hunter-item {
