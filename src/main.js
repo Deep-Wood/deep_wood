@@ -167,29 +167,12 @@ game.events.once('ready', () => {
       import('./audio.js').then((m) => { window.__audioDebug = m.audioDebug; });
     }
 
-    // SOUND button position: it must sit in the SAME column as settle
-    // (far-right) and exactly one row-gap (18px) below it. Settle's own top is
-    // computed at runtime by aligning to the sell button (see ForestScene
-    // syncActionDom), so a hardcoded CSS top cannot track it. Instead measure
-    // the live settle wrapper and place sound relative to it -- same
-    // two-pass measurement settle itself uses.
+    // SOUND button: now lives in .rail-actions alongside settle, stacked
+    // vertically in normal flow. No runtime positioning needed -- CSS handles
+    // the layout. This replaces the old absolute-positioned placeSound that
+    // measured settle's rect and set sound.style.top/right.
     const placeSound = () => {
-      const sound = document.querySelector('.sound-toggle-wrap');
-      const settleWrap = document.querySelector('.settle-right');
-      const settleBtn = document.getElementById('belt-settle');
-      const hud = document.getElementById('hud');
-      if (!sound || !settleWrap || !settleBtn || !hud) return;
-      const hudRect = hud.getBoundingClientRect();
-      const settleRect = settleWrap.getBoundingClientRect();
-      const settleBtnRect = settleBtn.getBoundingClientRect();
-      const gap = 18; // matches .rail-action-icon margin-top:18px row rhythm
-      sound.style.top = Math.round(settleRect.bottom - hudRect.top + gap) + 'px';
-      // Align the ICON columns, not the wrappers: settle's label ('settle
-      // hunt') is wider than its 44px icon, so its wrapper stretch makes the
-      // icon sit 15px inside the far-right edge. Aligning wrappers would push
-      // the sound icon 15px right of settle's icon -- the misaligned column
-      // the user reported. Align icon-right to icon-right instead.
-      sound.style.right = Math.round(hudRect.right - settleBtnRect.right) + 'px';
+      // No-op: CSS flexbox in .rail-actions handles the layout.
     };
     // Settle is (re)created by syncActionDom, so re-run after each render.
     // The scene emits 'ready' once, but syncActionDom runs on every HUD sync.

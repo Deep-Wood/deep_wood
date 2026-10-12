@@ -187,27 +187,28 @@
          (plus repair/settle/sell) live here as a vertical column. -->
     <div class="belt-actions" id="belt-actions"></div>
 
-    <!-- LEADERBOARD button moved to the wallet dropdown menu (user request).
-         The right rail now starts with the Sound button. -->
-
-    <!-- SOUND toggle: round 3D button, placed BELOW the SETTLE button in the
-         right rail. Tapping it opens the sound panel with THREE pill toggles
-         (matching the reference art: red OFF / green ON with a white 3D knob):
-         game sounds (dig+steps), ambience (birds+wind), music. -->
-    <div class="rail-action-item sound-toggle-wrap">
-      <button type="button" id="sound-toggle" class="icon-btn" aria-label="Sound options" title="Sound options">
-        <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="icon-sound-on">
-          <path d="M3 9v6h4l5 5V4L7 9H3z" fill="currentColor"/>
-          <path d="M16.5 12a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z" fill="currentColor"/>
-          <path d="M14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z" fill="currentColor"/>
-        </svg>
-        <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="icon-sound-off" style="display:none">
-          <path d="M3 9v6h4l5 5V4L7 9H3z" fill="currentColor"/>
-          <line x1="16" y1="9" x2="22" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-          <line x1="22" y1="9" x2="16" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-      </button>
-      <span class="rail-action-label">Sound</span>
+    <!-- RIGHT RAIL: Sound + Settle, stacked vertically. Leaderboard moved to
+         the wallet dropdown menu (user request). -->
+    <div class="rail-actions">
+      <!-- SOUND toggle: round 3D button. Tapping it opens the sound panel with
+           THREE pill toggles (matching the reference art: red OFF / green ON
+           with a white 3D knob): game sounds (dig+steps), ambience (birds+wind),
+           music. -->
+      <div class="rail-action-item sound-toggle-wrap">
+        <button type="button" id="sound-toggle" class="icon-btn" aria-label="Sound options" title="Sound options">
+          <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="icon-sound-on">
+            <path d="M3 9v6h4l5 5V4L7 9H3z" fill="currentColor"/>
+            <path d="M16.5 12a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z" fill="currentColor"/>
+            <path d="M14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z" fill="currentColor"/>
+          </svg>
+          <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="icon-sound-off" style="display:none">
+            <path d="M3 9v6h4l5 5V4L7 9H3z" fill="currentColor"/>
+            <line x1="16" y1="9" x2="22" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <line x1="22" y1="9" x2="16" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <span class="rail-action-label">Sound</span>
+      </div>
     </div>
 
     <!-- SOUND PANEL: three iOS-style pill toggles (red OFF / green ON, white

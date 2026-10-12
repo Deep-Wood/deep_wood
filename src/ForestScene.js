@@ -1792,34 +1792,14 @@ export class ForestScene extends Phaser.Scene {
       // RIGHT edge. .settle-right anchors it to the right edge (aligned with the
       // leaderboard column); the top is set below so it sits on the SAME row as
       // the sell button, which is measured from the live layout.
-      const hud = document.getElementById('hud');
-      // The settle wrapper lives in #hud (not #belt-actions) so it can break
-      // out to the far-right edge. syncActionDom clears #belt-actions only, so
-      // a stale settle wrapper from a previous render would linger and a new
-      // one would stack on top of it -- visible as a duplicated button. Remove
-      // any prior settle wrapper before appending the fresh one.
-      const stale = hud && hud.querySelector('.settle-right');
+      // Settle now lives in .rail-actions alongside Sound, stacked vertically
+      // in normal flow. The old absolute-positioned layout aligned it to the
+      // skill button's row, but with leaderboard moved out the right rail is
+      // just Sound + Settle -- no cross-row alignment needed.
+      const railActions = document.querySelector('.rail-actions');
+      const stale = railActions && railActions.querySelector('.settle-right');
       if (stale) stale.remove();
-      (hud || el).appendChild(wrap);
-      // Align settle's vertical position to the SKILL button's row. Settle is
-      // position:absolute against #hud, so its top is relative to the HUD's top
-      // edge. The wrapper has its own internal offset (the button does not sit
-      // flush at the wrapper's top edge), so measure that gap and compensate:
-      // we want settle's BUTTON top to equal sell's BUTTON top.
-      const sellBtn = document.getElementById('belt-skill');
-      if (sellBtn) {
-        const hudRect = hud.getBoundingClientRect();
-        const sellRect = sellBtn.getBoundingClientRect();
-        // Two-pass alignment. Settle is position:absolute inside the #hud GRID,
-        // whose containing-block math for absolute children does not match a
-        // naive top-from-padding-box (the grid adds its own offset). So set an
-        // initial top, measure the actual residual error between settle's button
-        // and sell's button, then correct by that error. This lands settle's
-        // button exactly on sell's row at every viewport.
-        wrap.style.top = (sellRect.top - hudRect.top) + 'px';
-        const before = st.getBoundingClientRect().top - sellRect.top;
-        wrap.style.top = (sellRect.top - hudRect.top - before) + 'px';
-      }
+      (railActions || el).appendChild(wrap);
     }
   }
 

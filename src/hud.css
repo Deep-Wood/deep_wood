@@ -122,27 +122,21 @@ html, body {
    pinned to that same vertical band. */
 .rail-action-item.settle-right {
   margin-top: 0;
-  position: absolute;
-  right: 0;
-  left: auto !important;  /* the .rail-action-icon width:100% sets left:0 via stretch; force auto */
-  top: 152px;             /* match the SELL button's row (sell top) */
-  width: auto !important; /* shrink-wrap to the icon+label so right:0 pins its edge */
-  align-items: flex-end;  /* right-align the icon within the item */
-  align-self: start;
+  position: relative;
+  width: auto !important;
+  align-items: flex-end;
+  align-self: end;
 }
 /* SOUND toggle: placed BELOW the SETTLE button in the right rail. The exact
    top is set at runtime by main.js placeSound() (same two-pass measurement
    settle uses), because settle's own top is computed from the live layout.
    This rule only anchors the column: far-right edge, same as settle. */
 .sound-toggle-wrap {
-  margin-top: 0;
-  position: absolute;
-  right: 0;
-  left: auto !important;
-  top: 289px; /* runtime-measured fallback until placeSound() lands */
+  margin-top: var(--s2);
+  position: relative;
   width: auto !important;
   align-items: flex-end;
-  align-self: start;
+  align-self: end;
 }
 /* BUY is the FIRST action in the rail, so it must not carry the 18px top margin
    that spaces the subsequent rows -- otherwise it sits 18px below the rail's top
@@ -152,7 +146,7 @@ html, body {
 /* Right-aligned so the signal/leaderboard button lines up with the right
  * edge of the belt above it, exactly as the action buttons line up with the
  * left edge of the panel above them. */
-.rail-actions { display: flex; justify-content: flex-end; }
+.rail-actions { display: flex; flex-direction: column; align-items: flex-end; gap: var(--s2); }
 #belt   { grid-column: 3; grid-row: 1; width: var(--rail); }
 
 /* The SIGNAL / leaderboard button (bar-chart glyph) is a grid item in the
@@ -1022,13 +1016,12 @@ button.chip { position: relative; }
  * so the box only needs to be as wide as that string plus a little padding. */
 .wallet-menu {
   position: absolute;
-  top: calc(100% + 8px);
+  top: calc(100% + 6px);
   right: 0;
-  min-width: 180px;
   background: var(--panel-solid, #0d1a10);
   border: 2px solid var(--gold, #d9a441);
   border-radius: 0;
-  padding: 8px;
+  padding: 4px;
   z-index: 900;
   box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.4);
 }
@@ -1036,10 +1029,10 @@ button.chip { position: relative; }
   font-family: var(--mono);
   font-size: 10px;
   color: rgba(232, 240, 224, 0.55);
-  padding: 0 4px 8px;
+  padding: 2px 6px 4px;
   white-space: nowrap;
   border-bottom: 1px solid rgba(217, 164, 65, 0.25);
-  margin-bottom: 6px;
+  margin-bottom: 2px;
 }
 /* Rectangular menu items stacked vertically in a bordered box. */
 .wallet-menu .wm-item {
@@ -1048,13 +1041,13 @@ button.chip { position: relative; }
   text-align: left;
   font-family: var(--mono);
   font-size: 11px;
-  padding: 6px 10px;
+  padding: 4px 8px;
   background: none;
   border: 1px solid transparent;
   border-radius: 0;
   color: var(--ink, #e8f0e0);
   cursor: pointer;
-  margin-bottom: 2px;
+  margin-bottom: 0;
 }
 .wallet-menu .wm-item:hover {
   background: rgba(180, 134, 58, 0.2);
@@ -1074,6 +1067,9 @@ button.chip { position: relative; }
   overflow: hidden;
   display: flex; flex-direction: column; gap: var(--s2);
   box-shadow: 6px 6px 0 rgba(124, 58, 237, 0.3);
+  max-height: 65vh;
+  width: min(420px, 88vw);
+  box-sizing: border-box;
 }
 .lb-head { display: flex; align-items: center; justify-content: space-between; }
 .lb-title { font-weight: 700; color: #c4b5fd; letter-spacing: 0.5px; }
