@@ -1524,6 +1524,12 @@ button.chip { position: relative; }
    ladder. Wood tool shows "Tool: Wood" under the wood pickaxe; Greenhorn
    skill shows "Skill: Greenhorn" under the rough gem. */
 .hunter-card {
+  /* Break out of the card chain width. The season rail is ~140px, which is
+     too narrow for "TOOL Wood · SKILL Prospector" side by side. The card is
+     the full season-card width so both rows have room; the 6px buffer keeps
+     it off the rail edges. */
+  grid-column: 1;
+  margin: 0 6px 6px;
   padding: var(--s2) var(--s3);
   background: linear-gradient(180deg, rgba(26, 10, 46, .92), rgba(13, 26, 16, .92));
   border: 1px solid rgba(124, 58, 237, .35);
@@ -1531,7 +1537,7 @@ button.chip { position: relative; }
 }
 .hunter-rows {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: var(--s3);
   margin-top: var(--s2);
 }
@@ -1542,8 +1548,8 @@ button.chip { position: relative; }
   min-width: 0;
 }
 .hunter-av {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   flex-shrink: 0;
   display: block;
 }
