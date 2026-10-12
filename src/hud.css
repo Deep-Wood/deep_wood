@@ -1586,12 +1586,16 @@ button.chip { position: relative; }
   letter-spacing: .04em;
   text-transform: uppercase;
   color: var(--faint);
+  /* Rotated 90deg so the full name fits in the ~20px rung. Horizontal text
+     truncated to one letter ("W… B… I… S… G…"); vertical text uses the
+     card's height instead. */
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
   text-align: center;
   line-height: 1.1;
+  max-height: 4.2em;   /* fits "Greenhorn" / "Prospector" without clipping */
 }
 .hunter-step.now .hunter-name { color: var(--gold); font-weight: 700; }
 
