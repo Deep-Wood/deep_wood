@@ -153,22 +153,6 @@
         <span class="season-phase" id="season-phase" hidden></span>
       </div>
 
-      <!-- Hunter card: an exact duplicate of the #gemstrip bar -- same look,
-           same pill row, one item per side. Left: the current tool, right:
-           the current skill. No ladder; a single item each, replaced on upgrade.
-           Placed directly above the SATCHEL, and the PRESEASON text moved up
-           to clear space for it. -->
-      <div id="hunter-strip" class="readout hunter-strip" hidden>
-        <span class="hunter-pill" id="hunter-tool">
-          <span class="hunter-pill-av" id="tool-av"></span>
-          <span class="hunter-pill-name" id="tool-name">--</span>
-        </span>
-        <span class="hunter-pill" id="hunter-skill">
-          <span class="hunter-pill-av" id="skill-av"></span>
-          <span class="hunter-pill-name" id="skill-name">--</span>
-        </span>
-      </div>
-
       <!-- Satchel: the find tally by rarity, its own tile. -->
       <div id="satchel" class="readout" hidden>
         <span class="card-title">Satchel</span>
@@ -492,57 +476,58 @@
           + `<span class="c">${c}</span></div>`;
       }).join('');
 
-      // The live top-centre strip. Icon + its live count, as originally built.
-      gemstrip.innerHTML = bal.map((c, i) =>
+      // The live top-centre strip now has two stacked rows: the five gem
+      // tallies on top, then the current tool and skill. The gem row markup is
+      // unchanged; the hunter row sits beneath it.
+      gemstrip.innerHTML = `<div class="gs-row">` + bal.map((c, i) =>
         `<div class="gem-ic" title="${gemNames[i]}: ${c}">`
         + `<img src="${gemIcons[i]}" alt="${gemNames[i]}" draggable="false">`
         + `<span class="gc${c ? '' : ' zero'}">${c}</span></div>`
-      ).join('');
+      ).join('') + `</div>`
+      + `<div class="gs-row">`
+      + '<div class="gem-ic" id="gs-tool">'
+      + '<span class="hunter-gs-av" id="gs-tool-av"></span>'
+      + '<span class="gc" id="gs-tool-name">--</span></div>'
+      + '<div class="gem-ic" id="gs-skill">'
+      + '<span class="hunter-gs-av" id="gs-skill-av"></span>'
+      + '<span class="gc" id="gs-skill-name">--</span></div>'
+      + `</div>`;
+      renderHunterStrip();
     }
     // Exposed so the belt's buy/repair/sell handlers can repaint the satchel
     // after they change the balance. Without this the satchel only refreshed on
     // a hunt, so selling gems left the tiles showing the pre-sale count.
     window.renderGems = renderGems;
 
-    // ---- hunter card: the player's current tool and skill ------------------
-    // One avatar + one name per row. Not a ladder -- the thing the player
-    // HOLDS. The avatars are inline SVG generated in economy.js so there is
-    // no image to 404.
+    // ---- hunter row: the player's current tool and skill ------------------
+    // The second row of the gemstrip: one pickaxe avatar + tier name, one gem
+    // avatar + skill name. Not a ladder -- the thing the player HOLDS,
+    // replaced on upgrade. The avatars are inline SVG generated in economy.js
+    // so there is no image to 404.
     // Loaded lazily via dynamic import so this block does not need to be a
     // module itself -- the surrounding script is a plain inline one.
-    const toolAv = document.getElementById('tool-av');
-    const toolName = document.getElementById('tool-name');
-    const skillAv = document.getElementById('skill-av');
-    const skillName = document.getElementById('skill-name');
-    const hunterStrip = document.getElementById('hunter-strip');
-
-    let hunterHooked = false;
-    async function renderHunter() {
+    async function renderHunterStrip() {
       const p = window.__scene?.econ;
+      const toolAv = document.getElementById('gs-tool-av');
+      if (!toolAv) return;   // strip not rebuilt yet
       if (!p) {
-        // The HUD script can run before main.js assigns window.__scene.
-        // Poll until it exists rather than returning silently.
-        if (!hunterHooked) {
-          hunterHooked = true;
-          const poll = () => {
-            if (window.__scene?.econ) { renderHunter(); hunterHooked = false; return; }
-            setTimeout(poll, 200);
-          };
-          poll();
-        }
+        setTimeout(renderHunterStrip, 200);
         return;
       }
-      hunterHooked = false;
       const { TOOL_AVATARS, SKILL_AVATARS, TIER_NAME, SKILL_NAME } = await import('/src/economy.js');
+      const toolName = document.getElementById('gs-tool-name');
+      const skillAv = document.getElementById('gs-skill-av');
+      const skillName = document.getElementById('gs-skill-name');
       // Tool: tier 0 means no pick yet.
       toolAv.innerHTML = p.tier >= 1 ? TOOL_AVATARS[p.tier] : '';
       toolName.textContent = p.tier >= 1 ? TIER_NAME[p.tier] : 'None';
+      toolAv.closest('.gem-ic').title = `Tool: ${p.tier >= 1 ? TIER_NAME[p.tier] : 'None'}`;
       // Skill: 0..4, Greenhorn through Lapidary.
       skillAv.innerHTML = SKILL_AVATARS[p.skill] || '';
       skillName.textContent = SKILL_NAME[p.skill] || '--';
-      hunterStrip.hidden = false;
+      skillAv.closest('.gem-ic').title = `Skill: ${SKILL_NAME[p.skill] || '--'}`;
     }
-    window.renderHunter = renderHunter;
+    window.renderHunter = renderHunterStrip;
 
     // Pending-batch badge: how many hunts sit in the settle queue. Written by
     // ForestScene after every dig and settle. Kept on the belt-mode line so it

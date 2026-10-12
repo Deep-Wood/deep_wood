@@ -779,8 +779,11 @@ button.chip { position: relative; }
  * ------------------------------------------------------------------------ */
 #gemstrip {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   justify-content: center;
+  /* Two stacked rows: the five gem tallies on top, the current tool and
+     skill below. Doubling the height of the original one-row card. */
   gap: var(--s2);
   /* Solid 3D lemon box. Lemon face + darker lemon base (the extruded lip) via
      a vertical gradient, rounded pill, warm outer glow, crisp 1px rim. */
@@ -794,6 +797,18 @@ button.chip { position: relative; }
     inset 0 1px 0 rgba(255, 255, 255, .5); /* top highlight for the bevel */
   text-shadow: 0 1px 2px rgba(0, 0, 0, .55);
   pointer-events: none;
+}
+/* Row 1: the gem tallies. Row 2: tool + skill. */
+#gemstrip .gs-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+}
+/* Thin divider between the two rows. */
+#gemstrip .gs-row + .gs-row {
+  border-top: 1px solid rgba(0, 0, 0, .18);
+  padding-top: var(--s2);
 }
 .gem-ic {
   display: flex;
@@ -1525,47 +1540,16 @@ button.chip { position: relative; }
   text-transform: uppercase;
 }
 
-/* ---- hunter strip: a duplicate of the gemstrip bar ----
-   Same solid 3D lemon pill, same inner flex row. One pill for the current
-   tool, one for the current skill. Only the active tier/rank shows; an
-   upgrade swaps it in place. Sits directly above the SATCHEL. */
-.hunter-strip {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--s2);
-  /* Solid 3D lemon box, same as #gemstrip. */
-  background: linear-gradient(180deg, #f2f56b 0%, #e3e33f 55%, #c9c62e 100%);
-  border: 1px solid #b7b326;
-  border-radius: 12px;
-  padding: 7px 14px;
-  box-shadow:
-    0 3px 0 #a89f24,
-    0 6px 14px rgba(0, 0, 0, .55),
-    inset 0 1px 0 rgba(255, 255, 255, .5);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, .55);
-  pointer-events: none;
-}
-.hunter-pill {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-}
-.hunter-pill-av {
+/* ---- hunter row inside the gemstrip ----
+   Row 2 of the strip: one pickaxe avatar + tier name, one gem avatar +
+   skill name. Same .gem-ic shape as the tallies above so both rows share a
+   rhythm. Only the current rank shows; an upgrade swaps it in place. */
+.hunter-gs-av {
   width: 22px;
   height: 22px;
   display: block;
 }
-.hunter-pill-av svg { width: 100%; height: 100%; display: block; }
-.hunter-pill-name {
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .06em;
-  color: #2c2a0a;
-  white-space: nowrap;
-}
+.hunter-gs-av svg { width: 100%; height: 100%; display: block; }
 
 .redeem-msg { min-height: 13px; font-size: 10px; color: var(--warn); }
 .redeem-msg.bad { color: var(--bad); }
