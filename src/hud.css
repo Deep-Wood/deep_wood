@@ -1569,7 +1569,7 @@ button.chip { position: relative; }
   white-space: nowrap;
 }
 .hunter-name {
-  font-size: 11px;
+  font-size: 9.5px;
   letter-spacing: .04em;
   text-transform: uppercase;
   color: var(--gold);
