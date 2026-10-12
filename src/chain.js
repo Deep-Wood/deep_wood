@@ -561,6 +561,7 @@ export async function connect({ rpcUrl, address, player, fallbackRpcUrls = [] })
     huntCostWei: async (t) => dUint(await rpc.call(to, sel('huntCostWei(uint8)') + arg8(t))),
     dropTable: async (t, skill = 0) => dArray5(await rpc.call(to, sel('dropTable(uint8,uint8)') + arg8(t) + arg8(skill))),
     skillCost: async (lvl) => dUint(await rpc.call(to, sel('skillCost(uint8)') + arg8(lvl))),
+    skillOf: async (addr) => dUint(await rpc.call(to, sel('skillOf(address)') + argAddr(addr))),
     priceOf: async (r) => dUint(await rpc.call(to, sel('priceOf(uint8)') + arg8(r))),
     rarityWeight: async (r) => dUint(await rpc.call(to, sel('rarityWeight(uint8)') + arg8(r))),
 

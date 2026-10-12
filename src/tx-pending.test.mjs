@@ -23,7 +23,7 @@ test('every chain action raises and clears a pending state', () => {
   for (const [id, verb] of [
     ['belt-buy', 'buying'],
     ['belt-repair', 'repairing'],
-    ['belt-sell', 'selling'],
+    ['belt-skill', 'upgrading'],
   ]) {
     assert.match(
       scene,

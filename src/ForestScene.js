@@ -1665,47 +1665,52 @@ export class ForestScene extends Phaser.Scene {
     bwrap.appendChild(blbl);
     el.appendChild(bwrap);
 
-    // --- sell gems. Rendered as a 3D CIRCLE ICON (like settle/repair) with the
-    // "sell gems" label beneath it, in the same column. Wears COPPER (a
-    // convert-to-value action) so the column reads green/copper/blue/gold.
-    // The dynamic payout stays in the tooltip; the icon + label are fixed.
+    // --- upgrade skill. Rendered as a 3D CIRCLE ICON (like settle/repair) with
+    // the "skill" label beneath it, in the same column. Replaces the old redeem
+    // button; redemption moved to the wallet dropdown menu.
+    // Skill N unlocks the next gem rarity. A level is inert until the matching
+    // tool exists — skill 1 gives nothing until Bronze.
     {
       const swrap = document.createElement('div');
-      swrap.className = 'rail-action-item rail-action-icon order-sell';
-      const sell = document.createElement('button');
-      sell.className = 'icon-btn sell';
-      sell.id = 'belt-sell';
-      const held = p.gems.reduce((a, b) => a + b, 0);
-      const val = redeemValueWei(p);
-      const shortVal = held > 0 ? String(Number(val) / 1e18).replace(/0+$/, '').replace(/\.$/, '') : 'sell gems';
-      const payoutLabel = this.tokenAddress ? '$DEEPWOOD' : 'ETH';
-      // A gems-to-coin glyph: a stacked gem converting to a coin.
-      sell.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">'
-        + '<path d="M6.5 10.5 9 7h6l2.5 3.5L12 18l-5.5-7.5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>'
-        + '<path d="M6.5 10.5h11" fill="none" stroke="currentColor" stroke-width="1.6"/>'
-        + '<path d="M9 7l1.4 3.5M15 7l-1.4 3.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>'
+      swrap.className = 'rail-action-item rail-action-icon order-skill';
+      const skill = document.createElement('button');
+      skill.className = 'icon-btn skill';
+      skill.id = 'belt-skill';
+      const curSkill = p.skill ?? 1;
+      const nextLevel = curSkill + 1;
+      const maxSkill = 4;
+      const tier = p.tier ?? 0;
+      // Interlock: upgradeSkill(N) requires tier >= N
+      const interlockOk = tier >= nextLevel;
+      const isMaxed = curSkill >= maxSkill;
+      // Skill costs Quartz: 200, 400, 600, 800
+      const skillCosts = { 1: 200, 2: 400, 3: 600, 4: 800 };
+      const cost = skillCosts[nextLevel] || 0;
+      const quartz = p.gems?.[0] ?? 0;
+      // Upward arrow glyph: skill progression.
+      skill.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">'
+        + '<path d="M12 4l-7 7h4v7h6v-7h4z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>'
         + '</svg>';
-      sell.setAttribute('aria-label', 'Redeem gems');
-      sell.title = held > 0 ? `redeem gems for ${payoutLabel}` : 'no gems to redeem';
-      // The card is the gate now, not `canRedeem`. canRedeem checks the
-      // AGGREGATE satchel against the ETH floor, which would grey the button
-      // for a player whose 1600 quartz alone is fine but whose total is under
-      // the floor -- and more importantly the floor applies PER REDEMPTION,
-      // which the card enforces with the contract's own quote. Disabling here
-      // would make the card unreachable for exactly the player it was built
-      // for.
-      sell.disabled = held <= 0;
-      if (held <= 0) sell.title = 'no gems to redeem';
-      // Opens the redemption CARD rather than dumping the whole satchel. The
-      // old one-tap behaviour redeemed every rarity in sequence, which meant a
-      // player with 1600 quartz could not take out 1500 -- they either took
-      // all of it or none.
-      sell.onclick = () => this.openRedeemCard();
-      this.decoratePending(sell);
-      swrap.appendChild(sell);
+      skill.setAttribute('aria-label', 'Upgrade skill');
+      if (isMaxed) {
+        skill.title = 'Skill maxed';
+        skill.disabled = true;
+      } else if (!interlockOk) {
+        skill.title = `Need tier ${nextLevel} tool first`;
+        skill.disabled = true;
+      } else if (quartz < cost) {
+        skill.title = `Need ${cost} Quartz (have ${quartz})`;
+        skill.disabled = true;
+      } else {
+        skill.title = `Upgrade skill to ${nextLevel} — ${cost} Quartz`;
+        skill.disabled = false;
+      }
+      skill.onclick = () => this.doUpgradeSkill(nextLevel, curSkill);
+      this.decoratePending(skill);
+      swrap.appendChild(skill);
       const slbl = document.createElement('span');
       slbl.className = 'rail-action-label';
-      slbl.textContent = 'redeem';
+      slbl.textContent = isMaxed ? 'max' : `skill ${curSkill}`;
       swrap.appendChild(slbl);
       el.appendChild(swrap);
     }
@@ -1790,12 +1795,12 @@ export class ForestScene extends Phaser.Scene {
       const stale = hud && hud.querySelector('.settle-right');
       if (stale) stale.remove();
       (hud || el).appendChild(wrap);
-      // Align settle's vertical position to the SELL button's row. Settle is
+      // Align settle's vertical position to the SKILL button's row. Settle is
       // position:absolute against #hud, so its top is relative to the HUD's top
       // edge. The wrapper has its own internal offset (the button does not sit
       // flush at the wrapper's top edge), so measure that gap and compensate:
       // we want settle's BUTTON top to equal sell's BUTTON top.
-      const sellBtn = document.getElementById('belt-sell');
+      const sellBtn = document.getElementById('belt-skill');
       if (sellBtn) {
         const hudRect = hud.getBoundingClientRect();
         const sellRect = sellBtn.getBoundingClientRect();
@@ -1955,6 +1960,14 @@ export class ForestScene extends Phaser.Scene {
         this._tokenRailActive = await r.tokenRedemptionActive();
       } catch {
         this._tokenRailActive = false;
+      }
+      // Skill level — read from chain so the upgrade button knows the current
+      // level and can compute the next cost. Falls back to 1 (the default for
+      // new players) if the read fails.
+      try {
+        this.econ.skill = Number(await r.skillOf(account)) || 1;
+      } catch {
+        this.econ.skill = 1;
       }
       // These five numbers ARE the satchel -- one per rarity, straight off the
       // contract. There is no second tally (no lifetime 'found', no mirror that
@@ -2518,6 +2531,28 @@ export class ForestScene extends Phaser.Scene {
     }
     this._redeemCard.refresh();
     this._redeemCard.open();
+  }
+
+  async doUpgradeSkill(level, currentSkill) {
+    if (this.txBusy) return;
+    this.txBusy = true;
+    this.setTxPending('belt-skill', 'upgrading');
+    try {
+      const { upgradeSkillOnchain } = await import('./onchain.js');
+      const res = await upgradeSkillOnchain(level, currentSkill);
+      if (res.ok) {
+        this.beltMsg(`Skill upgraded to ${level}`, 'ok');
+        await this.refreshChainBalance();
+        this.refreshBelt();
+        window.renderGems?.();
+        this.updateHud();
+      } else {
+        this.beltMsg(res.reason || 'Skill upgrade failed', 'bad');
+      }
+    } finally {
+      this.clearTxPending();
+      this.txBusy = false;
+    }
   }
 
   async doSellGems() {

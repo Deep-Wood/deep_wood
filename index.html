@@ -748,6 +748,7 @@
       walletMenu.className = 'wallet-menu';
       walletMenu.innerHTML =
         '<div class="wm-account">' + short(getState().account || '') + '</div>' +
+        '<button class="wm-item" type="button" id="wm-redeem">Redeem gems</button>' +
         '<button class="wm-item" type="button">Disconnect</button>';
       // Append the menu to the button and DO NOT touch its position.
       //
@@ -763,15 +764,33 @@
       document.addEventListener('click', outsideClose, true);
       document.addEventListener('keydown', escClose, true);
 
-      walletMenu.querySelector('.wm-item').addEventListener('click', async (e) => {
+      // Redeem gems — opens the redemption card. Lives in the wallet dropdown
+      // because it needs a connected wallet, and the belt slot it used to
+      // occupy is now the skill upgrade button.
+      walletMenu.querySelector('#wm-redeem').addEventListener('click', (e) => {
         e.stopPropagation();
         closeWalletMenu();
-        btn.disabled = true;
-        const r = await disconnect();
-        btn.disabled = false;
-        if (!r.ok) setPending('Disconnect failed: ' + (r.reason || 'unknown'));
-        else if (r.revoked === false) setPending('Disconnected. The wallet may still remember this site -- clear it there too if you want a fresh prompt.');
-        render();
+        // The redeem card is owned by ForestScene; reach it through the game
+        // instance the scene registers on window.
+        const scene = window.__scene || window.__game?.scene;
+        if (scene && typeof scene.openRedeemCard === 'function') {
+          scene.openRedeemCard();
+        } else {
+          setPending('Redemption is not ready yet — try again in a moment.');
+        }
+      });
+
+      walletMenu.querySelectorAll('.wm-item:not(#wm-redeem)').forEach((item) => {
+        item.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          closeWalletMenu();
+          btn.disabled = true;
+          const r = await disconnect();
+          btn.disabled = false;
+          if (!r.ok) setPending('Disconnect failed: ' + (r.reason || 'unknown'));
+          else if (r.revoked === false) setPending('Disconnected. The wallet may still remember this site -- clear it there too if you want a fresh prompt.');
+          render();
+        });
       });
     }
 
