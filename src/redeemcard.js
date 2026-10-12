@@ -87,6 +87,9 @@ export function createRedeemCard({
         amount = 0;
         elInput.value = '';
         render();
+        // A new rarity means a new price. Without this the card kept showing
+        // the previous rarity's estimate (or '--').
+        refreshQuote();
       });
     });
   }
@@ -103,6 +106,10 @@ export function createRedeemCard({
         amount = percentAmount(held(), Number(btn.dataset.pct) || 0);
         elInput.value = String(amount);
         render();
+        // The chip sets the amount, so it must also fetch the estimate --
+        // otherwise the "You receive" line stays at '--' until the player
+        // manually types in the box.
+        refreshQuote();
       });
     });
   }

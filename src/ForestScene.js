@@ -1355,12 +1355,21 @@ export class ForestScene extends Phaser.Scene {
     //    hoping Phaser's depth comparison reaches the window. --
     const el = document.createElement('div');
     el.className = 'lb-overlay';
+    // NOTE: the previous version was missing the ';' after `align-items:center`,
+    // so the declaration ran on as `align-items:center justify-content:center`
+    // and BOTH properties were dropped -- the overlay fell back to
+    // justify-content:flex-start, which is why the panel was pinned left
+    // instead of centred. Each declaration is terminated explicitly now.
     el.style.cssText =
-      'position:fixed;inset:0;z-index:1000;display:flex;align-items:center justify-content:center;' +
-      'background:rgba(0,0,0,.55);';
+      'position:fixed;inset:0;z-index:1000;display:flex;'
+      + 'align-items:center;justify-content:center;'
+      + 'background:rgba(0,0,0,.62);';
+    // Half the viewport, always. The panel is a fixed-height sheet anchored to
+    // the bottom on small screens, so `50vh` is the whole vertical budget --
+    // the rows area scrolls inside it rather than growing the panel.
     const frame = sheet
-      ? 'left:0;right:0;top:auto;bottom:0;width:100%;max-width:none;border-radius:0;margin-bottom:0;'
-      : `left:${cx}px;top:${cy}px;width:${pw}px;max-height:${ph}px;`;
+      ? 'left:0;right:0;top:auto;bottom:0;width:100%;max-width:none;height:50vh;max-height:50vh;margin:0;'
+      : 'width:min(560px,92vw);height:50vh;max-height:50vh;';
 
     const top10 = rows.slice(0, TOP_N);
     const iAmHere = top10.some((r) => r.address === me && r.onBoard);
@@ -1382,37 +1391,34 @@ export class ForestScene extends Phaser.Scene {
     };
     const rowHtml = (r) => {
       const isMe = r.address === me;
-      return `<div class="lb-row${isMe ? ' me' : ''}${r.onBoard ? '' : ' off'}">${''}` +
-        `<span class="lb-rank-cell">${r.onBoard ? medal(r.rank) : '--'}</span>${''}` +
-        `<span class="lb-addr">${esc(shortAddr(r.address))}</span>${''}` +
-        `<span class="lb-roi">${roiTxt(r)}</span>${''}` +
-        `<span class="lb-best">${bestTxt(r)}</span>${''}` +
+      return `<div class="lb-grid lb-row${isMe ? ' me' : ''}${r.onBoard ? '' : ' off'}">` +
+        `<span class="lb-rank-cell">${r.onBoard ? medal(r.rank) : '--'}</span>` +
+        `<span class="lb-addr">${esc(shortAddr(r.address))}</span>` +
+        `<span class="lb-roi">${roiTxt(r)}</span>` +
+        `<span class="lb-best">${bestTxt(r)}</span>` +
         `</div>`;
     };
 
     const myRow = rows.find((r) => r.address === me);
+    const onBoard = rows.filter((x) => x.onBoard).length;
     const statsFoot = myRow
       ? (myRow.onBoard
-          ? `<div class="lb-stats">you are #${myRow.rank} of ${rows.filter((x) => x.onBoard).length}${' '}${''
-          }${myRow.rank <= TOP_N ? ' · in the prize places' : ''}</div>`
-          : `<div class="lb-stats off">not on the board yet -- below the splay floor, ${''}${''
-          }spend ${seasonEth(myRow.ethSpent)} / 0.005 ETH to rank</div>`)
+          ? `<div class="lb-foot">You're <b>#${myRow.rank}</b> of ${onBoard} ranked hunters${myRow.rank <= TOP_N ? ' — inside the prizes' : ''}.</div>`
+          : `<div class="lb-foot off">You're not ranked yet. Spend ${seasonEth(myRow.ethSpent)} of the 0.005 ETH needed to get on the board.</div>`)
       : '';
 
     el.innerHTML = `
       <div class="lb-panel" style="${frame}">
         <div class="lb-head">
-          <span class="lb-title">${phaseLabel ?? 'Season'} · VERDANT HOLLOW</span>
-          <button class="lb-close" type="button">✕</button>
+          <span class="lb-title">${phaseLabel ?? 'Season'} Leaderboard</span>
+          <button class="lb-close" type="button" aria-label="Close">✕</button>
         </div>
-        <div class="lb-sub">
-          ranked by EFFICIENCY: rarity-weight per ETH spent · not by wealth · ${esc(rankNote ?? '')}
-        </div>
-        <div class="lb-cols">
-          <span>RANK</span><span>PLAYER</span><span>ROI</span><span>BEST</span>
+        <p class="lb-sub">Ranked by how well you hunt, not how much you spend — gems found per ETH. ${esc(rankNote ?? '')}</p>
+        <div class="lb-grid lb-cols">
+          <span>#</span><span>Hunter</span><span>Gems / ETH</span><span>Best find</span>
         </div>
         <div class="lb-rows">
-          ${top10.length ? top10.map(rowHtml).join('') : '<div class="lb-empty">no players on-chain yet</div>'}
+          ${top10.length ? top10.map(rowHtml).join('') : '<div class="lb-empty">No one has settled a hunt yet. Be the first.</div>'}
         </div>
         ${statsFoot}
       </div>`;

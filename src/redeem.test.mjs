@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import {
   PERCENT_STEPS, percentAmount, clampAmount, rarityRows, redeemState, fmtToken,
 } from './redeem.js';
@@ -117,4 +118,37 @@ test('token amounts are grouped and trimmed for display', () => {
   assert.equal(fmtToken(1234567n * 10n ** 18n), '1,234,567');
   assert.equal(fmtToken(1_500_000_000_000_000_000n), '1.5');
   assert.equal(fmtToken(null), '--');
+});
+
+// --- the "You receive" estimate must follow every control that sets amount --
+//
+// Regression: the percentage chips and the rarity buttons used to set `amount`
+// and call render() only. render() paints from the CACHED quoteWei, so the
+// estimate stayed at '--' until the player typed in the box by hand. The fix
+// is that every path which changes the selection or the amount also calls
+// refreshQuote(). This asserts the CONTRACT of that wiring at the source level,
+// because the card is DOM-heavy and a behavioural test would need a full DOM.
+
+test('every control that sets the amount also refreshes the quote', async () => {
+  const src = await readFile(new URL('./redeemcard.js', import.meta.url), 'utf8');
+
+  // The three controls that can change what the player is redeeming.
+  for (const handler of ['elPcts.querySelectorAll', 'elRarities.querySelectorAll']) {
+    const i = src.indexOf(handler);
+    assert.ok(i > 0, `${handler} should exist`);
+    const block = src.slice(i, i + 700);
+    assert.ok(
+      block.includes('refreshQuote()'),
+      `${handler} must call refreshQuote() so the estimate updates`,
+    );
+  }
+
+  // The manual input already did this; keep it pinned so a refactor cannot
+  // silently drop it and regress the same way.
+  const inputIdx = src.indexOf('elInput.addEventListener');
+  assert.ok(inputIdx > 0, 'the input handler should exist');
+  assert.ok(
+    src.slice(inputIdx, inputIdx + 400).includes('refreshQuote()'),
+    'the manual input must call refreshQuote()',
+  );
 });
