@@ -548,8 +548,11 @@
           }).join('');
         };
       }
-      // Tool: tier 0 means no pick yet, so the ladder starts at 1.
-      ladderRow(toolLadder, TOOL_AVATARS.slice(1), TIER_NAME.slice(1), p.tier, 1);
+      // Tool: tier 0 means no pick yet, so the ladder starts at 1. TIER_NAME
+      // is already index-aligned to the tier (TIER_NAME[1] === 'Wood'), so it
+      // is passed whole and `offset` does the shifting -- slicing it here as
+      // well skipped Wood and left the last rung undefined.
+      ladderRow(toolLadder, TOOL_AVATARS.slice(1), TIER_NAME, p.tier, 1);
       // Skill: 0..4, Greenhorn through Lapidary.
       ladderRow(skillLadder, SKILL_AVATARS, SKILL_NAME, p.skill, 0);
       hunterCard.hidden = false;

@@ -294,3 +294,15 @@ test('higher skill ranks get more facets', () => {
   }
   assert.ok(points[4] > points[0], 'Lapidary is visibly more cut than Greenhorn');
 });
+
+test('the tool ladder names five rungs starting at Wood', () => {
+  // Regression: renderHunter passed TIER_NAME.slice(1) with offset 1, which
+  // skipped Wood and left the fifth rung undefined ("Bronze, Iron, Steel,
+  // Gold, undefined"). TIER_NAME is index-aligned to the tier, so the ladder
+  // must read TIER_NAME[1..5] and every one must be a real name.
+  const rungs = [];
+  for (let i = 1; i <= 5; i++) rungs.push(TIER_NAME[i]);
+  assert.deepEqual(rungs, ['Wood', 'Bronze', 'Iron', 'Steel', 'Gold']);
+  assert.ok(rungs.every((n) => typeof n === 'string' && n.length > 0), 'no empty rung');
+  assert.ok(!rungs.includes(undefined), 'no undefined rung');
+});
