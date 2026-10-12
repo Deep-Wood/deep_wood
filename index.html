@@ -508,26 +508,29 @@
     // ---- hunter card: the player's tool and skill ladders ------------------
     // Five rungs per row, the held one lit gold. The avatars are inline SVG
     // generated in economy.js so there is no image to 404.
-    import { TOOL_AVATARS, SKILL_AVATARS, TIER_NAME, SKILL_NAME } from '/src/economy.js';
-
+    // Loaded lazily via dynamic import so this block does not need to be a
+    // module itself -- the surrounding script is a plain inline one.
     const toolLadder = document.getElementById('tool-ladder');
     const skillLadder = document.getElementById('skill-ladder');
     const hunterCard = document.getElementById('hunter-card');
 
-    function ladderRow(el, avatars, names, current, offset) {
-      el.innerHTML = avatars.map((svg, i) => {
-        const idx = i + offset;
-        const isNow = idx === current;
-        return `<div class="hunter-step${isNow ? ' now' : ''}" title="${names[idx]}">`
-          + `<span class="hunter-av">${svg}</span>`
-          + `<span class="hunter-name">${names[idx]}</span>`
-          + `</div>`;
-      }).join('');
-    }
-
-    function renderHunter() {
+    let ladderRow;
+    async function renderHunter() {
       const p = window.__scene?.econ;
       if (!p) return;
+      const { TOOL_AVATARS, SKILL_AVATARS, TIER_NAME, SKILL_NAME } = await import('/src/economy.js');
+      if (!ladderRow) {
+        ladderRow = (el, avatars, names, current, offset) => {
+          el.innerHTML = avatars.map((svg, i) => {
+            const idx = i + offset;
+            const isNow = idx === current;
+            return `<div class="hunter-step${isNow ? ' now' : ''}" title="${names[idx]}">`
+              + `<span class="hunter-av">${svg}</span>`
+              + `<span class="hunter-name">${names[idx]}</span>`
+              + `</div>`;
+          }).join('');
+        };
+      }
       // Tool: tier 0 means no pick yet, so the ladder starts at 1.
       ladderRow(toolLadder, TOOL_AVATARS.slice(1), TIER_NAME.slice(1), p.tier, 1);
       // Skill: 0..4, Greenhorn through Lapidary.
