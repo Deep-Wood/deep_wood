@@ -1612,7 +1612,7 @@ export class ForestScene extends Phaser.Scene {
         const shortToken = tokenCost > 0
           ? (Number(tokenCost) / 1e18).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
           : '???';
-        optToken.textContent = 'Pay DeepWood 10% off';
+        optToken.textContent = 'Pay DeepWood (10% off)';
         optToken.title = `pay ~${shortToken} $DEEPWOOD (10% discount)`;
         optToken.onclick = (e) => { e.stopPropagation(); closeBuyDropdown(); this.doBuyToolWithToken(nt); };
 
