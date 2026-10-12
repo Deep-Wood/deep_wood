@@ -515,8 +515,20 @@
     const hunterCard = document.getElementById('hunter-card');
 
     let ladderRow;
+    let hunterWired = false;
     async function renderHunter() {
       const p = window.__scene?.econ;
+      // The HUD script can run before main.js assigns window.__scene. Retry
+      // until the scene exists rather than returning silently and leaving the
+      // card hidden for the whole session.
+      if (!p && !hunterWired) {
+        hunterWired = true;
+        const scene = () => window.__scene;
+        if (scene()?.events?.once) scene().events.once('ready', () => renderHunter());
+        else setTimeout(renderHunter, 250);
+        setTimeout(() => { if (hunterWired) renderHunter(); }, 1500);
+        return;
+      }
       if (!p) return;
       const { TOOL_AVATARS, SKILL_AVATARS, TIER_NAME, SKILL_NAME } = await import('/src/economy.js');
       if (!ladderRow) {
