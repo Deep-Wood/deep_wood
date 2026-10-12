@@ -1984,12 +1984,15 @@ export class ForestScene extends Phaser.Scene {
         this._tokenRailActive = false;
       }
       // Skill level — read from chain so the upgrade button knows the current
-      // level and can compute the next cost. Falls back to 1 (the default for
-      // new players) if the read fails.
+      // level and can compute the next cost. On a brand-new player the
+      // contract returns 0 (no skill trained yet); the old `|| 1` silently
+      // re-labelled that as Greenhorn, which is why a fresh wallet saw
+      // "Prospector" in the header. Keep 0 as 0 — the UI shows "None".
       try {
-        this.econ.skill = Number(await r.skillOf(account)) || 1;
+        const s = Number(await r.skillOf(account));
+        this.econ.skill = Number.isFinite(s) ? s : 0;
       } catch {
-        this.econ.skill = 1;
+        this.econ.skill = 0;
       }
       // These five numbers ARE the satchel -- one per rarity, straight off the
       // contract. There is no second tally (no lifetime 'found', no mirror that
@@ -3588,7 +3591,7 @@ export class ForestScene extends Phaser.Scene {
     } else {
       result = rollHunt(
         this.seed, this.wallet ?? '0xplayer', this.huntIndex, tier,
-        this.econ.skill ?? 1,
+        this.econ.skill ?? 0,
       );
       this.huntIndex += 1;
     }

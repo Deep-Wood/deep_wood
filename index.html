@@ -521,9 +521,12 @@
       // Tool: tier 0 means no pick yet.
       toolName.textContent = p.tier >= 1 ? TIER_NAME[p.tier] : 'None';
       toolIc.title = `Tool: ${p.tier >= 1 ? TIER_NAME[p.tier] : 'None'}`;
-      // Skill: 0..4, Greenhorn through Lapidary.
-      skillName.textContent = SKILL_NAME[p.skill] || '--';
-      skillIc.title = `Skill: ${SKILL_NAME[p.skill] || '--'}`;
+      // Skill: 0 means a brand-new player who has not trained a skill yet;
+      // 1..4 map to Greenhorn through Lapidary. A fresh wallet (0) reads
+      // "None" instead of Greenhorn.
+      const sv = SKILL_NAME[p.skill];
+      skillName.textContent = p.skill >= 1 ? sv : 'None';
+      skillIc.title = `Skill: ${p.skill >= 1 ? sv : 'None'}`;
     }
     window.renderHunter = renderHunterStrip;
 
