@@ -1373,10 +1373,16 @@ export class ForestScene extends Phaser.Scene {
     const roiTxt = (r) => r.onBoard ? r.roi.toLocaleString('en-US') + 'x' : '--';
     const bestTxt = (r) => seasonEth(r.bestWei) + ' ETH';
     const shortAddr = (a) => a === '0xplayer' ? 'YOU' : `${a.slice(0, 6)}…${a.slice(-4)}`;
+    const medal = (rank) => {
+      if (rank === 1) return '<span class="lb-medal gold">1st</span>';
+      if (rank === 2) return '<span class="lb-medal silver">2nd</span>';
+      if (rank === 3) return '<span class="lb-medal bronze">3rd</span>';
+      return `<span class="lb-rank">${rank}</span>`;
+    };
     const rowHtml = (r) => {
       const isMe = r.address === me;
       return `<div class="lb-row${isMe ? ' me' : ''}${r.onBoard ? '' : ' off'}">${''}` +
-        `<span class="lb-rank">${r.onBoard ? r.rank : '--'}</span>${''}` +
+        `<span class="lb-rank-cell">${r.onBoard ? medal(r.rank) : '--'}</span>${''}` +
         `<span class="lb-addr">${esc(shortAddr(r.address))}</span>${''}` +
         `<span class="lb-roi">${roiTxt(r)}</span>${''}` +
         `<span class="lb-best">${bestTxt(r)}</span>${''}` +
@@ -1402,7 +1408,7 @@ export class ForestScene extends Phaser.Scene {
           ranked by EFFICIENCY: rarity-weight per ETH spent · not by wealth · ${esc(rankNote ?? '')}
         </div>
         <div class="lb-cols">
-          <span>#</span><span>PLAYER</span><span>ROI</span><span>BEST</span>
+          <span>RANK</span><span>PLAYER</span><span>ROI</span><span>BEST</span>
         </div>
         <div class="lb-rows">
           ${top10.length ? top10.map(rowHtml).join('') : '<div class="lb-empty">no players on-chain yet</div>'}

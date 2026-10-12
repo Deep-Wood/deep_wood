@@ -1022,41 +1022,42 @@ button.chip { position: relative; }
  * so the box only needs to be as wide as that string plus a little padding. */
 .wallet-menu {
   position: absolute;
-  top: calc(100% + 6px);
+  top: calc(100% + 8px);
   right: 0;
-  min-width: 0;
+  min-width: 180px;
   background: var(--panel-solid, #0d1a10);
-  border: 1px solid var(--gold, #d9a441);
-  border-radius: 6px;
-  padding: 6px;
+  border: 2px solid var(--gold, #d9a441);
+  border-radius: 0;
+  padding: 8px;
   z-index: 900;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.4);
 }
 .wallet-menu .wm-account {
   font-family: var(--mono);
   font-size: 10px;
   color: rgba(232, 240, 224, 0.55);
-  padding: 4px 8px 6px;
+  padding: 0 4px 8px;
   white-space: nowrap;
+  border-bottom: 1px solid rgba(217, 164, 65, 0.25);
+  margin-bottom: 6px;
 }
-/* The action is an inline-width text action, not a full-width bar. Matches
- * the compact dropdown pattern: hover highlights a tight pill, not a
- * 200px-wide banner. */
+/* Rectangular menu items stacked vertically in a bordered box. */
 .wallet-menu .wm-item {
-  display: inline-block;
-  width: auto;
+  display: block;
+  width: 100%;
   text-align: left;
   font-family: var(--mono);
   font-size: 11px;
-  padding: 4px 8px;
+  padding: 6px 10px;
   background: none;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: 0;
   color: var(--ink, #e8f0e0);
   cursor: pointer;
+  margin-bottom: 2px;
 }
 .wallet-menu .wm-item:hover {
-  background: rgba(180, 134, 58, 0.15);
+  background: rgba(180, 134, 58, 0.2);
   border-color: var(--warn, #b4863a);
   color: var(--warn, #b4863a);
 }
@@ -1064,28 +1065,56 @@ button.chip { position: relative; }
 /* ---- season leaderboard ---- */
 /* The trigger is an .icon-btn now (see the icon button block above), so only
    the overlay needs styling here. */
-.lb-overlay { font-family: inherit; color: var(--ink); }
+.lb-overlay { font-family: inherit; color: #e8f0e0; }
 .lb-panel {
-  background: var(--panel-solid); border: 2px solid var(--edge);
-  border-radius: var(--radius); box-shadow: var(--shadow);
-  padding: var(--s3) var(--s3) var(--s4); overflow: hidden;
+  background: linear-gradient(180deg, #1a0a2e 0%, #0d1a10 100%);
+  border: 2px solid #7c3aed;
+  border-radius: 0;
+  padding: var(--s3) var(--s3) var(--s4);
+  overflow: hidden;
   display: flex; flex-direction: column; gap: var(--s2);
+  box-shadow: 6px 6px 0 rgba(124, 58, 237, 0.3);
 }
 .lb-head { display: flex; align-items: center; justify-content: space-between; }
-.lb-title { font-weight: 700; color: var(--ink); }
-.lb-close { background: none; border: none; color: var(--dim); font-size: 16px; cursor: pointer; }
-.lb-close:hover { color: var(--ink); }
-.lb-sub { color: var(--dim); font-size: 12px; }
-.lb-cols, .lb-row { display: grid; grid-template-columns: 3ch 1fr 9ch 9ch; gap: var(--s2); }
-.lb-cols { color: var(--faint); font-size: 11px; border-bottom: 1px solid var(--edge-dim); padding-bottom: 4px; }
-.lb-rows { display: flex; flex-direction: column; gap: 4px; min-height: 40px; }
-.lb-row { font-size: 12px; color: var(--ink); }
-.lb-row.me { color: #fff8d0; }
+.lb-title { font-weight: 700; color: #c4b5fd; letter-spacing: 0.5px; }
+.lb-close { background: none; border: none; color: #8b7fb8; font-size: 16px; cursor: pointer; }
+.lb-close:hover { color: #c4b5fd; }
+.lb-sub { color: #8b7fb8; font-size: 11px; }
+.lb-cols, .lb-row { display: grid; grid-template-columns: 5ch 1fr 9ch 9ch; gap: var(--s2); }
+.lb-cols { color: #7c3aed; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #7c3aed; padding-bottom: 6px; }
+.lb-rows { display: flex; flex-direction: column; gap: 3px; min-height: 40px; }
+.lb-row {
+  font-size: 12px;
+  color: #e8f0e0;
+  padding: 4px 6px;
+  border-left: 3px solid transparent;
+  transition: background 0.15s;
+}
+.lb-row:nth-child(odd) { background: rgba(124, 58, 237, 0.06); }
+.lb-row:hover { background: rgba(124, 58, 237, 0.12); }
+.lb-row.me {
+  color: #fbbf24;
+  border-left-color: #fbbf24;
+  background: rgba(251, 191, 36, 0.08);
+  font-weight: 600;
+}
 .lb-row.off { color: var(--faint); }
-.lb-rank { color: var(--gold); }
-.lb-empty { color: var(--faint); padding: var(--s3); text-align: center; font-size: 12px; }
-.lb-stats { margin-top: var(--s1); color: var(--ink); font-size: 12px; }
-.lb-stats.off { color: var(--warn); }
+.lb-rank-cell { display: flex; align-items: center; }
+.lb-rank { color: #8b7fb8; font-weight: 600; }
+.lb-medal {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.lb-medal.gold { background: linear-gradient(135deg, #fbbf24, #d97706); color: #1a0a00; }
+.lb-medal.silver { background: linear-gradient(135deg, #e5e7eb, #9ca3af); color: #111827; }
+.lb-medal.bronze { background: linear-gradient(135deg, #f59e0b, #92400e); color: #fff; }
+.lb-empty { color: #8b7fb8; padding: var(--s3); text-align: center; font-size: 12px; }
+.lb-stats { margin-top: var(--s1); color: #c4b5fd; font-size: 12px; }
+.lb-stats.off { color: #f59e0b; }
 
 /* ---- token buy button ---- */
 .chip.btn.act.token-buy {

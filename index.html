@@ -187,20 +187,8 @@
          (plus repair/settle/sell) live here as a vertical column. -->
     <div class="belt-actions" id="belt-actions"></div>
 
-    <!-- The SIGNAL / leaderboard button (the bar-chart glyph) sits in the
-         RIGHT rail on the same row as the action buttons, right-aligned under
-         the belt -- the mirror of the action buttons on the left. It was a
-         floating icon in the top-left corner, which read as chrome. -->
-    <div class="rail-actions">
-      <div class="rail-action-item">
-        <button type="button" id="leaderboard-btn" class="icon-btn" aria-label="Leaderboard" title="Leaderboard">
-          <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
-            <path d="M4 13h4v7H4zM10 8h4v12h-4zM16 4h4v16h-4z" fill="currentColor"/>
-          </svg>
-        </button>
-        <span class="rail-action-label">Leaderboard</span>
-      </div>
-    </div>
+    <!-- LEADERBOARD button moved to the wallet dropdown menu (user request).
+         The right rail now starts with the Sound button. -->
 
     <!-- SOUND toggle: round 3D button, placed BELOW the SETTLE button in the
          right rail. Tapping it opens the sound panel with THREE pill toggles
@@ -748,6 +736,7 @@
       walletMenu.className = 'wallet-menu';
       walletMenu.innerHTML =
         '<div class="wm-account">' + short(getState().account || '') + '</div>' +
+        '<button class="wm-item" type="button" id="wm-leaderboard">Leaderboard</button>' +
         '<button class="wm-item" type="button" id="wm-redeem">Redeem gems</button>' +
         '<button class="wm-item" type="button">Disconnect</button>';
       // Append the menu to the button and DO NOT touch its position.
@@ -763,6 +752,19 @@
       btn.dataset.open = '1';
       document.addEventListener('click', outsideClose, true);
       document.addEventListener('keydown', escClose, true);
+
+      // Leaderboard — opens the leaderboard panel. Moved from the right rail
+      // into the wallet dropdown per user request.
+      walletMenu.querySelector('#wm-leaderboard').addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeWalletMenu();
+        const scene = window.__scene || window.__game?.scene;
+        if (scene && typeof scene.toggleLeaderboard === 'function') {
+          scene.toggleLeaderboard();
+        } else {
+          setPending('Leaderboard is not ready yet — try again in a moment.');
+        }
+      });
 
       // Redeem gems — opens the redemption card. Lives in the wallet dropdown
       // because it needs a connected wallet, and the belt slot it used to
