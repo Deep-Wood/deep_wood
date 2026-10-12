@@ -301,3 +301,35 @@
   border-color: var(--warn, #b4863a);
   color: var(--warn, #b4863a);
 }
+
+/* The payment options now sit inside a .wm-box (same 3D green panel as the
+   wallet menu), each row pairing the pay button with an external link that
+   helps new players top up: "claim faucet" beside Pay ETH, "buy DeepWood"
+   beside Pay DeepWood. */
+.buy-dropdown .wm-box {
+  width: max-content;
+  min-width: 100%;
+}
+.pay-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pay-row .wm-item {
+  flex: 1;
+  white-space: nowrap;
+}
+.pay-link {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .06em;
+  text-transform: lowercase;
+  color: var(--gold, #d9a441);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+  padding: 4px 6px;
+}
+.pay-link:hover {
+  color: #f2c46b;
+}

@@ -1575,26 +1575,50 @@ export class ForestScene extends Phaser.Scene {
         dd.className = 'buy-dropdown';
         dd.id = 'buy-dropdown';
 
+        // Style the dropdown like the wallet menu box: a 3D green raised panel
+        // with each option as a flat row inside (same look as Leaderboard /
+        // Redeem gems in .wm-box).
+        const box = document.createElement('div');
+        box.className = 'wm-box';
+
+        // Row builder: pay button on the left, external link on the right.
+        const mkRow = (btn, linkText, linkHref, linkTitle) => {
+          const row = document.createElement('div');
+          row.className = 'pay-row';
+          row.appendChild(btn);
+          const a = document.createElement('a');
+          a.className = 'pay-link';
+          a.href = linkHref;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          a.title = linkTitle;
+          a.textContent = linkText;
+          a.onclick = (e) => e.stopPropagation();
+          row.appendChild(a);
+          return row;
+        };
+
         const optEth = document.createElement('button');
-        optEth.className = 'buy-dd-item';
+        optEth.className = 'wm-item';
         optEth.type = 'button';
-        optEth.textContent = 'pay eth';
+        optEth.textContent = 'Pay ETH';
         optEth.title = `pay ${fmtEth(cost)}`;
         optEth.onclick = (e) => { e.stopPropagation(); closeBuyDropdown(); this.doBuyTool(nt); };
 
         const optToken = document.createElement('button');
-        optToken.className = 'buy-dd-item';
+        optToken.className = 'wm-item';
         optToken.type = 'button';
         const tokenCost = this.estimateTokenCost(nt);
         const shortToken = tokenCost > 0
           ? (Number(tokenCost) / 1e18).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
           : '???';
-        optToken.textContent = 'pay DeepWood 10% off';
+        optToken.textContent = 'Pay DeepWood 10% off';
         optToken.title = `pay ~${shortToken} $DEEPWOOD (10% discount)`;
         optToken.onclick = (e) => { e.stopPropagation(); closeBuyDropdown(); this.doBuyToolWithToken(nt); };
 
-        dd.appendChild(optEth);
-        dd.appendChild(optToken);
+        box.appendChild(mkRow(optEth, 'claim faucet', 'https://faucet.testnet.chain.robinhood.com', 'Get free Robinhood testnet ETH'));
+        box.appendChild(mkRow(optToken, 'buy DeepWood', 'https://vibe.market/token/0xF049d0076C2f25a763551bED760Ab55e905Ea831', 'Buy $DEEPWOOD on vibe.market'));
+        dd.appendChild(box);
 
         // Position the dropdown below the button. The button is inside
         // #belt-actions (position:relative), so offsetParent is that container.
