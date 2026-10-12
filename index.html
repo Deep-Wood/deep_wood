@@ -159,20 +159,21 @@
         <div id="gemlist"></div>
       </div>
 
-      <!-- Hunter card: the player's current tool and skill. One avatar + one
-           name per row -- "Tool: Wood" under the wood pickaxe, "Skill:
-           Greenhorn" under the rough gem. Mirrors the satchel tile beside it. -->
+      <!-- Hunter card: an exact duplicate of the satchel tile, same width,
+           same padding, same title row. Two compact rows inside: TOOL with
+           the current pickaxe avatar + name, SKILL with the current gem
+           avatar + name. Only the current rank shows; an upgrade replaces it. -->
       <div id="hunter-card" class="readout hunter-card" hidden>
         <span class="card-title">Hunter</span>
-        <div class="hunter-rows">
-          <div class="hunter-row">
+        <div class="hunter-grid">
+          <div class="hunter-item">
             <span class="hunter-av" id="tool-av"></span>
             <span class="hunter-text">
               <span class="hunter-label">Tool</span>
               <span class="hunter-name" id="tool-name">--</span>
             </span>
           </div>
-          <div class="hunter-row">
+          <div class="hunter-item">
             <span class="hunter-av" id="skill-av"></span>
             <span class="hunter-text">
               <span class="hunter-label">Skill</span>

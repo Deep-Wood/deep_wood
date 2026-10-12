@@ -1518,38 +1518,29 @@ button.chip { position: relative; }
   text-transform: uppercase;
 }
 
-/* ---- hunter card: the player's current tool and skill ----
-   Mirrors the satchel card exactly: same tile, same title row, same two-up
-   rows. One avatar + name per row -- the thing the player HOLDS, not a
-   ladder. Wood tool shows "Tool: Wood" under the wood pickaxe; Greenhorn
-   skill shows "Skill: Greenhorn" under the rough gem. */
+/* ---- hunter card: an exact duplicate of the satchel tile ----
+   Same width, same padding, same title row as the satchel below it. Two
+   compact items inside: TOOL with the current pickaxe, SKILL with the
+   current gem. Each is avatar + label + name, side by side, no ladder. */
 .hunter-card {
-  /* Break out of the card chain width. The season rail is ~140px, which is
-     too narrow for "TOOL Wood · SKILL Prospector" side by side. The card is
-     the full season-card width so both rows have room; the 6px buffer keeps
-     it off the rail edges. */
-  grid-column: 1;
-  margin: 0 6px 6px;
-  padding: var(--s2) var(--s3);
-  background: linear-gradient(180deg, rgba(26, 10, 46, .92), rgba(13, 26, 16, .92));
-  border: 1px solid rgba(124, 58, 237, .35);
-  border-radius: 4px;
+  /* match the satchel tile exactly -- .readout already gives padding:0 and
+     no background, so this only needs the same interior rhythm as #gemlist */
 }
-.hunter-rows {
+.hunter-grid {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--s3);
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s2);
   margin-top: var(--s2);
 }
-.hunter-row {
+.hunter-item {
   display: flex;
   align-items: center;
   gap: var(--s2);
   min-width: 0;
 }
 .hunter-av {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
   display: block;
 }
@@ -1561,7 +1552,7 @@ button.chip { position: relative; }
   overflow: hidden;
 }
 .hunter-label {
-  font-size: 9px;
+  font-size: 8px;
   letter-spacing: .14em;
   text-transform: uppercase;
   color: var(--dim);
@@ -1569,7 +1560,7 @@ button.chip { position: relative; }
   white-space: nowrap;
 }
 .hunter-name {
-  font-size: 9.5px;
+  font-size: 10px;
   letter-spacing: .04em;
   text-transform: uppercase;
   color: var(--gold);
