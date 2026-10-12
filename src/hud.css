@@ -1525,10 +1525,20 @@ button.chip { position: relative; }
    are dim. */
 .hunter-card {
   padding: var(--s2) var(--s3);
+  /* A real surface. The .readout tiles are background:none -- they sit on
+     the game -- but this card holds ten small glyphs that need a stable
+     ground to read against. Same ground as the satchel tile beside it. */
+  background: linear-gradient(180deg, rgba(26, 10, 46, .92), rgba(13, 26, 16, .92));
+  border: 1px solid rgba(124, 58, 237, .35);
+  border-radius: 4px;
 }
 .hunter-rows {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* Stacked vertically, not side-by-side. The card lives inside the season
+     rail (~140px on mobile); two 5-rung ladders side by side would give each
+     rung ~7px, which is invisible. Stacked, each ladder gets the full card
+     width and each rung ~28px -- enough for the 26px avatars to read. */
+  grid-template-columns: 1fr;
   gap: var(--s3);
   margin-top: var(--s2);
 }
