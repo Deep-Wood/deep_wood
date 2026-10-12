@@ -153,16 +153,11 @@
         <span class="season-phase" id="season-phase" hidden></span>
       </div>
 
-      <!-- Satchel: the find tally by rarity, its own tile. -->
-      <div id="satchel" class="readout" hidden>
-        <span class="card-title">Satchel</span>
-        <div id="gemlist"></div>
-      </div>
-
       <!-- Hunter card: an exact duplicate of the satchel tile, same width,
            same padding, same title row. Two compact rows inside: TOOL with
            the current pickaxe avatar + name, SKILL with the current gem
-           avatar + name. Only the current rank shows; an upgrade replaces it. -->
+           avatar + name. Only the current rank shows; an upgrade replaces it.
+           Placed directly below the PRESEASON wordmark, ABOVE the satchel. -->
       <div id="hunter-card" class="readout hunter-card" hidden>
         <span class="card-title">Hunter</span>
         <div class="hunter-grid">
@@ -181,6 +176,12 @@
             </span>
           </div>
         </div>
+      </div>
+
+      <!-- Satchel: the find tally by rarity, its own tile. -->
+      <div id="satchel" class="readout" hidden>
+        <span class="card-title">Satchel</span>
+        <div id="gemlist"></div>
       </div>
     </section>
 
