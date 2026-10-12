@@ -1172,22 +1172,42 @@ button.chip { position: relative; }
   font-size: 11px;
   line-height: 1.45;
 }
-/* Every row and the header share one grid template, so the columns line up. */
-.lb-grid {
-  display: grid;
-  grid-template-columns: 4.5ch minmax(0, 1fr) 9ch 8ch;
-  gap: var(--s2);
-  align-items: center;
+/* The leaderboard is a real <table> now: th header row, td rows, medal emoji
+   on the podium. The old div-grid (.lb-grid/.lb-cols/.lb-rows) is replaced by
+   this single table with collapsed borders. */
+.lb-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 2px solid #7c3aed;
+  font-size: 12px;
+  color: #e8f0e0;
+  table-layout: fixed;
 }
-.lb-cols {
+.lb-table thead th {
   color: #7c3aed;
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 1px;
+  padding: 6px 8px;
   border-bottom: 2px solid #7c3aed;
-  padding-bottom: 5px;
+  text-align: left;
+  background: rgba(124, 58, 237, 0.12);
 }
+.lb-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(124, 58, 237, 0.18);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lb-table th:nth-child(1), .lb-table td:nth-child(1) { width: 5ch; text-align: center; }
+.lb-table th:nth-child(3), .lb-table td:nth-child(3) { width: 10ch; text-align: right; }
+.lb-table th:nth-child(4), .lb-table td:nth-child(4) { width: 9ch; text-align: right; }
+/* Scrolling tbody: keep the header pinned while the rows scroll inside the
+   50vh sheet. */
+.lb-table tbody { display: block; overflow-y: auto; max-height: calc(50vh - 130px); }
+.lb-table thead, .lb-table tbody tr { display: table; width: 100%; table-layout: fixed; }
 /* The only scrolling region. Rows are fixed-height so the grid stays legible
    and the panel never grows past its 50vh frame. */
 .lb-rows {
@@ -1213,19 +1233,9 @@ button.chip { position: relative; }
   font-weight: 600;
 }
 .lb-row.off { color: var(--faint); }
-.lb-rank-cell { display: flex; align-items: center; }
+.lb-rank-cell { text-align: center; }
 .lb-rank { color: #8b7fb8; font-weight: 600; }
-.lb-medal {
-  display: inline-block;
-  padding: 1px 6px;
-  border-radius: 2px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-}
-.lb-medal.gold { background: linear-gradient(135deg, #fbbf24, #d97706); color: #1a0a00; }
-.lb-medal.silver { background: linear-gradient(135deg, #e5e7eb, #9ca3af); color: #111827; }
-.lb-medal.bronze { background: linear-gradient(135deg, #f59e0b, #92400e); color: #fff; }
+.lb-medal { font-size: 16px; line-height: 1; display: inline-block; }
 .lb-empty { color: #8b7fb8; padding: var(--s3); text-align: center; font-size: 12px; }
 .lb-foot {
   border-top: 1px solid rgba(124, 58, 237, 0.35);

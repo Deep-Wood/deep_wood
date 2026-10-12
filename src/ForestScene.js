@@ -1384,19 +1384,19 @@ export class ForestScene extends Phaser.Scene {
     const bestTxt = (r) => seasonEth(r.bestWei) + ' ETH';
     const shortAddr = (a) => a === '0xplayer' ? 'YOU' : `${a.slice(0, 6)}…${a.slice(-4)}`;
     const medal = (rank) => {
-      if (rank === 1) return '<span class="lb-medal gold">1st</span>';
-      if (rank === 2) return '<span class="lb-medal silver">2nd</span>';
-      if (rank === 3) return '<span class="lb-medal bronze">3rd</span>';
+      if (rank === 1) return '<span class="lb-medal gold">🥇</span>';
+      if (rank === 2) return '<span class="lb-medal silver">🥈</span>';
+      if (rank === 3) return '<span class="lb-medal bronze">🥉</span>';
       return `<span class="lb-rank">${rank}</span>`;
     };
     const rowHtml = (r) => {
       const isMe = r.address === me;
-      return `<div class="lb-grid lb-row${isMe ? ' me' : ''}${r.onBoard ? '' : ' off'}">` +
-        `<span class="lb-rank-cell">${r.onBoard ? medal(r.rank) : '--'}</span>` +
-        `<span class="lb-addr">${esc(shortAddr(r.address))}</span>` +
-        `<span class="lb-roi">${roiTxt(r)}</span>` +
-        `<span class="lb-best">${bestTxt(r)}</span>` +
-        `</div>`;
+      return `<tr class="lb-row${isMe ? ' me' : ''}${r.onBoard ? '' : ' off'}">` +
+        `<td class="lb-rank-cell">${r.onBoard ? medal(r.rank) : '--'}</td>` +
+        `<td class="lb-addr">${esc(shortAddr(r.address))}</td>` +
+        `<td class="lb-roi">${roiTxt(r)}</td>` +
+        `<td class="lb-best">${bestTxt(r)}</td>` +
+        `</tr>`;
     };
 
     const myRow = rows.find((r) => r.address === me);
@@ -1413,15 +1413,16 @@ export class ForestScene extends Phaser.Scene {
           <span class="lb-title">${phaseLabel ?? 'Season'} Leaderboard</span>
           <button class="lb-close" type="button" aria-label="Close">✕</button>
         </div>
-        <p class="lb-sub">Ranked by how well you hunt, not how much you spend — gems found per ETH. ${esc(rankNote ?? '')}</p>
-        <div class="lb-grid lb-cols">
-          <span>#</span><span>Hunter</span><span>Gems / ETH</span><span>Best find</span>
-        </div>
-        <div class="lb-rows">
-          ${top10.length ? top10.map(rowHtml).join('') : '<div class="lb-empty">No one has settled a hunt yet. Be the first.</div>'}
-        </div>
+        <table class="lb-table">
+          <thead>
+            <tr><th>#</th><th>Hunter</th><th>Gems / ETH</th><th>Best find</th></tr>
+          </thead>
+          <tbody class="lb-rows-t">
+            ${top10.length ? top10.map(rowHtml).join('') : '<tr><td colspan="4" class="lb-empty">No one has settled a hunt yet. Be the first.</td></tr>'}
+         </tbody>
+        </table>
         ${statsFoot}
-      </div>`;
+        </div>`;
     document.body.appendChild(el);
     this.lbEl = el;
 
