@@ -1518,86 +1518,60 @@ button.chip { position: relative; }
   text-transform: uppercase;
 }
 
-/* ---- hunter card: the player's tool and skill, side by side ----
-   Mirrors the satchel card (same .readout tile, same title row) so the two
-   read as a pair. The five avatars per row let a player see the whole ladder
-   at a glance and which rung they are on -- the current one is lit, the rest
-   are dim. */
+/* ---- hunter card: the player's current tool and skill ----
+   Mirrors the satchel card exactly: same tile, same title row, same two-up
+   rows. One avatar + name per row -- the thing the player HOLDS, not a
+   ladder. Wood tool shows "Tool: Wood" under the wood pickaxe; Greenhorn
+   skill shows "Skill: Greenhorn" under the rough gem. */
 .hunter-card {
   padding: var(--s2) var(--s3);
-  /* A real surface. The .readout tiles are background:none -- they sit on
-     the game -- but this card holds ten small glyphs that need a stable
-     ground to read against. Same ground as the satchel tile beside it. */
   background: linear-gradient(180deg, rgba(26, 10, 46, .92), rgba(13, 26, 16, .92));
   border: 1px solid rgba(124, 58, 237, .35);
   border-radius: 4px;
 }
 .hunter-rows {
   display: grid;
-  /* Stacked vertically, not side-by-side. The card lives inside the season
-     rail (~140px on mobile); two 5-rung ladders side by side would give each
-     rung ~7px, which is invisible. Stacked, each ladder gets the full card
-     width and each rung ~28px -- enough for the 26px avatars to read. */
-  grid-template-columns: 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: var(--s3);
   margin-top: var(--s2);
 }
-.hunter-row { min-width: 0; }
+.hunter-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-width: 0;
+}
+.hunter-av {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: block;
+}
+.hunter-av svg { width: 100%; height: 100%; display: block; }
+.hunter-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
 .hunter-label {
   font-size: 9px;
   letter-spacing: .14em;
   text-transform: uppercase;
   color: var(--dim);
   font-weight: 700;
-  margin-bottom: 4px;
+  white-space: nowrap;
 }
-.hunter-ladder {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 4px;
-}
-.hunter-step {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  padding: 4px 2px;
-  border: 1px solid transparent;
-  border-radius: 3px;
-  opacity: .38;
-  filter: grayscale(.75);
-  transition: opacity .15s, filter .15s;
-}
-/* The rung the player actually holds. */
-.hunter-step.now {
-  opacity: 1;
-  filter: none;
-  background: rgba(217, 164, 65, .14);
-  border-color: var(--gold);
-}
-.hunter-av {
-  width: 26px;
-  height: 26px;
-  display: block;
-}
-.hunter-av img, . hunter-av svg { width: 100%; height: 100%; display: block; }
 .hunter-name {
-  font-size: 8.5px;
+  font-size: 11px;
   letter-spacing: .04em;
   text-transform: uppercase;
-  color: var(--faint);
-  /* Rotated 90deg so the full name fits in the ~20px rung. Horizontal text
-     truncated to one letter ("W… B… I… S… G…"); vertical text uses the
-     card's height instead. */
-  writing-mode: vertical-rl;
-  text-orientation: mixed;
+  color: var(--gold);
+  font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
-  text-align: center;
-  line-height: 1.1;
-  max-height: 4.2em;   /* fits "Greenhorn" / "Prospector" without clipping */
+  text-overflow: ellipsis;
 }
-.hunter-step.now .hunter-name { color: var(--gold); font-weight: 700; }
 
 .redeem-msg { min-height: 13px; font-size: 10px; color: var(--warn); }
 .redeem-msg.bad { color: var(--bad); }

@@ -159,19 +159,25 @@
         <div id="gemlist"></div>
       </div>
 
-      <!-- Hunter card: the player's current tool and skill, with the full
-           5-rung ladder for each. The held rung is lit gold; the rest are dim.
-           Mirrors the satchel tile so the two read as a pair. -->
+      <!-- Hunter card: the player's current tool and skill. One avatar + one
+           name per row -- "Tool: Wood" under the wood pickaxe, "Skill:
+           Greenhorn" under the rough gem. Mirrors the satchel tile beside it. -->
       <div id="hunter-card" class="readout hunter-card" hidden>
         <span class="card-title">Hunter</span>
         <div class="hunter-rows">
           <div class="hunter-row">
-            <div class="hunter-label">Tool</div>
-            <div class="hunter-ladder" id="tool-ladder"></div>
+            <span class="hunter-av" id="tool-av"></span>
+            <span class="hunter-text">
+              <span class="hunter-label">Tool</span>
+              <span class="hunter-name" id="tool-name">--</span>
+            </span>
           </div>
           <div class="hunter-row">
-            <div class="hunter-label">Skill</div>
-            <div class="hunter-ladder" id="skill-ladder"></div>
+            <span class="hunter-av" id="skill-av"></span>
+            <span class="hunter-text">
+              <span class="hunter-label">Skill</span>
+              <span class="hunter-name" id="skill-name">--</span>
+            </span>
           </div>
         </div>
       </div>
@@ -505,56 +511,42 @@
     // a hunt, so selling gems left the tiles showing the pre-sale count.
     window.renderGems = renderGems;
 
-    // ---- hunter card: the player's tool and skill ladders ------------------
-    // Five rungs per row, the held one lit gold. The avatars are inline SVG
-    // generated in economy.js so there is no image to 404.
+    // ---- hunter card: the player's current tool and skill ------------------
+    // One avatar + one name per row. Not a ladder -- the thing the player
+    // HOLDS. The avatars are inline SVG generated in economy.js so there is
+    // no image to 404.
     // Loaded lazily via dynamic import so this block does not need to be a
     // module itself -- the surrounding script is a plain inline one.
-    const toolLadder = document.getElementById('tool-ladder');
-    const skillLadder = document.getElementById('skill-ladder');
+    const toolAv = document.getElementById('tool-av');
+    const toolName = document.getElementById('tool-name');
+    const skillAv = document.getElementById('skill-av');
+    const skillName = document.getElementById('skill-name');
     const hunterCard = document.getElementById('hunter-card');
 
-    let ladderRow;
     let hunterHooked = false;
     async function renderHunter() {
       const p = window.__scene?.econ;
       if (!p) {
-        // The HUD script runs before main.js assigns window.__scene. Hook the
-        // scene's own CREATE event -- main.js publishes on the same signal --
-        // and poll briefly as a fallback, so the card never depends on which
-        // script happened to win the race.
+        // The HUD script can run before main.js assigns window.__scene.
+        // Poll until it exists rather than returning silently.
         if (!hunterHooked) {
           hunterHooked = true;
-          const s = window.__scene;
-          if (s?.events?.once) s.events.once('ready', () => renderHunter());
           const poll = () => {
-            if (window.__scene?.econ) renderHunter();
-            else setTimeout(poll, 200);
+            if (window.__scene?.econ) { renderHunter(); hunterHooked = false; return; }
+            setTimeout(poll, 200);
           };
-          setTimeout(poll, 200);
+          poll();
         }
         return;
       }
+      hunterHooked = false;
       const { TOOL_AVATARS, SKILL_AVATARS, TIER_NAME, SKILL_NAME } = await import('/src/economy.js');
-      if (!ladderRow) {
-        ladderRow = (el, avatars, names, current, offset) => {
-          el.innerHTML = avatars.map((svg, i) => {
-            const idx = i + offset;
-            const isNow = idx === current;
-            return `<div class="hunter-step${isNow ? ' now' : ''}" title="${names[idx]}">`
-              + `<span class="hunter-av">${svg}</span>`
-              + `<span class="hunter-name">${names[idx]}</span>`
-              + `</div>`;
-          }).join('');
-        };
-      }
-      // Tool: tier 0 means no pick yet, so the ladder starts at 1. TIER_NAME
-      // is already index-aligned to the tier (TIER_NAME[1] === 'Wood'), so it
-      // is passed whole and `offset` does the shifting -- slicing it here as
-      // well skipped Wood and left the last rung undefined.
-      ladderRow(toolLadder, TOOL_AVATARS.slice(1), TIER_NAME, p.tier, 1);
+      // Tool: tier 0 means no pick yet.
+      toolAv.innerHTML = p.tier >= 1 ? TOOL_AVATARS[p.tier] : '';
+      toolName.textContent = p.tier >= 1 ? TIER_NAME[p.tier] : 'None';
       // Skill: 0..4, Greenhorn through Lapidary.
-      ladderRow(skillLadder, SKILL_AVATARS, SKILL_NAME, p.skill, 0);
+      skillAv.innerHTML = SKILL_AVATARS[p.skill] || '';
+      skillName.textContent = SKILL_NAME[p.skill] || '--';
       hunterCard.hidden = false;
     }
     window.renderHunter = renderHunter;
