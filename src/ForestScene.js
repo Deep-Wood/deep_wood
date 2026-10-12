@@ -1617,7 +1617,7 @@ export class ForestScene extends Phaser.Scene {
         optToken.onclick = (e) => { e.stopPropagation(); closeBuyDropdown(); this.doBuyToolWithToken(nt); };
 
         box.appendChild(mkRow(optEth, 'claim faucet', 'https://faucet.testnet.chain.robinhood.com', 'Get free Robinhood testnet ETH'));
-        box.appendChild(mkRow(optToken, 'buy DeepWood', 'https://vibe.market/token/0xF049d0076C2f25a763551bED760Ab55e905Ea831', 'Buy $DEEPWOOD on vibe.market'));
+        box.appendChild(mkRow(optToken, 'buy DeepWood', 'https://testnet.vibevibe.fun/token/0xF049d0076c2f25A763551beD760aB55e905ea831', 'Buy $DEEPWOOD on vibevibe.fun'));
         dd.appendChild(box);
 
         // Position the dropdown below the button. The button is inside
