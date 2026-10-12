@@ -1552,12 +1552,13 @@ button.chip { position: relative; }
   overflow: hidden;
 }
 .hunter-label {
-  font-size: 8px;
-  letter-spacing: .14em;
+  font-size: 7px;
+  letter-spacing: .12em;
   text-transform: uppercase;
   color: var(--dim);
   font-weight: 700;
   white-space: nowrap;
+  /* the label sits above the name; keep it compact so the name gets width */
 }
 .hunter-name {
   font-size: 10px;
