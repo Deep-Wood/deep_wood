@@ -248,8 +248,15 @@ html, body {
      icon row so it cleared the connect/wallet button. That button is 44px and
      sits in the same grid column, so a smaller, fixed offset seats the
      wordmark level with it instead of floating a row below. */
-  margin-top: 0;
+  /* The old calc() pushed the wordmark down to clear the wallet button.
+     Now the wordmark needs to sit back at the top of the screen, ABOVE
+     where the hunter strip will be. Negative margin pulls it up past the
+     icon row so the text against the forest canopy. */
+  margin-top: calc(-1 * (var(--icon) + var(--s2)));
 }
+/* The first card after the wordmark needs room to breathe below the
+   text -- otherwise the PRESEASON and the strip touch visually. */
+.season-head + .readout { margin-top: var(--s3); }
 /* Brand lockup: the logo + wordmark share the first row; the phase line wraps
    to its own row beneath (flex-basis:100%). The logo is the emblem cropped to
    its actual bright circular boundary (deepwood-emblem-round.png) -- centered
