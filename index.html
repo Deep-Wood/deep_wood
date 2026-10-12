@@ -616,6 +616,7 @@
     // Spending gems does not un-find them.
     window.retireSatchel = () => { /* the satchel is permanent now */ };
     renderGems();
+    renderHunter();
 
     // Countdown. Drives the ENDS text and the season progress bar.
     //
@@ -627,6 +628,7 @@
       r.counts.forEach((c, i) => { totals[i] += c; });
       renderGems();
       renderGems();
+      renderHunter();
     });
 
     </script>
