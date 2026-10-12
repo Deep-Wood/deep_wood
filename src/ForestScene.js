@@ -1755,11 +1755,10 @@ export class ForestScene extends Phaser.Scene {
       el.appendChild(swrap);
     }
 
-    // --- repair, shown only when broken and affordable. It is a gem action
-    // dressed like the ETH ones, so it sits on its own row under them.
-    // Rendered as a 3D CIRCLE ICON (like settle) with the "fix tool" label
-    // beneath it, in the same column, so the terminal actions read as a set.
-    if (p.tier > 0 && p.left === 0) {
+    // --- repair. Always rendered (even with a healthy tool) so the tutorial
+    // step has somewhere to point. Clicking with a working tool shows
+    // "Tool not broken. Continue hunting." instead of running the repair.
+    if (p.tier > 0) {
       const rwrap = document.createElement('div');
       rwrap.className = 'rail-action-item rail-action-icon order-repair';
       const r = document.createElement('button');
@@ -1770,12 +1769,20 @@ export class ForestScene extends Phaser.Scene {
         + '<path d="M14.7 6.3a3.5 3.5 0 0 0 4.6 4.6l-3 3a1.5 1.5 0 0 1-2.1 0l-1.4-1.4a1.5 1.5 0 0 1 0-2.1l1.9-4.1Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>'
         + '<path d="M11.5 12.5 4.6 19.4a1.6 1.6 0 0 0 0 2.3l.7.7a1.6 1.6 0 0 0 2.3 0l6.9-6.9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>'
         + '</svg>';
-      const need = repairNeeds(p);
-      const chk = canRepair(p);
+      const broken = p.left === 0;
+      const chk = broken ? canRepair(p) : { ok: false, reason: 'Tool not broken. Continue hunting.' };
       r.setAttribute('aria-label', `Fix ${toolName(p.tier)}`);
-      r.title = chk.ok ? `repair ${toolName(p.tier)} for ${fmtRepair(p.tier)}` : chk.reason;
-      r.disabled = !chk.ok;
-      r.onclick = () => this.doRepair();
+      r.title = broken
+        ? (chk.ok ? `repair ${toolName(p.tier)} for ${fmtRepair(p.tier)}` : chk.reason)
+        : 'Tool not broken. Continue hunting.';
+      r.disabled = broken && !chk.ok;
+      r.onclick = () => {
+        if (!broken) {
+          window.deepwoodFlash?.('Tool not broken. Continue hunting.');
+          return;
+        }
+        this.doRepair();
+      };
       this.decoratePending(r);
       rwrap.appendChild(r);
       const rlbl = document.createElement('span');

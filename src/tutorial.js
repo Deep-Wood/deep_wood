@@ -1,57 +1,78 @@
 /**
  * First-run tutorial overlay.
  *
- * Design constraints (user, 2026-10-05):
- *   - step-by-step: one instruction at a time, click the screen to advance
- *   - a SKIP button at every step, skipping the whole tutorial entirely
- *   - covers: move, dig, settle (the batch concept), skill (the rarity gate),
- *     durability and repair, redeem ($DEEPWOOD, not ETH), and the obstacles
- *     (trees block you, water edges the world)
+ * Design constraints (user, 2026-10-05 / refined 2026-10-12):
+ *   - one welcome step, then an INTERACTIVE step per HUD control: the card
+ *     jumps next to the element being described and a white ring highlights it
+ *   - viber.png avatar on every card: the tour guide is one of the vibers
+ *   - SKIP at every step, FINISH on the last; the final step keeps the
+ *     tree / water warning
+ *   - Fix-tool button is ALWAYS visible and the repair step mentions it even
+ *     when the tool is fine; clicking when not broken flashes
+ *     "Tool not broken. Continue hunting."
  *
- * Storage: localStorage 'dw-tutorial-v3'. The overlay is pure DOM -- no
- * Phaser dependency -- so it works before the scene is ready and never
- * touches gameplay state. It is a dimmer plus a centered card; clicks land
- * on the CARD to advance (not anywhere, or a click meant for the game
- * would silently eat steps), and skip clears the flag and hides everything.
+ * Storage: localStorage 'dw-tutorial-v4'. Bumped from v3 because the whole
+ * step list changed shape.
+ *
+ * Pure DOM overlay -- no Phaser -- so it works before the scene is ready
+ * and never touches gameplay state. The card positions itself next to the
+ * target element at paint time via getBoundingClientRect and clamps to the
+ * viewport, so steps stay put if the HUD itself rebuilds.
  */
 
-// v2: added the skill step, corrected durability to the tier range, and
-// switched the sell step from ETH to $DEEPWOOD. Returning players should see
-// the corrected version, so the key is bumped rather than reused.
-const KEY = "dw-tutorial-v3";
+const KEY = "dw-tutorial-v4";
 
+/**
+ * `target` is the CSS selector for the element to point at. `pos` is the
+ * side of the target the card should prefer. When the target is missing
+ * (e.g. a rail that only renders on desktop) the step drops to centred.
+ */
 const STEPS = [
   {
     title: "Welcome to DeepWood",
-    body: "Hunt gems in a procedurally generated forest. Everything you find is real on-chain state once your wallet is connected. Click to continue.",
+    body: "Hunt gems in a procedurally generated forest. Everything you find is real on-chain state once your wallet is connected. Tap the card to continue.",
+    target: null,
   },
   {
-    title: "Move",
-    body: "Tap or click where you want to walk. The hunter finds their own path; you can also hold a direction.",
+    title: "Your satchel",
+    body: "This lemon bar is your satchel. Top row: one icon per gem rarity with the count you hold. Bottom row: your current tool and skill.",
+    target: "#gemstrip",
+    pos: "below",
   },
   {
-    title: "Dig",
-    body: "Walk up to a dig site and press HUNT. Each dig swings the pick three times — the result comes from the chain itself, not the client.",
+    title: "Buy / upgrade tool",
+    body: "Pickaxe icon: buy your first tool, or upgrade to the next tier. Tap it and choose ETH or $DEEPWOOD (10% off). Next to each pay option there's a link for the testnet faucet or for buying $DEEPWOOD if you're short.",
+    target: "#belt-buy",
+    pos: "left",
   },
   {
-    title: "Settle when you choose",
-    body: "Digs are queued, not settled one by one. When you press SETTLE, up to 20 queued hunts are written to the chain in ONE transaction. Warning: reload or leave with hunts queued and they are lost — settle before you go.",
+    title: "Upgrade skill",
+    body: "Arrow icon: climb from Greenhorn → Lapidary. Each rank unlocks the next gem rarity. Skill costs Quartz, which you always mine. A skill only takes effect once you hold the matching tool.",
+    target: "#belt-skill",
+    pos: "left",
   },
   {
-    title: "Your craft title",
-    body: "You start a Greenhorn and climb: Prospector, Delver, Assayer, Lapidary. Each title unlocks the next gem tier — Prospector mines Amber, Delver Sapphire, Assayer Ruby, Lapidary Diamond — and the last two grant an extra find per hunt. A title only takes effect once you hold the matching tool, so Prospector gives you nothing until you buy Bronze. Upgrades cost Quartz, which you always mine.",
+    title: "Fix tool",
+    body: "Wrench icon: a tool lasts 20–40 digs. Tap when it's broken to repair with gems. If it's not broken, you'll just see 'Tool not broken. Continue hunting.'",
+    target: "#belt-repair",
+    pos: "left",
   },
   {
-    title: "The tool wears out",
-    body: "A tool lasts 20–40 digs depending on tier. SETTLE your batch, then repair it with gems or upgrade to the next tier. Higher tiers need rarer gems to repair — keep your skill high enough to mine them. A broken pick digs nothing.",
+    title: "Settle hunt",
+    body: "Checkmark icon: digs are queued, not settled one by one. Tap Settle to write up to 20 queued hunts in ONE transaction. Reload or leave with hunts queued and they are lost — settle before you go.",
+    target: "#belt-settle",
+    pos: "left",
   },
   {
-    title: "Redeem",
-    body: "Gems in your satchel can be redeemed any time for $DEEPWOOD tokens, not ETH. The satchel always shows your real on-chain balance per rarity.",
+    title: "Wallet & redeem",
+    body: "Wallet chip, top-right: tap to open. From here you can Redeem gems for $DEEPWOOD, view the Leaderboard, or disconnect. The button is also how you connect when freshly loaded.",
+    target: "#connect",
+    pos: "below-wide",
   },
   {
     title: "Watch the forest",
-    body: "Trees block your path and hide sites; deep water ends the world. Everything else — the leaderboards, ranks, the season — lives in the header card.",
+    body: "Trees block your path and hide dig sites; deep water ends the world. Spend a moment learning the layout before you burn a pick's durability fighting an invisible boundary. Good hunting, hunter.",
+    target: null,
   },
 ];
 
@@ -71,6 +92,52 @@ export function markTutorialDone() {
   }
 }
 
+/** Which side the arrow sits on for a given card placement. */
+function arrowSide(pos) {
+  if (pos === "left") return "right";
+  if (pos === "right") return "left";
+  if (pos === "below" || pos === "below-wide") return "top";
+  if (pos === "above") return "bottom";
+  return "none";
+}
+
+/** Place the card next to `target`, clamped to the viewport. */
+function placeCard(card, arrow, target, pos) {
+  const PADDING = 10;
+  const GAP = 12;
+  if (!target || !pos) {
+    card.style.left = "50%";
+    card.style.top = "50%";
+    card.style.transform = "translate(-50%,-50%)";
+    arrow.className = "tut-arrow none";
+    return;
+  }
+  const t = target.getBoundingClientRect();
+  const cw = card.offsetWidth;
+  const ch = card.offsetHeight;
+  let left;
+  let top;
+  if (pos === "left") {
+    left = t.left - cw - GAP;
+    top = t.top + t.height / 2 - ch / 2;
+  } else if (pos === "right") {
+    left = t.right + GAP;
+    top = t.top + t.height / 2 - ch / 2;
+  } else if (pos === "above") {
+    top = t.top - ch - GAP;
+    left = t.left + t.width / 2 - cw / 2;
+  } else {
+    top = t.bottom + GAP;
+    left = t.left + t.width / 2 - cw / 2;
+  }
+  left = Math.max(PADDING, Math.min(window.innerWidth - cw - PADDING, left));
+  top = Math.max(PADDING, Math.min(window.innerHeight - ch - PADDING, top));
+  card.style.left = `${Math.round(left)}px`;
+  card.style.top = `${Math.round(top)}px`;
+  card.style.transform = "none";
+  arrow.className = `tut-arrow ${arrowSide(pos)}`;
+}
+
 /**
  * Show the overlay if it has never been dismissed.
  * @returns {boolean} whether the overlay is up (the caller may pause input)
@@ -83,52 +150,99 @@ export function maybeShowTutorial() {
   dim.className = "tutorial-dim";
 
   const card = document.createElement("div");
-  card.className = "tutorial-card";
+  card.className = "tutorial-card tut-pointed";
+  card.style.position = "fixed";
+  card.style.margin = "0";
 
+  const arrow = document.createElement("div");
+  arrow.className = "tut-arrow none";
+  card.appendChild(arrow);
+
+  // Header: viber avatar + step title.
+  const head = document.createElement("div");
+  head.className = "tut-head";
+  const avatar = document.createElement("img");
+  avatar.className = "tut-avatar";
+  avatar.src = "/art/viber.png";
+  avatar.alt = "tutor";
+  head.appendChild(avatar);
   const h = document.createElement("h2");
+  head.appendChild(h);
+  card.appendChild(head);
+
   const b = document.createElement("p");
+  card.appendChild(b);
+
   const steps = document.createElement("div");
   steps.className = "tutorial-steps";
+  card.appendChild(steps);
+
+  const foot = document.createElement("div");
+  foot.className = "tut-foot";
   const skip = document.createElement("button");
   skip.className = "tutorial-skip";
   skip.textContent = "skip";
+  const next = document.createElement("button");
+  next.className = "tutorial-next";
+  next.textContent = "next";
+  foot.appendChild(skip);
+  foot.appendChild(next);
+  card.appendChild(foot);
 
-  card.appendChild(h);
-  card.appendChild(b);
-  card.appendChild(steps);
-  card.appendChild(skip);
   dim.appendChild(card);
   document.body.appendChild(dim);
 
   let i = 0;
+  let highlighted = null;
+
+  const clearHighlight = () => {
+    if (highlighted) {
+      highlighted.classList.remove("tut-hot");
+      highlighted = null;
+    }
+  };
+
   const paint = () => {
+    clearHighlight();
     const s = STEPS[i];
     h.textContent = s.title;
     b.textContent = s.body;
-    // Progress dots: which step you are on, how many remain.
     steps.innerHTML = STEPS.map(
       (_, k) => `<span class="dot${k === i ? " on" : ""}"></span>`,
     ).join("");
-    skip.textContent = i === STEPS.length - 1 ? "done" : "skip";
+    next.textContent = i === STEPS.length - 1 ? "finish" : "next";
+    // Resolve the target AFTER the card has its new content so the position
+    // math reads a fully laid-out element.
+    requestAnimationFrame(() => {
+      const el = s.target ? document.querySelector(s.target) : null;
+      if (el) {
+        el.classList.add("tut-hot");
+        highlighted = el;
+        placeCard(card, arrow, el, s.pos || "below");
+      } else {
+        placeCard(card, arrow, null, null);
+      }
+    });
   };
 
   const close = () => {
     markTutorialDone();
+    clearHighlight();
     dim.remove();
   };
 
-  // Advance on ANY click inside the card; the dim layer does not advance, so
-  // a click meant for the game world behind it is just a click.
-  card.addEventListener("click", (e) => {
-    if (e.target === skip) return; // skip has its own handler
+  const advance = () => {
     i += 1;
     if (i >= STEPS.length) close();
     else paint();
+  };
+
+  card.addEventListener("click", (e) => {
+    if (e.target === skip || e.target === next) return;
+    advance();
   });
-  skip.addEventListener("click", (e) => {
-    e.stopPropagation();
-    close();
-  });
+  next.addEventListener("click", (e) => { e.stopPropagation(); advance(); });
+  skip.addEventListener("click", (e) => { e.stopPropagation(); close(); });
 
   paint();
   return true;

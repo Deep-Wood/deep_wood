@@ -250,6 +250,86 @@
 }
 .tutorial-skip:hover { color: var(--ink, #e8f0e0); }
 
+/* The tutorial is interactive now: the card jumps next to the control being
+   described, a white ring highlights the target, and a small arrow nub on
+   the card points at it. The viber avatar sits on every card so the tour
+   guide reads as a character, not a status bar. */
+.tutorial-card.tut-pointed {
+  /* width is fixed, position is set in JS; cap at mobile width */
+  max-width: 300px;
+  width: 86vw;
+}
+.tut-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.tut-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid var(--gold, #d9a441);
+  background: #1a1a1a;
+  flex-shrink: 0;
+  image-rendering: -webkit-optimize-contrast;
+}
+.tut-head h2 { margin: 0; }
+.tut-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 6px;
+  gap: 10px;
+}
+.tutorial-next {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--gold, #d9a441);
+  background: rgba(217, 164, 65, 0.18);
+  border: 1px solid var(--gold, #d9a441);
+  border-radius: 4px;
+  padding: 5px 14px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.tutorial-next:hover { background: rgba(217, 164, 65, 0.3); }
+/* The arrow nub sits on one side of the card and points at the target.
+   Outline-only triangle so it matches the card's border. */
+.tut-arrow {
+  position: absolute;
+  width: 0; height: 0;
+  border: 8px solid transparent;
+}
+.tut-arrow.none { display: none; }
+.tut-arrow.top {
+  top: -16px; left: 50%;
+  margin-left: -8px;
+  border-bottom-color: var(--gold, #d9a441);
+}
+.tut-arrow.bottom {
+  bottom: -16px; left: 50%;
+  margin-left: -8px;
+  border-top-color: var(--gold, #d9a441);
+}
+.tut-arrow.left {
+  left: -16px; top: 50%;
+  margin-top: -8px;
+  border-right-color: var(--gold, #d9a441);
+}
+.tut-arrow.right {
+  right: -16px; top: 50%;
+  margin-top: -8px;
+  border-left-color: var(--gold, #d9a441);
+}
+/* The ring on the element we are describing. box-shadow (not outline) so
+   it shows over the 3D bevels on the chip/button. */
+.tut-hot {
+  box-shadow: 0 0 0 2px rgba(255, 235, 130, 0.9), 0 0 12px rgba(251, 191, 36, 0.55);
+  border-radius: 999px;
+}
+
 /* --- small phones: one button per row ------------------------------------
  * Two buttons side by side in a ~130px rail gives each ~62px, and "buy Wood"
  * ellipsised to "buy W…" at that width. A taller stack of full-width buttons
