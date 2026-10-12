@@ -324,3 +324,43 @@ export function fmtRepair(tier, short = true) {
     .filter(Boolean)
     .join(' + ') || 'free';
 }
+// --- hunter card avatars ---------------------------------------------------
+// Inline SVG so there are no image requests to go missing. Each tool tier is
+// a pickaxe whose head takes that tier's metal; each skill rank is a gem
+// cut to that rank's shape. `current` is lit by CSS, so the glyph itself is
+// always the same -- only the frame changes.
+
+/** A pickaxe head in the tier's metal. 16x16 viewBox. */
+function toolAvatar(tier) {
+  const metal = ['#8a6b4a', '#c98f4e', '#9aa5b1', '#6d8fa8', '#e8c25a'][tier - 1] || '#8a6b4a';
+  const dark = metal === '#e8c25a' ? '#a87c22' : '#00000055';
+  const id = `tg${tier}`;
+  return `<svg viewBox="0 0 16 16" aria-hidden="true"><defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${metal}"/><stop offset="1" stop-color="${dark}"/></linearGradient></defs>`
+    + `<path d="M2 4 Q8 0 14 4 L13 6 Q8 3 3 6 Z" fill="url(#${id})" stroke="#000" stroke-width=".4"/>`
+    + `<path d="M6 5 L9 14 L7.5 14.8 L5 6 Z" fill="#6b4f2f" stroke="#000" stroke-width=".35"/>`
+    + `</svg>`;
+}
+
+/** A gem cut to the skill rank's facet count. 16x16 viewBox. */
+function skillAvatar(rank) {
+  // More facets as the rank climbs: a rough pebble up to a brilliant cut.
+  const gem = ['#9fbc9f', '#7fd4a0', '#4fb8d8', '#e05a9b', '#fbbf24'][rank] || '#9fbc9f';
+  const light = rank >= 3 ? '#ffffff66' : '#ffffff33';
+  const id = `sg${rank}`;
+  const sides = [0, 4, 5, 6, 8][rank] || 4;
+  const cx = 8, cy = 8, r = 5.5;
+  let pts = '';
+  for (let i = 0; i < sides; i++) {
+    const a = (i / sides) * Math.PI * 2 - Math.PI / 2;
+    pts += `${(cx + r * Math.cos(a)).toFixed(2)},${(cy + r * Math.sin(a)).toFixed(2)} `;
+  }
+  return `<svg viewBox="0 0 16 16" aria-hidden="true"><defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${light}"/><stop offset=".55" stop-color="${gem}"/><stop offset="1" stop-color="#00000088"/></linearGradient></defs>`
+    + `<polygon points="${pts.trim()}" fill="url(#${id})" stroke="#000" stroke-width=".5"/>`
+    + `</svg>`;
+}
+
+/** The five tool avatars, index 1..5 (0 is the "no tool" state). */
+export const TOOL_AVATARS = ['', toolAvatar(1), toolAvatar(2), toolAvatar(3), toolAvatar(4), toolAvatar(5)];
+
+/** The five skill avatars, index 0..4. */
+export const SKILL_AVATARS = [skillAvatar(0), skillAvatar(1), skillAvatar(2), skillAvatar(3), skillAvatar(4)];

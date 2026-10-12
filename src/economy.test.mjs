@@ -15,7 +15,7 @@ import {
   FACE_VALUE, RARITY_WEIGHT, PAYOUT_BPS, REDEEM_FLOOR,
   toolPrice, durabilityOf, repairCost, payoutWei, dropTable,
   huntValueWei, netHuntWei, paybackHunts, fmtEth, fmtRepair,
-  SKILL_NAME, SKILL_NAME_UC, SKILL_UNLOCKS, RARITY_NAME,
+  SKILL_NAME, SKILL_NAME_UC, SKILL_UNLOCKS, RARITY_NAME, TOOL_AVATARS, SKILL_AVATARS,
   skillName, skillSubtitle,
 } from './economy.js';
 
@@ -256,4 +256,41 @@ test('skillName clamps out-of-range input instead of returning undefined', () =>
   assert.equal(skillName(99), 'Lapidary');
   assert.equal(skillName(undefined), 'Greenhorn');
   assert.equal(skillName(NaN), 'Greenhorn');
+});
+
+// --- hunter card avatars ---------------------------------------------------
+
+test('there are five tool avatars and five skill avatars', () => {
+  // TOOL_AVATARS[0] is the empty "no tool" slot; 1..5 are the five picks.
+  assert.equal(TOOL_AVATARS.length, 6);
+  assert.equal(SKILL_AVATARS.length, 5);
+  for (let t = 1; t <= 5; t++) {
+    assert.ok(TOOL_AVATARS[t].startsWith('<svg'), `tool ${t} avatar is an SVG`);
+    assert.ok(TOOL_AVATARS[t].includes('viewBox'), `tool ${t} has a viewBox`);
+  }
+  for (let s = 0; s <= 4; s++) {
+    assert.ok(SKILL_AVATARS[s].startsWith('<svg'), `skill ${s} avatar is an SVG`);
+    assert.ok(SKILL_AVATARS[s].includes('viewBox'), `skill ${s} has a viewBox`);
+  }
+});
+
+test('each tool tier wears its own metal', () => {
+  // The five picks must not all be the same colour, or the ladder reads as
+  // five copies of one icon.
+  const metals = TOOL_AVATARS.slice(1).map((svg) => /stop-color="([^"]+)"/.exec(svg)?.[1]);
+  assert.equal(new Set(metals).size, 5, 'five distinct tool metals');
+});
+
+test('higher skill ranks get more facets', () => {
+  // The skill ladder is a cut gem that gains facets as it climbs, so the
+  // polygon point count must rise with the rank -- otherwise the avatar row
+  // gives no visual sense of progression.
+  const points = SKILL_AVATARS.map((svg) => {
+    const m = /points="([^"]+)"/.exec(svg);
+    return m ? m[1].trim().split(/\s+/).length : 0;
+  });
+  for (let i = 1; i < points.length; i++) {
+    assert.ok(points[i] >= points[i - 1], `skill ${i} should not have fewer facets than ${i - 1}`);
+  }
+  assert.ok(points[4] > points[0], 'Lapidary is visibly more cut than Greenhorn');
 });

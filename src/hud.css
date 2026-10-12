@@ -244,7 +244,11 @@ html, body {
   display: flex; align-items: center; gap: var(--s1);
   flex-wrap: wrap;
   margin-bottom: 0;
-  margin-top: calc(-1 * (var(--icon) + var(--s2)));
+  /* Pulled to the top of the screen. The old calc() pushed it down by a full
+     icon row so it cleared the connect/wallet button. That button is 44px and
+     sits in the same grid column, so a smaller, fixed offset seats the
+     wordmark level with it instead of floating a row below. */
+  margin-top: 0;
 }
 /* Brand lockup: the logo + wordmark share the first row; the phase line wraps
    to its own row beneath (flex-basis:100%). The logo is the emblem cropped to
@@ -263,7 +267,10 @@ html, body {
 .brand-name,
 .season-head .card-title.brand-name {
   font-family: var(--serif);
-  font-size: 22px;             /* a touch bigger; fits the 236px rail */
+  /* Smaller than the other UI labels so the wordmark reads as a title, not a
+     banner. 17px at weight 900 still carries the gothic letterforms without
+     pushing the season phase onto a second line in the 236px rail. */
+  font-size: 17px;
   font-weight: 900;            /* heaviest weight -> the gothic letterforms read at small size */
   letter-spacing: .06em;       /* a little air so the blackletter strokes don't blur together */
   color: var(--gold);          /* warm brand gold, not plain white -- matches the emblem's gilt */
@@ -276,8 +283,9 @@ html, body {
      opt-out further down already sets overflow:visible). */
   transform: scaleY(1.35);
   transform-origin: center center;
-  line-height: 1.3;            /* reserve vertical room for the stretched caps */
+  line-height: 1.45;           /* room for the 1.35-stretched gothic caps */
   display: inline-block;       /* transform + reliable box height */
+  white-space: nowrap;         /* the wordmark is one word -- never wraps */
 }
 /* The season phase is HIDDEN (see the hidden attribute in index.html) until a
    placement is chosen. The rules stay so it is ready to unhide in place.
@@ -1501,7 +1509,81 @@ button.chip { position: relative; }
   border-top: 1px solid rgba(158,196,158,.14);
 }
 .redeem-quote-label { color: var(--faint); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
+.redeem-quote-amt { display: inline-flex; align-items: baseline; gap: 6px; }
 .redeem-quote-val { color: var(--gold); font-size: 15px; font-variant-numeric: tabular-nums; }
+.redeem-quote-cur {
+  color: var(--dim);
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+/* ---- hunter card: the player's tool and skill, side by side ----
+   Mirrors the satchel card (same .readout tile, same title row) so the two
+   read as a pair. The five avatars per row let a player see the whole ladder
+   at a glance and which rung they are on -- the current one is lit, the rest
+   are dim. */
+.hunter-card {
+  padding: var(--s2) var(--s3);
+}
+.hunter-rows {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s3);
+  margin-top: var(--s2);
+}
+.hunter-row { min-width: 0; }
+.hunter-label {
+  font-size: 9px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--dim);
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.hunter-ladder {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+}
+.hunter-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 2px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  opacity: .38;
+  filter: grayscale(.75);
+  transition: opacity .15s, filter .15s;
+}
+/* The rung the player actually holds. */
+.hunter-step.now {
+  opacity: 1;
+  filter: none;
+  background: rgba(217, 164, 65, .14);
+  border-color: var(--gold);
+}
+.hunter-av {
+  width: 26px;
+  height: 26px;
+  display: block;
+}
+.hunter-av img, . hunter-av svg { width: 100%; height: 100%; display: block; }
+.hunter-name {
+  font-size: 8.5px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  text-align: center;
+  line-height: 1.1;
+}
+.hunter-step.now .hunter-name { color: var(--gold); font-weight: 700; }
 
 .redeem-msg { min-height: 13px; font-size: 10px; color: var(--warn); }
 .redeem-msg.bad { color: var(--bad); }
