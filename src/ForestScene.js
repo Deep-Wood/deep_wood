@@ -1792,14 +1792,16 @@ export class ForestScene extends Phaser.Scene {
       // RIGHT edge. .settle-right anchors it to the right edge (aligned with the
       // leaderboard column); the top is set below so it sits on the SAME row as
       // the sell button, which is measured from the live layout.
-      // Settle now lives in .rail-actions alongside Sound, stacked vertically
-      // in normal flow. The old absolute-positioned layout aligned it to the
-      // skill button's row, but with leaderboard moved out the right rail is
-      // just Sound + Settle -- no cross-row alignment needed.
+      // Settle is PREPENDED so it occupies the first slot in the right rail
+      // (where Leaderboard used to be), putting it on the UPGRADE button's row.
+      // Sound follows below it. Previously settle was absolutely positioned to
+      // align with the sell/skill row; with leaderboard gone the rail just
+      // stacks in flow and settle takes the top slot.
       const railActions = document.querySelector('.rail-actions');
       const stale = railActions && railActions.querySelector('.settle-right');
       if (stale) stale.remove();
-      (railActions || el).appendChild(wrap);
+      if (railActions) railActions.insertBefore(wrap, railActions.firstChild);
+      else el.appendChild(wrap);
     }
   }
 

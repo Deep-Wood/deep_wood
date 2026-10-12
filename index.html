@@ -187,8 +187,9 @@
          (plus repair/settle/sell) live here as a vertical column. -->
     <div class="belt-actions" id="belt-actions"></div>
 
-    <!-- RIGHT RAIL: Sound + Settle, stacked vertically. Leaderboard moved to
-         the wallet dropdown menu (user request). -->
+    <!-- RIGHT RAIL: Settle then Sound, stacked vertically. Leaderboard moved
+         to the wallet dropdown menu (user request). Settle stays FIRST so it
+         sits on the SKILL button's row on the left, as it did before. -->
     <div class="rail-actions">
       <!-- SOUND toggle: round 3D button. Tapping it opens the sound panel with
            THREE pill toggles (matching the reference art: red OFF / green ON
@@ -737,9 +738,11 @@
       walletMenu.className = 'wallet-menu';
       walletMenu.innerHTML =
         '<div class="wm-account">' + short(getState().account || '') + '</div>' +
-        '<button class="wm-item" type="button" id="wm-leaderboard">Leaderboard</button>' +
-        '<button class="wm-item" type="button" id="wm-redeem">Redeem gems</button>' +
-        '<button class="wm-item" type="button">Disconnect</button>';
+        '<div class="wm-box">' +
+          '<button class="wm-item" type="button" id="wm-leaderboard">Leaderboard</button>' +
+          '<button class="wm-item" type="button" id="wm-redeem">Redeem gems</button>' +
+        '</div>' +
+        '<button class="wm-item wm-disconnect" type="button">Disconnect</button>';
       // Append the menu to the button and DO NOT touch its position.
       //
       // The button is already `position: absolute` (top-right corner, from
@@ -783,7 +786,7 @@
         }
       });
 
-      walletMenu.querySelectorAll('.wm-item:not(#wm-redeem)').forEach((item) => {
+      walletMenu.querySelectorAll('.wm-disconnect').forEach((item) => {
         item.addEventListener('click', async (e) => {
           e.stopPropagation();
           closeWalletMenu();
