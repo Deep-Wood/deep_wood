@@ -125,7 +125,10 @@ html, body {
   position: relative;
   width: auto !important;
   align-items: flex-end;
-  align-self: end;
+  /* !important: `.rail-action-item.rail-action-icon` (later in this file, same
+     specificity) sets align-self:start, which left-aligned Settle and put it in
+     a different column from Sound. Both icons right-align to the rail edge. */
+  align-self: end !important;
 }
 /* SOUND toggle: placed BELOW the SETTLE button in the right rail. The exact
    top is set at runtime by main.js placeSound() (same two-pass measurement

@@ -1762,7 +1762,7 @@ export class ForestScene extends Phaser.Scene {
     // and label remain on screen.
     {
       const wrap = document.createElement('div');
-      wrap.className = 'rail-action-item rail-action-icon settle-right';
+      wrap.className = 'rail-action-item settle-right';
       const st = document.createElement('button');
       st.className = 'icon-btn settle';
       st.id = 'belt-settle';
