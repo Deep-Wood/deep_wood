@@ -1518,66 +1518,46 @@ button.chip { position: relative; }
   text-transform: uppercase;
 }
 
-/* ---- hunter card: an exact duplicate of the satchel tile ----
-   Same width, same padding, same title row as the satchel below it. Two
-   compact items inside: TOOL with the current pickaxe, SKILL with the
-   current gem. Each is avatar + label + name, side by side, no ladder. */
-.hunter-card {
-  /* Exact duplicate of the satchel tile: same width (the .readout grid does
-     that), same title row, same padding (none -- .readout is padding:0).
-     The grid inside is the only difference: two items instead of five gems. */
-}
-.hunter-grid {
-  display: grid;
-  /* Side-by-side again now that each item is compact: a 24px avatar + a
-     7px label + a 10px name. Stacked, the card was 79px tall -- three times
-     the satchel's 25px. Side-by-side it matches the satchel's height. */
-  grid-template-columns: 1fr 1fr;
-  gap: var(--s2);
-  margin-top: var(--s2);
-}
-.hunter-item {
+/* ---- hunter strip: a duplicate of the gemstrip bar ----
+   Same solid 3D lemon pill, same inner flex row. One pill for the current
+   tool, one for the current skill. Only the active tier/rank shows; an
+   upgrade swaps it in place. Sits directly above the SATCHEL. */
+.hunter-strip {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 2px;
-  min-width: 0;
+  justify-content: center;
+  gap: var(--s2);
+  /* Solid 3D lemon box, same as #gemstrip. */
+  background: linear-gradient(180deg, #f2f56b 0%, #e3e33f 55%, #c9c62e 100%);
+  border: 1px solid #b7b326;
+  border-radius: 12px;
+  padding: 7px 14px;
+  box-shadow:
+    0 3px 0 #a89f24,
+    0 6px 14px rgba(0, 0, 0, .55),
+    inset 0 1px 0 rgba(255, 255, 255, .5);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .55);
+  pointer-events: none;
 }
-.hunter-av {
+.hunter-pill {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.hunter-pill-av {
   width: 22px;
   height: 22px;
-  flex-shrink: 0;
   display: block;
 }
-.hunter-av svg { width: 100%; height: 100%; display: block; }
-.hunter-text {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  min-width: 0;
-  overflow: hidden;
-}
-/* Label above the name, both centred under the avatar — exactly the
-   satchel's gem pattern. Each item is ~64px wide: avatar 22px + label +
-   name fit vertically, and the name gets the full cell width. */
-.hunter-label {
-  font-size: 6.5px;
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  color: var(--dim);
+.hunter-pill-av svg { width: 100%; height: 100%; display: block; }
+.hunter-pill-name {
+  font-family: var(--mono);
+  font-size: 10px;
   font-weight: 700;
-  white-space: nowrap;
-}
-.hunter-name {
-  font-size: 9px;
-  letter-spacing: .04em;
   text-transform: uppercase;
-  color: var(--gold);
-  font-weight: 700;
+  letter-spacing: .06em;
+  color: #2c2a0a;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
 }
 
 .redeem-msg { min-height: 13px; font-size: 10px; color: var(--warn); }

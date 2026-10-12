@@ -153,29 +153,20 @@
         <span class="season-phase" id="season-phase" hidden></span>
       </div>
 
-      <!-- Hunter card: an exact duplicate of the satchel tile, same width,
-           same padding, same title row. Two compact rows inside: TOOL with
-           the current pickaxe avatar + name, SKILL with the current gem
-           avatar + name. Only the current rank shows; an upgrade replaces it.
-           Placed directly below the PRESEASON wordmark, ABOVE the satchel. -->
-      <div id="hunter-card" class="readout hunter-card" hidden>
-        <span class="card-title">Hunter</span>
-        <div class="hunter-grid">
-          <div class="hunter-item">
-            <span class="hunter-av" id="tool-av"></span>
-            <span class="hunter-text">
-              <span class="hunter-label">Tool</span>
-              <span class="hunter-name" id="tool-name">--</span>
-            </span>
-          </div>
-          <div class="hunter-item">
-            <span class="hunter-av" id="skill-av"></span>
-            <span class="hunter-text">
-              <span class="hunter-label">Skill</span>
-              <span class="hunter-name" id="skill-name">--</span>
-            </span>
-          </div>
-        </div>
+      <!-- Hunter card: an exact duplicate of the #gemstrip bar -- same look,
+           same pill row, one item per side. Left: the current tool, right:
+           the current skill. No ladder; a single item each, replaced on upgrade.
+           Placed directly above the SATCHEL, and the PRESEASON text moved up
+           to clear space for it. -->
+      <div id="hunter-strip" class="readout hunter-strip" hidden>
+        <span class="hunter-pill" id="hunter-tool">
+          <span class="hunter-pill-av" id="tool-av"></span>
+          <span class="hunter-pill-name" id="tool-name">--</span>
+        </span>
+        <span class="hunter-pill" id="hunter-skill">
+          <span class="hunter-pill-av" id="skill-av"></span>
+          <span class="hunter-pill-name" id="skill-name">--</span>
+        </span>
       </div>
 
       <!-- Satchel: the find tally by rarity, its own tile. -->
@@ -523,7 +514,7 @@
     const toolName = document.getElementById('tool-name');
     const skillAv = document.getElementById('skill-av');
     const skillName = document.getElementById('skill-name');
-    const hunterCard = document.getElementById('hunter-card');
+    const hunterStrip = document.getElementById('hunter-strip');
 
     let hunterHooked = false;
     async function renderHunter() {
@@ -549,7 +540,7 @@
       // Skill: 0..4, Greenhorn through Lapidary.
       skillAv.innerHTML = SKILL_AVATARS[p.skill] || '';
       skillName.textContent = SKILL_NAME[p.skill] || '--';
-      hunterCard.hidden = false;
+      hunterStrip.hidden = false;
     }
     window.renderHunter = renderHunter;
 
