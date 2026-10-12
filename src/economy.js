@@ -182,6 +182,36 @@ export function skillUpCostQuartz(cur) {
 export const SKILL_UNLOCKS = { 1: 1, 2: 2, 3: 3, 4: 4 };
 
 /**
+ * The craft title for each skill level: 0 Greenhorn, 1 Prospector, 2 Delver,
+ * 3 Assayer, 4 Lapidary.
+ *
+ * A title beats "skill 3" on the button because it tells the player who they
+ * ARE, not just a number. Paired with SKILL_UNLOCKS it also answers the only
+ * question that matters in the moment: what can I find now?
+ */
+export const SKILL_NAME = ['Greenhorn', 'Prospector', 'Delver', 'Assayer', 'Lapidary'];
+
+/** Uppercase form for the button label and HUD chips. */
+export const SKILL_NAME_UC = SKILL_NAME.map((n) => n.toUpperCase());
+
+/**
+ * The one-line subtitle for a skill level -- what that level unlocked, in the
+ * player's language. Skill 0 is the baseline (Quartz only, no unlock yet).
+ */
+export function skillSubtitle(level) {
+  const lv = Math.max(0, Math.min(4, Number(level) || 0));
+  if (lv === 0) return 'Quartz only';
+  const gem = RARITY_NAME[SKILL_UNLOCKS[lv]] || '';
+  return lv >= 3 ? `${gem} + extra slot` : `${gem} unlocked`;
+}
+
+/** Craft title for a level, falling back to Greenhorn for bad input. */
+export function skillName(level) {
+  const lv = Math.max(0, Math.min(4, Number(level) || 0));
+  return SKILL_NAME[lv];
+}
+
+/**
  * The highest skill level a player may buy, given the tool they hold.
  * One level per tier: upgradeSkill requires targetSkill <= heldTier.
  */

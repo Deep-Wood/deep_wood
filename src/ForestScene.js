@@ -62,6 +62,7 @@ import {
   toolPrice, durabilityOf, repairCost, fmtRepair, fmtEth,
   huntValueWei, netHuntWei, paybackHunts, cyclesToPayback, dropTable,
   REDEEM_FLOOR,
+  SKILL_NAME_UC, skillSubtitle, skillName,
 } from './economy.js';
 import { DROP_TABLE, PRICE } from './engine.js';
 import {
@@ -1698,17 +1699,19 @@ export class ForestScene extends Phaser.Scene {
         + '<path d="M12 4l-7 7h4v7h6v-7h4z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>'
         + '</svg>';
       skill.setAttribute('aria-label', 'Upgrade skill');
+      const curName = skillName(curSkill);
+      const nextName = skillName(nextLevel);
       if (isMaxed) {
-        skill.title = 'Skill maxed';
+        skill.title = `${curName} — skill maxed (${skillSubtitle(curSkill)})`;
         skill.disabled = true;
       } else if (!interlockOk) {
-        skill.title = `Need tier ${nextLevel} tool first`;
+        skill.title = `${nextName} needs a tier ${nextLevel} tool first — you hold ${TIER_NAME[tier] || 'none'}`;
         skill.disabled = true;
       } else if (quartz < cost) {
-        skill.title = `Need ${cost} Quartz (have ${quartz})`;
+        skill.title = `${nextName} costs ${cost} Quartz (have ${quartz}) — unlocks ${skillSubtitle(nextLevel)}`;
         skill.disabled = true;
       } else {
-        skill.title = `Upgrade skill to ${nextLevel} — ${cost} Quartz`;
+        skill.title = `Upgrade to ${nextName} — ${cost} Quartz, unlocks ${skillSubtitle(nextLevel)}`;
         skill.disabled = false;
       }
       skill.onclick = () => this.doUpgradeSkill(nextLevel, curSkill);
@@ -1716,7 +1719,7 @@ export class ForestScene extends Phaser.Scene {
       swrap.appendChild(skill);
       const slbl = document.createElement('span');
       slbl.className = 'rail-action-label';
-      slbl.textContent = isMaxed ? 'max' : `skill ${curSkill}`;
+      slbl.textContent = isMaxed ? SKILL_NAME_UC[curSkill] : `${SKILL_NAME_UC[curSkill]} · ${curSkill}`;
       swrap.appendChild(slbl);
       el.appendChild(swrap);
     }
@@ -2529,7 +2532,7 @@ export class ForestScene extends Phaser.Scene {
       const { upgradeSkillOnchain } = await import('./onchain.js');
       const res = await upgradeSkillOnchain(level, currentSkill);
       if (res.ok) {
-        this.beltMsg(`Skill upgraded to ${level}`, 'ok');
+        this.beltMsg(`You are now a ${skillName(level)} — ${skillSubtitle(level)}`, 'ok');
         await this.refreshChainBalance();
         this.refreshBelt();
         window.renderGems?.();

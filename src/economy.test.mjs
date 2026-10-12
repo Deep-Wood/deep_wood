@@ -15,6 +15,8 @@ import {
   FACE_VALUE, RARITY_WEIGHT, PAYOUT_BPS, REDEEM_FLOOR,
   toolPrice, durabilityOf, repairCost, payoutWei, dropTable,
   huntValueWei, netHuntWei, paybackHunts, fmtEth, fmtRepair,
+  SKILL_NAME, SKILL_NAME_UC, SKILL_UNLOCKS, RARITY_NAME,
+  skillName, skillSubtitle,
 } from './economy.js';
 
 // Exact literals, NOT n*1e18. Math.round(2.3*1e18) is 2300000000000000001, so a
@@ -214,4 +216,44 @@ test('fmtEth trims trailing zeros', () => {
 test('fmtRepair renders short labels', () => {
   assert.equal(fmtRepair(1), '9Qtz');
   assert.equal(fmtRepair(2), '5Qtz + 4Amb');
+});
+// --- skill titles (the craft ladder) --------------------------------------
+
+test('the five skill levels are Greenhorn/Prospector/Delver/Assayer/Lapidary', () => {
+  assert.deepEqual(SKILL_NAME, ['Greenhorn', 'Prospector', 'Delver', 'Assayer', 'Lapidary']);
+  assert.equal(SKILL_NAME.length, 5, 'skill 0..4 is five states');
+});
+
+test('skill names uppercase cleanly for the button label', () => {
+  assert.deepEqual(SKILL_NAME_UC, ['GREENHORN', 'PROSPECTOR', 'DELVER', 'ASSAYER', 'LAPIDARY']);
+});
+
+test('every skill level names the gem it unlocks', () => {
+  // Skill N -> Rarity(N); the subtitle is what the button tooltip promises.
+  for (const lv of [1, 2, 3, 4]) {
+    const sub = skillSubtitle(lv);
+    const gem = RARITY_NAME[SKILL_UNLOCKS[lv]];
+    assert.ok(sub.includes(gem), `skill ${lv} subtitle should name ${gem}, got "${sub}"`);
+  }
+});
+
+test('skill 0 is the baseline -- Quartz only, nothing unlocked yet', () => {
+  assert.equal(skillSubtitle(0), 'Quartz only');
+  assert.equal(skillName(0), 'Greenhorn');
+});
+
+test('skills 3 and 4 advertise the extra slot they grant', () => {
+  // Contract: newSlots = baseSlots + (skill>=3) + (skill>=4). The subtitle has
+  // to say so, or the extra slot is an invisible bonus.
+  assert.ok(skillSubtitle(3).includes('slot'), 'skill 3 grants a slot');
+  assert.ok(skillSubtitle(4).includes('slot'), 'skill 4 grants a slot');
+  assert.ok(!skillSubtitle(1).includes('slot'), 'skill 1 grants no slot');
+  assert.ok(!skillSubtitle(2).includes('slot'), 'skill 2 grants no slot');
+});
+
+test('skillName clamps out-of-range input instead of returning undefined', () => {
+  assert.equal(skillName(-1), 'Greenhorn');
+  assert.equal(skillName(99), 'Lapidary');
+  assert.equal(skillName(undefined), 'Greenhorn');
+  assert.equal(skillName(NaN), 'Greenhorn');
 });

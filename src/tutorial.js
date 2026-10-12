@@ -8,7 +8,7 @@
  *     durability and repair, redeem ($DEEPWOOD, not ETH), and the obstacles
  *     (trees block you, water edges the world)
  *
- * Storage: localStorage 'dw-tutorial-v2'. The overlay is pure DOM -- no
+ * Storage: localStorage 'dw-tutorial-v3'. The overlay is pure DOM -- no
  * Phaser dependency -- so it works before the scene is ready and never
  * touches gameplay state. It is a dimmer plus a centered card; clicks land
  * on the CARD to advance (not anywhere, or a click meant for the game
@@ -18,7 +18,7 @@
 // v2: added the skill step, corrected durability to the tier range, and
 // switched the sell step from ETH to $DEEPWOOD. Returning players should see
 // the corrected version, so the key is bumped rather than reused.
-const KEY = "dw-tutorial-v2";
+const KEY = "dw-tutorial-v3";
 
 const STEPS = [
   {
@@ -38,8 +38,8 @@ const STEPS = [
     body: "Digs are queued, not settled one by one. When you press SETTLE, up to 20 queued hunts are written to the chain in ONE transaction. Warning: reload or leave with hunts queued and they are lost — settle before you go.",
   },
   {
-    title: "Skill unlocks rarities",
-    body: "Skill N unlocks the next gem tier: Amber, Sapphire, Ruby, Diamond. A level only takes effect once you hold the matching tool — skill 1 gives you nothing until you buy Bronze. Skill costs Quartz, which you always mine.",
+    title: "Your craft title",
+    body: "You start a Greenhorn and climb: Prospector, Delver, Assayer, Lapidary. Each title unlocks the next gem tier — Prospector mines Amber, Delver Sapphire, Assayer Ruby, Lapidary Diamond — and the last two grant an extra find per hunt. A title only takes effect once you hold the matching tool, so Prospector gives you nothing until you buy Bronze. Upgrades cost Quartz, which you always mine.",
   },
   {
     title: "The tool wears out",
