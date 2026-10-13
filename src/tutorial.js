@@ -108,7 +108,14 @@ function arrowSide(pos) {
   return "none";
 }
 
-/** Place the card next to `target`, clamped to the viewport. */
+/**
+ * Place the card next to `target`, clamped to the viewport.
+ * The arrow is positioned precisely at the target's centre (not the card's) so
+ * it always points at the correct control even when the card has to shift to
+ * stay on-screen. Pos semantics: 'left'/'right' = card sits to the left/right of
+ * the target, arrow on the opposite side of the card pointing at the target;
+ * 'below'/'above'/'below-wide' = card below/above, arrow on top/bottom.
+ */
 function placeCard(card, arrow, target, pos) {
   const PADDING = 10;
   const GAP = 12;
@@ -119,30 +126,82 @@ function placeCard(card, arrow, target, pos) {
     arrow.className = "tut-arrow none";
     return;
   }
+  card.style.transform = "none";
   const t = target.getBoundingClientRect();
   const cw = card.offsetWidth;
   const ch = card.offsetHeight;
+  const centerX = t.left + t.width / 2;
+  const centerY = t.top + t.height / 2;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
   let left;
   let top;
   if (pos === "left") {
     left = t.left - cw - GAP;
-    top = t.top + t.height / 2 - ch / 2;
+    top = centerY - ch / 2;
+    top = Math.max(PADDING, Math.min(vh - ch - PADDING, top));
+    left = Math.max(PADDING, Math.min(vw - cw - PADDING, left));
   } else if (pos === "right") {
-    left = t.right + GAP;
-    top = t.top + t.height / 2 - ch / 2;
+    left = t.left + t.width + GAP;
+    top = centerY - ch / 2;
+    top = Math.max(PADDING, Math.min(vh - ch - PADDING, top));
+    left = Math.max(PADDING, Math.min(vw - cw - PADDING, left));
   } else if (pos === "above") {
+    left = centerX - cw / 2;
     top = t.top - ch - GAP;
-    left = t.left + t.width / 2 - cw / 2;
+    top = Math.max(PADDING, Math.min(vh - ch - PADDING, top));
+    left = Math.max(PADDING, Math.min(vw - cw - PADDING, left));
   } else {
-    top = t.bottom + GAP;
-    left = t.left + t.width / 2 - cw / 2;
+    // below / below-wide
+    left = centerX - cw / 2;
+    top = t.top + t.height + GAP;
+    top = Math.max(PADDING, Math.min(vh - ch - PADDING, top));
+    left = Math.max(PADDING, Math.min(vw - cw - PADDING, left));
   }
-  left = Math.max(PADDING, Math.min(window.innerWidth - cw - PADDING, left));
-  top = Math.max(PADDING, Math.min(window.innerHeight - ch - PADDING, top));
   card.style.left = `${Math.round(left)}px`;
   card.style.top = `${Math.round(top)}px`;
-  card.style.transform = "none";
-  arrow.className = `tut-arrow ${arrowSide(pos)}`;
+
+  // Position the arrow at the exact centre of the target, relative to the
+  // card's computed position, so the nub always lands on the right icon.
+  // Each side class sets the triangle's direction; the top/left here turn it
+  // into a pixel-perfect pointer.
+  arrow.style.margin = "0";
+  const side = arrowSide(pos);
+  if (side === "right") {
+    arrow.className = "tut-arrow right";
+    arrow.style.right = "-16px";
+    arrow.style.left = "auto";
+    arrow.style.top = `${Math.round(centerY - top)}px`;
+    arrow.style.bottom = "auto";
+    arrow.style.marginTop = "-8px";
+    arrow.style.marginLeft = "0";
+  } else if (side === "left") {
+    arrow.className = "tut-arrow left";
+    arrow.style.left = "-16px";
+    arrow.style.right = "auto";
+    arrow.style.top = `${Math.round(centerY - top)}px`;
+    arrow.style.bottom = "auto";
+    arrow.style.marginTop = "-8px";
+    arrow.style.marginLeft = "0";
+  } else if (side === "top") {
+    arrow.className = "tut-arrow top";
+    arrow.style.top = "-16px";
+    arrow.style.bottom = "auto";
+    arrow.style.left = `${Math.round(centerX - left)}px`;
+    arrow.style.right = "auto";
+    arrow.style.marginLeft = "-8px";
+    arrow.style.marginTop = "0";
+  } else if (side === "bottom") {
+    arrow.className = "tut-arrow bottom";
+    arrow.style.bottom = "-16px";
+    arrow.style.top = "auto";
+    arrow.style.left = `${Math.round(centerX - left)}px`;
+    arrow.style.right = "auto";
+    arrow.style.marginLeft = "-8px";
+    arrow.style.marginTop = "0";
+  } else {
+    arrow.className = "tut-arrow none";
+  }
 }
 
 /**

@@ -296,33 +296,21 @@
 }
 .tutorial-next:hover { background: rgba(217, 164, 65, 0.3); }
 /* The arrow nub sits on one side of the card and points at the target.
-   Outline-only triangle so it matches the card's border. */
+   It is placed dynamically (inline top/left) so it always aims at the
+   target's centre, even when the card is clamped away from it. */
 .tut-arrow {
   position: absolute;
   width: 0; height: 0;
   border: 8px solid transparent;
+  pointer-events: none;
 }
 .tut-arrow.none { display: none; }
-.tut-arrow.top {
-  top: -16px; left: 50%;
-  margin-left: -8px;
-  border-bottom-color: var(--gold, #d9a441);
-}
-.tut-arrow.bottom {
-  bottom: -16px; left: 50%;
-  margin-left: -8px;
-  border-top-color: var(--gold, #d9a441);
-}
-.tut-arrow.left {
-  left: -16px; top: 50%;
-  margin-top: -8px;
-  border-right-color: var(--gold, #d9a441);
-}
-.tut-arrow.right {
-  right: -16px; top: 50%;
-  margin-top: -8px;
-  border-left-color: var(--gold, #d9a441);
-}
+/* The side class only sets the triangle's colour direction; absolute
+   coordinates are set in JS so the arrow lands exactly on the target. */
+.tut-arrow.top { border-bottom-color: var(--gold, #d9a441); }
+.tut-arrow.bottom { border-top-color: var(--gold, #d9a441); }
+.tut-arrow.left { border-right-color: var(--gold, #d9a441); }
+.tut-arrow.right { border-left-color: var(--gold, #d9a441); }
 /* The ring on the element we are describing. box-shadow (not outline) so
    it shows over the 3D bevels on the chip/button. */
 .tut-hot {
