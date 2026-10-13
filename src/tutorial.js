@@ -53,7 +53,7 @@ const STEPS = [
   },
   {
     title: "Fix tool",
-    body: "Wrench icon on the left rail: a tool lasts 20-40 digs. Tap when it's broken to repair with gems. If it's not broken, you'll just see 'Tool not broken. Continue hunting.' It appears after you buy your first tool.",
+    body: "Wrench icon on the left rail: a tool lasts 20-40 digs. You only fix a broken tool.",
     target: "#belt-repair",
     fallback: "#belt-buy",
     pos: "right",

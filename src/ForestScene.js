@@ -1196,7 +1196,7 @@ export class ForestScene extends Phaser.Scene {
 
     // HUNT is the core verb, so it gets its own large target rather than
     // living on the d-pad where it competes with the directions.
-    zone('hunt', r.hunt, 'HUNT', { radius: 1, fontSize: 15, alpha: 0.96, tint: 0x6fd08c });
+    zone('hunt', r.hunt, 'DIG', { radius: 1, fontSize: 15, alpha: 0.96, tint: 0x6fd08c });
 
     // BOARD is GONE from the canvas.
     //
