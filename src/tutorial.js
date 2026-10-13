@@ -53,8 +53,9 @@ const STEPS = [
   },
   {
     title: "Fix tool",
-    body: "Wrench icon on the left rail: a tool lasts 20-40 digs. Tap when it's broken to repair with gems. If it's not broken, you'll just see 'Tool not broken. Continue hunting.' No tool yet? It appears once you buy one.",
+    body: "Wrench icon on the left rail: a tool lasts 20-40 digs. Tap when it's broken to repair with gems. If it's not broken, you'll just see 'Tool not broken. Continue hunting.' It appears after you buy your first tool.",
     target: "#belt-repair",
+    fallback: "#belt-buy",
     pos: "right",
   },
   {
@@ -218,10 +219,12 @@ export function maybeShowTutorial() {
     ).join("");
     next.textContent = i === STEPS.length - 1 ? "finish" : "next";
     // Resolve the target AFTER the card has its new content so the position
-    // math reads a fully laid-out element.
+    // math reads a fully laid-out element. Falls back to `fallback` when the
+    // main target is not on screen (e.g. Fix tool before the first buy).
     requestAnimationFrame(() => {
-      const el = s.target ? document.querySelector(s.target) : null;
-      if (el) {
+      let el = s.target ? document.querySelector(s.target) : null;
+      if (!el && s.fallback) el = document.querySelector(s.fallback);
+      if (el && el.offsetParent !== null) {
         el.classList.add("tut-hot");
         highlighted = el;
         placeCard(card, arrow, el, s.pos || "below");
