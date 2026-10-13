@@ -1532,13 +1532,14 @@ export class ForestScene extends Phaser.Scene {
     const buy = document.createElement('button');
     buy.className = 'icon-btn buy';
     buy.id = 'belt-buy';
-    // A pickaxe/hammer glyph: acquiring a tool.
-    const PICKAXE = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">'
-      + '<path d="M14.2 4.2a3.2 3.2 0 0 1 4.4 4.4L12.6 14.6l-2.2 5.9a1.3 1.3 0 0 1-2.4 0l-1-2.6-2.6-1a1.3 1.3 0 0 1 0-2.4l5.9-2.2 3.9-8.1Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>'
-      + '<path d="M11.4 11.4 9.2 14.2l-.4 1.4 1.6 1.6 1.4-.4 2.8-2.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>'
+    // BUY/UPGRADE: a clear arrow-chevron (up / up) reads as "level up" on a
+    // button. The 24px pickaxe glyph looked like a rocket at phone size.
+    const UPGRADE_GLYPH = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">'
+      + '<path d="M6 10.5 12 5l6 5.5" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>'
+      + '<path d="M6 17.5 12 12l6 5.5" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>'
       + '</svg>';
     if (nt > 5) {
-      buy.innerHTML = PICKAXE;
+      buy.innerHTML = UPGRADE_GLYPH;
       buy.disabled = true;
       buy.title = 'MAX TIER';
     } else {
@@ -1547,7 +1548,7 @@ export class ForestScene extends Phaser.Scene {
       const shortLabel = `${buyOrUpgradeLabel(p)} ${toolName(nt)} ${fmtEth(cost)}`;
       const verb = buyOrUpgradeLabel(p).startsWith('upgrade') ? 'upgrade' : 'buy';
       const nm = toolName(nt);
-      buy.innerHTML = PICKAXE;
+      buy.innerHTML = UPGRADE_GLYPH;
       buy.setAttribute('aria-label', `${verb} ${nm}`);
       buy.title = shortLabel + (chk.ok ? '' : '\n' + chk.reason);
       // "Use up your Bronze first" must NOT disable the button: the message
