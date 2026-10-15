@@ -12,35 +12,28 @@
  */
 
 import { connect, diffEconomy } from './chain.js';
+import { readLivePrices } from './economy.js';
 import { config, configProblem, isConfigured } from './config.js';
 import * as econ from './economy.js';
 import * as season from './season.js';
 
 /** Mirror object in the shape diffEconomy() expects from the client side. */
-function clientMirror() {
+async function clientMirror() {
+  const live = await readLivePrices(chain);
   return {
     BPS_DENOMINATOR: 10_000n,
     BURN_FEE_BPS: econ.TREASURY_BPS,
     SEASON_LENGTH: season.SEASON_LENGTH_SEC,
     HUNT_COOLDOWN: season.HUNT_COOLDOWN,
     SPLAY_FLOOR_WEI: season.SPLAY_FLOOR_WEI,
-    // Five tiers now, and the limits have all changed with them (spec s12):
-    // MAX_TIER 4 -> 5, hunt cost 0.0001..0.0008 -> 0. The contract is being
-    // redeployed to match; until it is, this drift guard is EXPECTED to fire,
-    // and that is the point -- it is the thing that tells us the redeploy
-    // landed with the numbers the frontend already assumes.
     MAX_TIER: econ.MAX_TIER,
-    toolCost: econ.toolPrice,
+    toolCost: (t) => live.toolPrices[t - 1] ?? 0n,
     durabilityOf: econ.durabilityOf,
     repairCost: (tier) => BigInt(econ.repairCost(tier).reduce(
       (sum, n, r) => sum + BigInt(n) * econ.FACE_VALUE[r], 0n,
     ) / 1n),
     huntCostWei: () => 0n,
-    // diffEconomy() indexes these directly (`mirror.GEM_PRICE[r]`), so dropping
-    // them made every parity read throw "Cannot read properties of undefined
-    // (reading '0')" -- the guard could not report drift because it crashed
-    // before it got to compare anything.
-    GEM_PRICE: econ.FACE_VALUE,
+    GEM_PRICE: live.gemPrices,
     RARITY_WEIGHT: econ.RARITY_WEIGHT,
   };
 }
@@ -151,7 +144,7 @@ export async function bootChain({ player } = {}) {
     if (paused) return { ok: false, reason: 'contract is paused' };
 
     const onChain = await chain.readEconomy();
-    const drift = diffEconomy(onChain, clientMirror());
+    const drift = diffEconomy(onChain, await clientMirror());
 
     // Is the deployed contract the one this build targets?
     //

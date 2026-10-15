@@ -3213,7 +3213,7 @@ export class ForestScene extends Phaser.Scene {
         this._brokenAt = now;
         this.openBelt();
         this.flash(this.econ.tier === 0
-          ? 'No tool yet \u2014 buy your first tool to start hunting.'
+          ? 'No tool yet\nbuy your first tool to start hunting.'
           : 'Pick broken \u2014 repair with gems or upgrade to keep hunting.');
       }
       return;
