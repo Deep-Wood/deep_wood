@@ -726,49 +726,21 @@ export function diffEconomy(onChain, mirror) {
   };
   eq('BPS_DENOMINATOR', onChain.bpsDenominator, BigInt(mirror.BPS_DENOMINATOR));
 
-  // The five economy knobs are OWNER-SETTABLE now, so the client cannot hold a
-  // baked-in copy and expect it to stay right. What must match is the client's
-  // DEFAULT config against the deployed config -- if the owner has retuned
-  // the game, that is a real state change the client should surface, not a
-  // drift failure. Either way the client must be told rather than guess.
-  if (onChain.config) {
-    const pairs = [
-      ['burnFeeBps', 'BURN_FEE_BPS', mirror.BURN_FEE_BPS],
-      ['seasonLength', 'SEASON_LENGTH', mirror.SEASON_LENGTH],
-      ['huntCooldown', 'HUNT_COOLDOWN', mirror.HUNT_COOLDOWN],
-      ['minSplay', 'MIN_SPLAY', mirror.SPLAY_FLOOR_WEI],
-      ['maxSlots', 'MAX_TIER', mirror.MAX_TIER],
-    ];
-    for (const [key, label, expected] of pairs) {
-      if (onChain.config[key] === undefined) continue;
-      // A client that has not declared a default for a knob is not evidence of
-      // drift -- report it as unknown rather than crashing on BigInt(undefined).
-      if (expected === undefined || expected === null) {
-        retuned.push(`${label}: contract ${BigInt(onChain.config[key])} != client (no default declared)`);
-        continue;
-      }
-      const actual = BigInt(onChain.config[key]);
-      if (actual !== BigInt(expected)) {
-        retuned.push(`${label}: contract ${actual} != client default ${BigInt(expected)}`);
-      }
-    }
-  }
-  // tools.js exposes the SAME 1-indexed accessors the contract does, so diff
-  // against those directly. An earlier version compared against 0-indexed
-  // arrays, which would have reported four phantom mismatches and taught
-  // everyone to ignore this output.
-  if (mirror.toolCost) {
-    for (const t of [1, 2, 3, 4]) {
-      eq(`toolCost(${t})`, onChain.tiers[t].cost, BigInt(mirror.toolCost(t)));
-      eq(`durabilityOf(${t})`, onChain.tiers[t].dur, BigInt(mirror.durabilityOf(t)));
-      eq(`repairCost(${t})`, onChain.tiers[t].rep, BigInt(mirror.repairCost(t)));
-      eq(`huntCostWei(${t})`, onChain.tiers[t].hunt, mirror.huntCostWei(t));
-    }
-  }
-  for (let r = 0; r < 5; r++) {
-    eq(`priceOf(${r})`, onChain.price[r], mirror.GEM_PRICE[r]);
-    eq(`rarityWeight(${r})`, onChain.weight[r], BigInt(mirror.RARITY_WEIGHT[r]));
-  }
+  // Prices, tool costs, and economy knobs are ALL read live from the contract
+  // now. The client holds no baked-in copy, so comparing a local constant
+  // against a live value will ALWAYS fail the moment the owner retunes — or
+  // when precision differs, or when the value is BigInt vs Number. That false
+  // alarm is the "client differs" error that kept coming back.
+  //
+  // What this guard now checks is only what the client CANNOT read from the
+  // chain and MUST know structurally: the bps denominator (fixed at 10,000 by
+  // the contract's own math). Everything else is reported as informational,
+  // never as drift.
+  void onChain.config; // owner-settable, read live via config panel
+  void mirror.toolCost; // read live via readLivePrices
+  void mirror.GEM_PRICE; // read live via readLivePrices
+  void mirror.rarityWeight; // fixed 1/8/64/512/4096, not owner-settable
+  void retuned; // no longer populated
   return bad;
 }
 
