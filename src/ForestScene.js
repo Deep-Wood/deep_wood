@@ -3642,8 +3642,75 @@ export class ForestScene extends Phaser.Scene {
         }
         this.queue = new HuntQueue(BigInt(this._huntIndex), tier);
       }
-      const { previewHuntFor } = await import('./onchain.js');
-      const preview = await previewHuntFor(tier);
+      // V6 roll discipline. The contract's previewHunt(player, tier) rolls at
+      // the chain's CURRENT hunt index -- it has no offset variant (V5's
+      // previewHuntAt was dropped). The dig about to queue is hunt
+      // `base + queue.size`, NOT the chain's current index, so a naive
+      // previewHunt would hand back the SAME roll for every dig in an
+      // unsettled batch ("2 quartz" every dig) and the queue would fill with
+      // duplicates the settle would reject as ResultMismatch.
+      //
+      // So: the first dig of a session (queue empty) previews from the chain,
+      // which also fetches the seed + skill the local mirror needs. Every
+      // later dig rolls LOCALLY with the same keccak formula the contract
+      // uses at settle time (engine.js rollHunt -- verified byte-exact
+      // against the chain's own preview at hunt index 0), at the correct
+      // future index, and prices the best with the live priceOf.
+      const { previewHuntFor, getReader } = await import('./onchain.js');
+      let preview = null;
+      if (this.queue.size === 0) {
+        preview = await previewHuntFor(tier);
+        // Capture the seed + skill NOW so subsequent digs can roll locally
+        // at the right future index (V6 previewHunt has no offset variant).
+        try {
+          const r2 = await getReader();
+          const { getState } = await import('./wallet.js');
+          const { account } = getState();
+          if (r2 && account) {
+            const [seedHex, s] = await Promise.all([
+              r2.seasonSeed(),
+              r2.skillOf(account),
+            ]);
+            this._chainSeed = seedHex;
+            this._chainSkill = Number(s);
+          }
+        } catch { /* non-fatal: later digs re-read */ }
+      } else {
+        const r2 = await getReader();
+        if (!r2) {
+          if (node?.setData) node.setData('used', false);
+          this.flash('Could not read the next roll from the chain — the dig stays open.');
+          this.busy = false;
+          return false;
+        }
+        const { getState } = await import('./wallet.js');
+        const { account: acct } = getState();
+        if (!acct) {
+          if (node?.setData) node.setData('used', false);
+          this.flash('Wallet not connected — the dig stays open.');
+          this.busy = false;
+          return false;
+        }
+        // Read the committed season seed + the player's skill ONCE per
+        // session; re-read only if they somehow went missing.
+        if (!this._chainSeed || this._chainSkill === undefined) {
+          const [seedHex, s] = await Promise.all([
+            r2.seasonSeed(),
+            r2.skillOf(acct),
+          ]);
+          this._chainSeed = seedHex;
+          this._chainSkill = Number(s);
+        }
+        const { rollHunt, PRICE } = await import('./engine.js');
+        const localRoll = rollHunt(
+          this._chainSeed, acct, this.queue.nextIndex, tier,
+          this._chainSkill ?? 0,
+        );
+        preview = {
+          counts: localRoll.counts.map((n) => BigInt(n)),
+          bestSingleWei: PRICE[localRoll.highest],
+        };
+      }
       if (!preview) {
         // Preview failed (RPC hiccup or season boundary). Keep the node
         // diggable; charging a hunt we could not see would be guessing.
@@ -3652,10 +3719,16 @@ export class ForestScene extends Phaser.Scene {
         this.busy = false;
         return false;
       }
-      this.queue.push(preview.counts);
+      this.queue.push(preview.counts, preview.bestSingleWei ?? 0n);
       result = {
         counts: preview.counts.map((n) => Number(n)),
         total: preview.counts.reduce((a, b) => a + Number(b), 0),
+        // valueWei is REQUIRED below: the deepwood:find event and the find
+        // ledger both read result.valueWei, and dropping it (the V6
+        // migration) made reveal() throw mid-function -- the chunk rebuild
+        // that retires the beacon light never ran, so the light stayed
+        // after the stake collapsed.
+        valueWei: preview.bestSingleWei ?? 0n,
         pending: true,
       };
       this.huntIndex += 1;

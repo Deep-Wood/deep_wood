@@ -639,7 +639,7 @@ export async function settleBatchOnchain(queue) {
   if (queue.empty) return fail("empty", "nothing to settle");
 
   const { account } = getState();
-  const { batch } = queue.toCalldata();
+  const { batch, bests } = queue.toCalldata();
 
   // Refuse to open the wallet for a queue the contract is certain to reject:
   // a moved hunt index means a settle happened underneath us, and a tier
@@ -662,6 +662,7 @@ export async function settleBatchOnchain(queue) {
     player: account,
     tier: queue.tier,
     batch,
+    bests,
   });
   if (!sent.ok)
     return fail(

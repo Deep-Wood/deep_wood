@@ -340,7 +340,7 @@ export function calldataSettleHunt(player, tier, counts) {
  * 4-byte selector):
  *   head:  player(32) tier(32) offsetA(32) offsetB(32)   -> 4 slots
  *   tail A at 0x80:  length(32) then N elements, each 5 inlined counts
- *   tail B:          length(32) then N uint256 zeros (bestSingleWei, unused)
+ *   tail B:          length(32) then N bestSingleWei values
  *
  * Each uint256[5] is FIXED-SIZE, so inside the outer array the five counts are
  * inlined and NOT behind a pointer -- only the OUTER array is dynamic. Getting
@@ -349,15 +349,20 @@ export function calldataSettleHunt(player, tier, counts) {
  * nonsense. Hence the byte-exact test that round-trips this against the
  * foundry harness.
  *
- * V6: bestSingleWei was removed from previewHunt. The contract still takes
- * uint256[] as the last parameter but ignores its contents. We send N zeros.
+ * V6: bestSingleWei is still REQUIRED. The contract validates
+ * `bestWei[k] == expectedBest` where expectedBest = priceOf(rolled rarity),
+ * and reverts ResultMismatch otherwise. The migration that sent zeros here
+ * misread the ABI change -- previewHunt still returns bestSingleWei as its
+ * 6th word, and settleBatch still checks every entry.
  *
  * @param {string} player  the settling player's address (must be you)
  * @param {number} tier    1..4
  * @param {Array<(bigint|number)[]>} batch  N hunt results, each five counts
  *                                          from previewHunt, in dig order
+ * @param {Array<(bigint|number)>} bests     N bestSingleWei values, one per
+ *                                          hunt, from previewHunt word 6
  */
-export function calldataSettleBatch(player, tier, batch) {
+export function calldataSettleBatch(player, tier, batch, bests) {
   const t = checkTier(tier);
   if (!Array.isArray(batch) || batch.length === 0) {
     throw new WalletError(
@@ -378,6 +383,12 @@ export function calldataSettleBatch(player, tier, batch) {
         "each hunt must be an array of exactly 5 rarity counts",
       );
     }
+  }
+  if (!Array.isArray(bests) || bests.length !== batch.length) {
+    throw new WalletError(
+      "bad-arg",
+      "bests must be an array with one bestSingleWei per hunt",
+    );
   }
 
   const n = batch.length;
@@ -405,9 +416,9 @@ export function calldataSettleBatch(player, tier, batch) {
     for (const c of batch[i]) out += encUint256(c);
   }
 
-  // --- tail B: uint256[] bests -- N zeros (unused in V6) ---
+  // --- tail B: uint256[] bests -- one REAL bestSingleWei per hunt ---
   out += encUint256(n);
-  for (let i = 0; i < n; i++) out += encUint256(0n);
+  for (let i = 0; i < n; i++) out += encUint256(bests[i]);
   return out;
 }
 
@@ -926,15 +937,17 @@ export async function settleHunt({ player, tier, counts }) {
  * only from the SETTLE button; nothing else in the client may invoke it, so
  * no gameplay action can ever pop a wallet prompt on its own.
  *
- * V6: bestSingleWei was removed from previewHunt. The batch no longer carries
- * per-hunt bests; the contract still accepts uint256[] but ignores contents.
+ * V6: bests carries the per-hunt bestSingleWei from previewHunt's 6th word.
+ * The contract still validates every entry (ResultMismatch on mismatch), so
+ * the zeros the migration sent would have reverted every settle.
  *
- * @param {{player:string, tier:number, batch:(bigint|number)[][]}} args
+ * @param {{player:string, tier:number, batch:(bigint|number)[][],
+ *          bests:(bigint|number)[]}} args
  */
-export async function settleBatch({ player, tier, batch }) {
+export async function settleBatch({ player, tier, batch, bests }) {
   let data;
   try {
-    data = calldataSettleBatch(player, tier, batch);
+    data = calldataSettleBatch(player, tier, batch, bests);
   } catch (e) {
     return { ok: false, code: e.code || "bad-arg", reason: e.message };
   }

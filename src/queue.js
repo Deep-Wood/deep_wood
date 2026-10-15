@@ -10,15 +10,19 @@
  *
  * HOW IT STAYS HONEST
  * ===================
- * The results are not invented locally. The contract's `previewHunt(player,
- * tier)` returns the roll for the hunt at the current queue position -- the
- * SAME roll `settleBatch` will recompute from the committed season seed. The
- * queue therefore holds chain-authorized results for hunt indexes
- * [base, base+n), where base is the chain's huntIndexOf(player) at queue
- * time. If anything settles underneath us (another tab, another device),
- * the base moves and the whole queue is stale -- settleBatch reverts
- * atomically, and `stale()` is what lets the UI SAY so instead of failing
- * blind.
+ * The results are not invented locally. V5 read the roll for hunt
+ * `base + offset` from the contract's `previewHuntAt`. V6 has NO offset
+ * variant -- `previewHunt(player, tier)` rolls at the chain's CURRENT hunt
+ * index only. So the first dig of a session previews from the chain, and
+ * each subsequent dig's roll is computed LOCALLY with the same keccak
+ * formula the contract uses at settle time (engine.js rollHunt, verified
+ * byte-exact against the chain's previewHunt at hunt index 0). The chain
+ * seed is read once per session from `seasonSeed()` and the result is
+ * recomputed against it, so the queue holds chain-authorized results for
+ * hunt indexes [base, base+n). If anything settles underneath us (another
+ * tab, another device), the base moves and the whole queue is stale --
+ * settleBatch reverts atomically, and `stale()` is what lets the UI SAY so
+ * instead of failing blind.
  *
  * WHAT LOSES DATA (BY DESIGN, SIGNED OFF)
  * =======================================
@@ -33,8 +37,15 @@ export const MAX_BATCH = 20;
 
 /**
  * The queue. One entry per QUEUED (dug-but-unsettled) hunt:
- *   { counts: bigint[5] }
+ *   { counts: bigint[5], bestSingleWei: bigint }
  * plus `base`, the chain hunt index the first entry corresponds to.
+ *
+ * bestSingleWei is BACK because the live V6 contract still requires it:
+ * settleBatch reverts ResultMismatch unless bestWei[k] equals the
+ * expected best for that hunt (priceOf(rolled rarity)). The migration
+ * that dropped it read "V6 removed bestSingleWei from previewHunt" as
+ * "the contract ignores bestWei" -- the contract does NOT ignore bestWei;
+ * it still validates it against its own recompute.
  */
 export class HuntQueue {
   constructor(huntIndex = 0n, tier = 0) {
@@ -78,19 +89,22 @@ export class HuntQueue {
    * Queue one hunt's chain-authorized result.
    * @returns {boolean} false if the queue is full or the tier changed mid-run
    */
-  push(counts) {
+  push(counts, bestSingleWei = 0n) {
     if (this.entries.length >= MAX_BATCH) return false;
-    this.entries.push({ counts });
+    this.entries.push({ counts, bestSingleWei: BigInt(bestSingleWei) });
     return true;
   }
 
   /**
-   * The argument shape wallet.settleBatch wants: an array of counts in dig
-   * order. Copies out so the caller can clear without aliasing.
+   * The argument shape wallet.settleBatch wants: two parallel arrays in dig
+   * order -- the counts AND the per-hunt bestSingleWei the contract still
+   * validates (ResultMismatch on any difference). Copies out so the caller
+   * can clear without aliasing.
    */
   toCalldata() {
     return {
       batch: this.entries.map((e) => e.counts),
+      bests: this.entries.map((e) => e.bestSingleWei),
     };
   }
 

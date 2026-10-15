@@ -584,9 +584,12 @@ export async function connect({ rpcUrl, address, player, fallbackRpcUrls = [] })
 
     // --- open settlement ---
     //
-    // previewHunt returns (uint256[5] counts) as FIVE static words -- a
-    // fixed-size array is inlined, not offset. V6 returns only counts (no
-    // bestSingleWei). This is the authoritative result the chain will accept;
+    // previewHunt returns SIX words: uint256[5] counts (static, inlined) then
+    // bestSingleWei. A fixed-size array is inlined, not offset. The V6
+    // migration dropped bestSingleWei from the decode, but the live contract
+    // still returns it AND still validates it in settleBatch (ResultMismatch
+    // unless bestWei[k] == priceOf(rolled rarity)) -- so the client must read
+    // it and queue it. This is the authoritative result the chain will accept;
     // settleHunt reverts with ResultMismatch on anything else, so the client
     // must show THIS and not a locally rolled guess.
     previewHunt: async (p = player, tier = 1) => {
@@ -594,7 +597,10 @@ export async function connect({ rpcUrl, address, player, fallbackRpcUrls = [] })
         await rpc.call(to, sel('previewHunt(address,uint8)') + argAddr(p) + arg8(tier))
       ).replace(/^0x/, '');
       const w = (i) => BigInt('0x' + h.slice(i * 64, (i + 1) * 64));
-      return { counts: [w(0), w(1), w(2), w(3), w(4)] };
+      return {
+        counts: [w(0), w(1), w(2), w(3), w(4)],
+        bestSingleWei: w(5),
+      };
     },
 
     maxBatch: async () => dUint(await rpc.call(to, sel('MAX_BATCH()'))),
