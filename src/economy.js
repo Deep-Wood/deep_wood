@@ -276,13 +276,32 @@ export function payoutWei(gems, rarity) {
  * @returns {Promise<{gemPrices: bigint[], toolPrices: bigint[]}>}
  */
 export async function readLivePrices(chain) {
+  // The Robinhood testnet RPC rate-limits aggressively (HTTP 429). Firing 10
+  // parallel calls guaranteed a rejection, which crashed bootChain and dropped
+  // the whole session into offline mode. Retry each call individually with
+  // backoff, and fall back to zeros if the chain is unreachable.
+  const safe = async (fn, fallback) => {
+    for (let i = 0; i < 3; i++) {
+      try { return await fn(); } catch (e) {
+        if (i < 2) await new Promise(r => setTimeout(r, 300 * (i + 1)));
+      }
+    }
+    return fallback;
+  };
+
   const [quartzPrice, amberPrice, sapphirePrice, emeraldPrice, diamondPrice] = await Promise.all([
-    chain.quartzPrice(), chain.amberPrice(), chain.sapphirePrice(),
-    chain.emeraldPrice(), chain.diamondPrice(),
+    safe(() => chain.quartzPrice(), 0n),
+    safe(() => chain.amberPrice(), 0n),
+    safe(() => chain.sapphirePrice(), 0n),
+    safe(() => chain.emeraldPrice(), 0n),
+    safe(() => chain.diamondPrice(), 0n),
   ]);
   const [woodCost, bronzeCost, silverCost, goldCost, mithrilCost] = await Promise.all([
-    chain.woodCost(), chain.bronzeCost(), chain.silverCost(),
-    chain.goldCost(), chain.mithrilCost(),
+    safe(() => chain.woodCost(), 0n),
+    safe(() => chain.bronzeCost(), 0n),
+    safe(() => chain.silverCost(), 0n),
+    safe(() => chain.goldCost(), 0n),
+    safe(() => chain.mithrilCost(), 0n),
   ]);
   const toolPrices = [woodCost, bronzeCost, silverCost, goldCost, mithrilCost];
   setToolPrices(toolPrices);
