@@ -243,11 +243,17 @@ class Rpc {
     let lastErr;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const res = await fetch(this.url, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ jsonrpc: '2.0', id, method: 'eth_call', params: [{ to, data }, 'latest'] }),
-        });
+        let res;
+        try {
+          res = await fetch(this.url, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ jsonrpc: '2.0', id, method: 'eth_call', params: [{ to, data }, 'latest'] }),
+          });
+        } catch (e) {
+          // Transport-level failure (fetch rejection) — retry, not propagate
+          throw new Error(`eth_call: network error ${e.message}`);
+        }
         if (!res.ok && res.status >= 500) throw new Error(`eth_call: HTTP ${res.status}`);
         const j = await res.json();
         if (j.error) throw new Error(`eth_call failed: ${j.error.message}`);
