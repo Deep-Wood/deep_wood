@@ -108,16 +108,20 @@ export function durabilityOf(tier) {
  * V6 uses dedicated cost functions: woodCost(), bronzeCost(), silverCost(),
  * goldCost(), mithrilCost() instead of the old toolCost(uint8).
  */
+/**
+ * Live tool prices read from the contract. Populated by readLivePrices().
+ * Falls back to 0n until the first read completes — never guess.
+ */
 export const TOOL_PRICE = {
-  1: 5_000_000_000_000_000n,        // Wood     0.005 ETH equivalent
-  2: 52_000_000_000_000_000n,       // Bronze   0.052
-  3: 184_000_000_000_000_000n,      // Silver   0.184
-  4: 862_000_000_000_000_000n,      // Gold     0.862
-  5: 2_300_000_000_000_000_000n,    // Mithril  2.300
+  1: 0n, 2: 0n, 3: 0n, 4: 0n, 5: 0n,
 };
 
 export function toolPrice(tier) {
   return TOOL_PRICE[tier] ?? 0n;
+}
+
+export function setToolPrices(prices) {
+  for (let i = 0; i < 5; i++) TOOL_PRICE[i + 1] = prices[i] ?? 0n;
 }
 
 export const TREASURY_BPS = 500;           // 5%
@@ -280,9 +284,11 @@ export async function readLivePrices(chain) {
     chain.woodCost(), chain.bronzeCost(), chain.silverCost(),
     chain.goldCost(), chain.mithrilCost(),
   ]);
+  const toolPrices = [woodCost, bronzeCost, silverCost, goldCost, mithrilCost];
+  setToolPrices(toolPrices);
   return {
     gemPrices: [quartzPrice, amberPrice, sapphirePrice, emeraldPrice, diamondPrice],
-    toolPrices: [woodCost, bronzeCost, silverCost, goldCost, mithrilCost],
+    toolPrices,
   };
 }
 
