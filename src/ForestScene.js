@@ -3701,14 +3701,27 @@ export class ForestScene extends Phaser.Scene {
           this._chainSeed = seedHex;
           this._chainSkill = Number(s);
         }
-        const { rollHunt, PRICE } = await import('./engine.js');
+        const { rollHunt } = await import('./engine.js');
         const localRoll = rollHunt(
           this._chainSeed, acct, this.queue.nextIndex, tier,
           this._chainSkill ?? 0,
         );
+        // Price the best from the CONTRACT, not the local FACE_VALUE table:
+        // V6 gem prices are owner-settable DEEPWOOD values (quartz = 400
+        // DEEPWOOD on the live deploy) while engine.js PRICE still carries
+        // the old ETH-era constants. settleBatch validates bestWei[k]
+        // against priceOf(rolled rarity) -- a stale local price reverts the
+        // whole batch with ResultMismatch. Read once per session alongside
+        // the seed.
+        if (!this._chainGemPrices) {
+          const prices = await Promise.all(
+            [0, 1, 2, 3, 4].map((x) => r2.priceOf(x)),
+          );
+          this._chainGemPrices = prices;
+        }
         preview = {
           counts: localRoll.counts.map((n) => BigInt(n)),
-          bestSingleWei: PRICE[localRoll.highest],
+          bestSingleWei: this._chainGemPrices[localRoll.highest],
         };
       }
       if (!preview) {
