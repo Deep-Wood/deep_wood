@@ -229,19 +229,21 @@ export function checkRedeem(rarity, count) {
 
 // `claimTool(uint8)` -- 8 + 64 hex chars.
 /**
- * `buyTool(uint8)`.
+ * `buyTool(uint8,uint256)` -- V6.
  *
- * PAYABLE and SEQUENTIAL: the contract requires the next tier only
- * (`held.tier + 1`), and refunds any overpayment, so the client sends exactly
- * `toolCost(tier)` read live from the chain rather than a transcribed price.
- * Tier 1 is NOT free in V2 -- buying it for free would let a player reach the
- * reward loop without ever committing ETH, which is the whole revenue basis.
+ * NOT PAYABLE: V6 pulls DEEPWOOD via transferFrom, so the frontend must
+ * approve the token spend first (see chain.js approveTokenTx). The second
+ * argument is the maximum DEEPWOOD tokens (18 decimals) the player is
+ * willing to spend, read live from toolCost(tier) on chain.
+ *
+ * SEQUENTIAL: the contract requires the next tier only (`held.tier + 1`).
  *
  * @param {number} tier 1..MAX_TIER (5)
+ * @param {bigint|number} maxTokenCost DEEPWOOD tokens (18 decimals)
  */
-export function calldataBuyTool(tier) {
+export function calldataBuyTool(tier, maxTokenCost) {
   const t = checkTier(tier);
-  return sel("buyTool(uint8)").slice(2) + encUint8(t);
+  return sel("buyTool(uint8,uint256)").slice(2) + encUint8(t) + encUint256(maxTokenCost);
 }
 
 /**
@@ -291,9 +293,13 @@ export function calldataRedeemGems(rarity, count) {
 /**
  * `settleHunt(address,uint8,uint256[5],uint256,bytes)` -- open settlement.
  *
+ * V6: bestSingleWei was removed from previewHunt and is no longer sent by the
+ * client. The contract may compute it internally now. The ABI signature is
+ * unchanged for backward compatibility; we pass 0n for the unused field.
+ *
  * Layout: 4 + 32 (player) + 32 (tier) + 5*32 (counts, INLINED because the
- * array type is fixed-size) + 32 (bestSingleWei) + 32 (offset to bytes) + 32
- * (bytes length) = 292 bytes = 584 hex chars plus the selector.
+ * array type is fixed-size) + 32 (bestSingleWei, always 0n) + 32 (offset to
+ * bytes) + 32 (bytes length) = 292 bytes = 584 hex chars plus the selector.
  *
  * The trailing `bytes signature` is RETAINED IN THE ABI BUT IGNORED by the
  * contract. We still send `0x` so the selector stays `0x2ded79da`.
@@ -307,9 +313,8 @@ export function calldataRedeemGems(rarity, count) {
  * @param {string} player      the settling player's address (must be you)
  * @param {number} tier        1..5
  * @param {(bigint|number)[]} counts  five rarity counts, from previewHunt
- * @param {bigint|number|string} bestSingleWei  from previewHunt
  */
-export function calldataSettleHunt(player, tier, counts, bestSingleWei) {
+export function calldataSettleHunt(player, tier, counts) {
   if (!Array.isArray(counts) || counts.length !== 5) {
     const e = new Error("counts must be an array of exactly 5 rarity counts");
     e.code = "bad-arg";
@@ -320,7 +325,7 @@ export function calldataSettleHunt(player, tier, counts, bestSingleWei) {
   head += encAddress(player);
   head += encUint8(t);
   for (const c of counts) head += encUint256(c);
-  head += encUint256(bestSingleWei);
+  head += encUint256(0n); // bestSingleWei -- removed in V6, pass 0n
   // Offset to the bytes payload. The head is 9 slots (player, tier, 5 counts,
   // best, this offset), so the tail -- the bytes length word -- starts at 0x120.
   head += encUint(9n * 32n, 256, "uint256");
@@ -329,14 +334,13 @@ export function calldataSettleHunt(player, tier, counts, bestSingleWei) {
 }
 
 /**
- * `settleBatch(address,uint8,uint256[5][],uint256[])` -- V3 batch settle.
+ * `settleBatch(address,uint8,uint256[5][],uint256[])` -- batch settle.
  *
  * Layout (all offsets relative to the START OF THE ARG BLOCK, i.e. after the
  * 4-byte selector):
  *   head:  player(32) tier(32) offsetA(32) offsetB(32)   -> 4 slots
- *   tail A at 0x80:  length(32) then N pointers, each to a 6-word hunt
- *                    (5 inlined counts + bestSingleWei)
- *   tail B:          length(32) then N uint256 bests
+ *   tail A at 0x80:  length(32) then N elements, each 5 inlined counts
+ *   tail B:          length(32) then N uint256 zeros (bestSingleWei, unused)
  *
  * Each uint256[5] is FIXED-SIZE, so inside the outer array the five counts are
  * inlined and NOT behind a pointer -- only the OUTER array is dynamic. Getting
@@ -345,24 +349,20 @@ export function calldataSettleHunt(player, tier, counts, bestSingleWei) {
  * nonsense. Hence the byte-exact test that round-trips this against the
  * foundry harness.
  *
+ * V6: bestSingleWei was removed from previewHunt. The contract still takes
+ * uint256[] as the last parameter but ignores its contents. We send N zeros.
+ *
  * @param {string} player  the settling player's address (must be you)
  * @param {number} tier    1..4
  * @param {Array<(bigint|number)[]>} batch  N hunt results, each five counts
- *                                          from previewHuntAt, in dig order
- * @param {(bigint|number)[]} bests  N bestSingleWei values, same order
+ *                                          from previewHunt, in dig order
  */
-export function calldataSettleBatch(player, tier, batch, bests) {
+export function calldataSettleBatch(player, tier, batch) {
   const t = checkTier(tier);
   if (!Array.isArray(batch) || batch.length === 0) {
     throw new WalletError(
       "bad-arg",
       "batch must be a non-empty array of hunts",
-    );
-  }
-  if (!Array.isArray(bests) || bests.length !== batch.length) {
-    throw new WalletError(
-      "bad-arg",
-      `bests must match batch length (${batch.length})`,
     );
   }
   if (batch.length > 20) {
@@ -405,9 +405,9 @@ export function calldataSettleBatch(player, tier, batch, bests) {
     for (const c of batch[i]) out += encUint256(c);
   }
 
-  // --- tail B: uint256[] bests ---
+  // --- tail B: uint256[] bests -- N zeros (unused in V6) ---
   out += encUint256(n);
-  for (const b of bests) out += encUint256(b);
+  for (let i = 0; i < n; i++) out += encUint256(0n);
   return out;
 }
 
@@ -843,53 +843,25 @@ export async function sendTo(to, data, { valueWei } = {}) {
 }
 
 /**
- * Buy the ONE tool, or upgrade it to the next tier. Costs ETH.
+ * Buy the ONE tool, or upgrade it to the next tier. Costs DEEPWOOD tokens.
+ *
+ * V6: buyTool(uint8,uint256) is NOT payable. It pulls DEEPWOOD via
+ * transferFrom, so the frontend must approve the token spend first.
  *
  * @param {number} tier 1..5
  * @param {object} [o]
- * @param {bigint|number|string} [o.valueWei] wei to send. Should be the
- *        chain's own `toolCost(tier)`; the contract refunds any excess, but
- *        sending the exact figure avoids a pointless extra transfer.
+ * @param {bigint|number|string} [o.maxTokenCost] DEEPWOOD tokens (18 decimals)
+ *        the player is willing to spend. Read from toolCost(tier) on chain.
  * @returns {Promise<{ok:boolean, hash?:string, code?:string, reason?:string}>}
  */
-export async function buyTool(tier, { valueWei } = {}) {
+export async function buyTool(tier, { maxTokenCost } = {}) {
   let data;
   try {
-    data = calldataBuyTool(tier);
+    data = calldataBuyTool(tier, maxTokenCost);
   } catch (e) {
     return { ok: false, code: e.code || "bad-arg", reason: e.message };
   }
-  // A missing value must be caught HERE, not on chain. The contract reverts
-  // Underpaid(cost, msg.value), so sending zero would open the wallet, get the
-  // player to sign, and only then tell them what was wrong. Same discipline the
-  // old buyGems path used, and the same reason: a "not-configured" complaint
-  // about an unaffordable purchase is true and useless.
-  if (valueWei === undefined || valueWei === null) {
-    return {
-      ok: false,
-      code: "bad-arg",
-      reason:
-        "buyTool needs { valueWei } -- read toolCost(tier) from the chain, it is payable",
-    };
-  }
-  let value;
-  try {
-    value = BigInt(valueWei);
-  } catch {
-    return {
-      ok: false,
-      code: "bad-arg",
-      reason: `valueWei is not an integer: ${String(valueWei)}`,
-    };
-  }
-  if (value < 0n) {
-    return {
-      ok: false,
-      code: "bad-arg",
-      reason: `valueWei must be >= 0, got ${value}`,
-    };
-  }
-  return send(data, { valueWei: value });
+  return send(data);
 }
 
 /** Repair the held tool by burning gems. No arguments, no value. */
@@ -930,17 +902,19 @@ export async function redeemGems(rarity, count) {
  * to BE the player, so a third party cannot settle on your behalf (that would
  * burn your cooldown and your tool durability).
  *
+ * V6: bestSingleWei was removed from previewHunt. The contract still takes
+ * the parameter in the ABI signature but ignores it; we pass 0n internally.
+ *
  * @param {object} o
  * @param {string} o.player
  * @param {number} o.tier
  * @param {(bigint|number)[]} o.counts    from chain.previewHunt
- * @param {bigint} o.bestSingleWei        from chain.previewHunt
  * @returns {Promise<{ok:boolean, hash?:string, code?:string, reason?:string}>}
  */
-export async function settleHunt({ player, tier, counts, bestSingleWei }) {
+export async function settleHunt({ player, tier, counts }) {
   let data;
   try {
-    data = calldataSettleHunt(player, tier, counts, bestSingleWei);
+    data = calldataSettleHunt(player, tier, counts);
   } catch (e) {
     return { ok: false, code: e.code || "bad-arg", reason: e.message };
   }
@@ -952,12 +926,15 @@ export async function settleHunt({ player, tier, counts, bestSingleWei }) {
  * only from the SETTLE button; nothing else in the client may invoke it, so
  * no gameplay action can ever pop a wallet prompt on its own.
  *
- * @param {{player:string, tier:number, batch:(bigint|number)[][], bests:(bigint|number)[]}} args
+ * V6: bestSingleWei was removed from previewHunt. The batch no longer carries
+ * per-hunt bests; the contract still accepts uint256[] but ignores contents.
+ *
+ * @param {{player:string, tier:number, batch:(bigint|number)[][]}} args
  */
-export async function settleBatch({ player, tier, batch, bests }) {
+export async function settleBatch({ player, tier, batch }) {
   let data;
   try {
-    data = calldataSettleBatch(player, tier, batch, bests);
+    data = calldataSettleBatch(player, tier, batch);
   } catch (e) {
     return { ok: false, code: e.code || "bad-arg", reason: e.message };
   }

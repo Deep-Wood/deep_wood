@@ -21,7 +21,7 @@ import {
 } from './wallet.js';
 
 const ART = JSON.parse(
-  readFileSync('/home/administrator/gem-hunter/out/DeepWoodV4.sol/DeepWoodV4.json', 'utf8'),
+  readFileSync('/home/administrator/gem-hunter/out/DeepWoodV6.sol/DeepWoodV6.json', 'utf8'),
 );
 const DISPATCH = ART.methodIdentifiers;
 
@@ -37,7 +37,7 @@ function assertSelector(sig) {
 
 // Every write the V2 UI can trigger.
 for (const sig of [
-  'buyTool(uint8)',
+  'buyTool(uint8,uint256)',
   'repairTool()',
   'upgradeSkill(uint8)',
   'redeemGems(uint8,uint256)',
@@ -47,7 +47,7 @@ for (const sig of [
 }
 
 // The builders must embed the right selector, not merely agree with sel().
-assert.equal(calldataBuyTool(1).slice(0, 8), DISPATCH['buyTool(uint8)']);
+assert.equal(calldataBuyTool(1, 1000n).slice(0, 8), DISPATCH['buyTool(uint8,uint256)']);
 assert.equal(calldataRepairTool().slice(0, 8), DISPATCH['repairTool()']);
 assert.equal(calldataUpgradeSkill(2).slice(0, 8), DISPATCH['upgradeSkill(uint8)']);
 assert.equal(calldataRedeemGems(1, 5).slice(0, 8), DISPATCH['redeemGems(uint8,uint256)']);
@@ -91,7 +91,7 @@ for (const gone of ['calldataClaimTool', 'calldataBuyGems', 'claimTool', 'buyGem
 // An earlier version of this test asserted 296 bytes against a hex string,
 // which was wrong by a factor of two and would have failed on correct code.
 {
-  const sd = calldataSettleHunt('0x' + '11'.repeat(20), 1, [1, 0, 0, 0, 0], 0);
+  const sd = calldataSettleHunt('0x' + '11'.repeat(20), 1, [1, 0, 0, 0, 0]);
 
   // 8-char selector, then 10 full words, then the trailing length word. The
   // encoders emit the MINIMUM hex for a value (a zero is 8 chars, not 64), so
@@ -113,12 +113,13 @@ for (const gone of ['calldataClaimTool', 'calldataBuyGems', 'claimTool', 'buyGem
   assert.equal(body.length, 640, 'the body is 10 words once the short tail is padded');
 
   // word0 player (left-padded to 32 bytes), word1 tier, words2-6 the five
-  // rarity counts, word7 bestSingleWei, word8 the bytes OFFSET, word9 length.
+  // rarity counts, word7 bestSingleWei (always 0n in V6), word8 the bytes
+  // OFFSET, word9 length.
   assert.equal(word(0), '0'.repeat(24) + '11'.repeat(20), 'player is left-padded to 32 bytes');
   assert.equal(word(1), '1'.padStart(64, '0'), 'tier');
   assert.equal(word(2), '1'.padStart(64, '0'), 'count[0]');
   assert.equal(word(3), '0'.repeat(64), 'count[1]');
-  assert.equal(word(7), '0'.repeat(64), 'bestSingleWei');
+  assert.equal(word(7), '0'.repeat(64), 'bestSingleWei is always 0n in V6');
   assert.equal(word(8), (9 * 32).toString(16).padStart(64, '0'), 'bytes offset is 0x120');
   assert.equal(body.slice(-8), '00000000', 'and the bytes length is zero');
   checked += 8;

@@ -4,9 +4,8 @@
 // index.html because that file is already the boot script's home. This module
 // owns the card's whole lifecycle: open, quote, submit, close.
 //
-// The quote comes from the CONTRACT (redeemQuoteToken), never from local
-// arithmetic -- the pool price moves and the payout spread lives on chain, so a
-// locally-derived number would drift from what the player actually receives.
+// V6: The quote comes from the CONTRACT (redeemQuote), not the removed
+// redeemQuote. The payout is in DEEPWOOD (18 decimals), not ETH wei.
 
 import { PERCENT_STEPS, percentAmount, clampAmount, rarityRows, redeemState, fmtToken } from './redeem.js';
 
@@ -58,7 +57,7 @@ export function createRedeemCard({
 
   let selected = 0;
   let amount = 0;
-  let quoteWei = null;
+  let quoteTokens = null;
   let busy = false;
   let quoteSeq = 0; // guards against an out-of-order quote response
 
@@ -131,12 +130,12 @@ export function createRedeemCard({
     elOf.textContent = `of ${held()}`;
 
     const st = redeemState({
-      held: held(), amount, quoteWei, floorWei: null, railActive: railActive?.() ?? true,
+      held: held(), amount, quoteWei: quoteTokens, floorWei: null, railActive: railActive?.() ?? true,
     });
     elGo.disabled = busy || !st.ok;
     elMsg.textContent = st.reason || '';
     elMsg.className = `redeem-msg${st.ok ? '' : ' bad'}`;
-    elQuote.textContent = quoteWei == null ? '--' : fmtToken(quoteWei);
+    elQuote.textContent = quoteTokens == null ? '--' : fmtToken(quoteTokens);
   }
 
   /**
@@ -146,7 +145,7 @@ export function createRedeemCard({
    */
   async function refreshQuote() {
     if (!onQuote || amount <= 0 || held() <= 0) {
-      quoteWei = null;
+      quoteTokens = null;
       render();
       return;
     }
@@ -158,7 +157,7 @@ export function createRedeemCard({
       q = null;
     }
     if (seq !== quoteSeq) return; // a newer quote is already in flight
-    quoteWei = q && q.tokens != null ? q.tokens : null;
+    quoteTokens = q && q.tokens != null ? q.tokens : null;
     render();
   }
 
@@ -167,7 +166,7 @@ export function createRedeemCard({
   function open() {
     busy = false;
     amount = 0;
-    quoteWei = null;
+    quoteTokens = null;
     elInput.value = '';
     // Preselect the first rarity the player actually holds.
     const rows = rarityRows(getBalances?.() ?? []);
@@ -209,7 +208,7 @@ export function createRedeemCard({
   elGo.addEventListener('click', async () => {
     if (busy) return;
     const st = redeemState({
-      held: held(), amount, quoteWei, floorWei: null, railActive: railActive?.() ?? true,
+      held: held(), amount, quoteWei: quoteTokens, floorWei: null, railActive: railActive?.() ?? true,
     });
     if (!st.ok) return;
     busy = true;

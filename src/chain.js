@@ -23,19 +23,25 @@ const SEL = new Map();
 // then diff this table against the artifact in chain.test.mjs.
 export const SIGS = {
   'BPS_DENOMINATOR()': '0xe1a45218',
-  'buyTool(uint8)': '0xfe3c3b38',
-  'buyToolWithToken(uint8,uint256,uint256,uint256)': '0xe030f7c7',
+  'buyTool(uint8,uint256)': '0x798588fc',
+  'buyToolWithEth(uint8,bytes,uint256)': '0xdba8dc9d',
+  'buyToolWithToken(uint8,uint256)': '0x8fb21f44',
+  'setGemPrices(uint256[5])': '0x22cbda8e',
+  'setToolPrices(uint256[5])': '0xabb5f6de',
+  'quartzPrice()': '0x1627bd9a',
+  'amberPrice()': '0xbf258425',
+  'sapphirePrice()': '0x6f358b3d',
+  'emeraldPrice()': '0xe31950d9',
+  'diamondPrice()': '0x8e1ad9da',
+  'woodCost()': '0x7339801d',
+  'bronzeCost()': '0x3236a906',
+  'silverCost()': '0xb866d608',
+  'goldCost()': '0x65f9c656',
+  'mithrilCost()': '0xf7d49a64',
   'emergencyWithdraw(address,uint256,address)': '0x551512de',
   'migrateFromV3(address)': '0xeee645f2',
   'completeMigration()': '0x4886f62c',
-  'buyNonce(address)': '0xe40afab2',
-  'getEthPerToken()': '0xcb27d6b6',
-  'getTokensPerEth()': '0x6893f63f',
-  'readSqrtPriceX96()': '0x3145fcd6',
   'migrationCompleted()': '0x31677980',
-  'POOL_MANAGER()': '0x62308e85',
-  'POOL_ID()': '0xe0d7d0e9',
-  'V3_CONTRACT()': '0xa5dd65b6',
   'closeSeason()': '0xbbc67395',
   'TREASURY()': '0x2d2c5565',
   'commitSeason(bytes32)': '0x4937e907',
@@ -48,7 +54,6 @@ export const SIGS = {
   'endRun()': '0xa0bb62c5',
   'ethBacking()': '0x96760e44',
   'finalizeSeason()': '0x30fb8f8a',
-  'fundToken(uint256)': '0x419cd5e6',
   'gemsOf(address,uint8)': '0x8d2de0ed',
   'getConfig()': '0xc3f909d4',
   'graduated()': '0xe7c2b772',
@@ -66,7 +71,6 @@ export const SIGS = {
   'MAX_SEASON_LENGTH()': '0x6577ff81',
   'MAX_TIER()': '0xaf3a19c7',
   'maxFindableRarity(address,uint8)': '0xa40bc926',
-  'migrateFromV2(address,uint8,uint64,uint256[5])': '0x3b1e1d0b',
   'minRedeemWei()': '0x011a4078',
   'onRoiBoard(address)': '0x5ab50c1a',
   'openSeason()': '0xe638f2d3',
@@ -79,7 +83,6 @@ export const SIGS = {
   'preroundTotal()': '0x115255c7',
   'preseasonPaused()': '0x06fa1f82',
   'previewHunt(address,uint8)': '0x3ab14c7c',
-  'previewHuntAt(address,uint8,uint256)': '0x6bab987f',
   'PRICE_SCALE()': '0xc33f59d3',
   'priceOf(uint8)': '0x912397c3',
   'rarityUnlocked(address,uint8)': '0xa4d75ca7',
@@ -102,22 +105,19 @@ export const SIGS = {
   'settleBatch(address,uint8,uint256[5][],uint256[])': '0x46fed0ad',
   'settleHunt(address,uint8,uint256[5],uint256,bytes)': '0x2ded79da',
   'setToken(address)': '0x144fa6d7',
-  'setTokenRail(bool)': '0x57ffbeff',
   'setTreasury(address)': '0xf0f44260',
-  'redeemQuoteToken(uint8,uint256)': '0x5156bf21',
   'tokenBacking()': '0xb1cb1a67',
   'shortOfFloor(address)': '0x2cd21481',
   'skillOf(address)': '0x8955cd0c',
   'startSeasonOne()': '0x89e411c3',
   'token()': '0xfc0c546a',
-  'tokenRailEnabled()': '0xf5e2db0f',
   'tokenRedemptionActive()': '0x06c47b56',
   'toolCost(uint8)': '0x82311716',
-  'toolLimit(address)': '0x1e4f9a63',
   'toolOf(address)': '0x8593d0ed',
   'totalHuntsOf(address)': '0x65269398',
   'transferOwnership(address)': '0xf2fde38b',
   'upgradeSkill(uint8)': '0xaa716e88',
+  'V3_CONTRACT()': '0xa5dd65b6',
 };
 
 function selector(sig) {
@@ -364,7 +364,7 @@ export function dBool(hex) {
 function dArray5(hex) {
   const h = hex.replace(/^0x/, '');
   const out = [];
-  for (let i = 0; i < 5; i++) out.push(BigInt('0x' + h.slice(2 + i * 64, 2 + (i + 1) * 64)));
+  for (let i = 0; i < 5; i++) out.push(BigInt('0x' + h.slice(i * 64, (i + 1) * 64)));
   return out;
 }
 
@@ -523,7 +523,6 @@ export async function connect({ rpcUrl, address, player, fallbackRpcUrls = [] })
     config: () => rpc.call(to, sel('getConfig()')),
     owner: () => rpc.call(to, sel('owner()')),
     token: () => rpc.call(to, sel('token()')),
-    tokenRailEnabled: async () => dBool(await rpc.call(to, sel('tokenRailEnabled()'))),
     paused: async () => dBool(await rpc.call(to, sel('paused()'))),
     bpsDenominator: () => rpc.call(to, sel('BPS_DENOMINATOR()')),
     treasury: () => rpc.call(to, sel('TREASURY()')),
@@ -565,33 +564,31 @@ export async function connect({ rpcUrl, address, player, fallbackRpcUrls = [] })
     priceOf: async (r) => dUint(await rpc.call(to, sel('priceOf(uint8)') + arg8(r))),
     rarityWeight: async (r) => dUint(await rpc.call(to, sel('rarityWeight(uint8)') + arg8(r))),
 
+    // --- V6 gem and tool price readers (in DEEPWOOD, 18 decimals) ---
+    quartzPrice: async () => dUint(await rpc.call(to, sel('quartzPrice()'))),
+    amberPrice: async () => dUint(await rpc.call(to, sel('amberPrice()'))),
+    sapphirePrice: async () => dUint(await rpc.call(to, sel('sapphirePrice()'))),
+    emeraldPrice: async () => dUint(await rpc.call(to, sel('emeraldPrice()'))),
+    diamondPrice: async () => dUint(await rpc.call(to, sel('diamondPrice()'))),
+    woodCost: async () => dUint(await rpc.call(to, sel('woodCost()'))),
+    bronzeCost: async () => dUint(await rpc.call(to, sel('bronzeCost()'))),
+    silverCost: async () => dUint(await rpc.call(to, sel('silverCost()'))),
+    goldCost: async () => dUint(await rpc.call(to, sel('goldCost()'))),
+    mithrilCost: async () => dUint(await rpc.call(to, sel('mithrilCost()'))),
+
     // --- open settlement ---
     //
-    // previewHunt returns (uint256[5] counts, uint256 bestSingleWei) as SIX
-    // static words -- a fixed-size array is inlined, not offset. This is the
-    // authoritative result the chain will accept; settleHunt reverts with
-    // ResultMismatch on anything else, so the client must show THIS and not a
-    // locally rolled guess.
+    // previewHunt returns (uint256[5] counts) as FIVE static words -- a
+    // fixed-size array is inlined, not offset. V6 returns only counts (no
+    // bestSingleWei). This is the authoritative result the chain will accept;
+    // settleHunt reverts with ResultMismatch on anything else, so the client
+    // must show THIS and not a locally rolled guess.
     previewHunt: async (p = player, tier = 1) => {
       const h = (
         await rpc.call(to, sel('previewHunt(address,uint8)') + argAddr(p) + arg8(tier))
       ).replace(/^0x/, '');
       const w = (i) => BigInt('0x' + h.slice(i * 64, (i + 1) * 64));
-      return { counts: [w(0), w(1), w(2), w(3), w(4)], bestSingleWei: w(5) };
-    },
-
-    // V3: the roll for the hunt `offset` digs FROM NOW. Free (eth_call), so
-    // the whole upcoming batch can be pre-rolled before any settle happens.
-    // Same six-word shape as previewHunt.
-    previewHuntAt: async (p = player, tier = 1, offset = 0) => {
-      const h = (
-        await rpc.call(
-          to,
-          sel('previewHuntAt(address,uint8,uint256)') + argAddr(p) + arg8(tier) + argUint(offset)
-        )
-      ).replace(/^0x/, '');
-      const w = (i) => BigInt('0x' + h.slice(i * 64, (i + 1) * 64));
-      return { counts: [w(0), w(1), w(2), w(3), w(4)], bestSingleWei: w(5) };
+      return { counts: [w(0), w(1), w(2), w(3), w(4)] };
     },
 
     maxBatch: async () => dUint(await rpc.call(to, sel('MAX_BATCH()'))),
@@ -600,8 +597,7 @@ export async function connect({ rpcUrl, address, player, fallbackRpcUrls = [] })
     // redeemQuote(uint8,uint256) view returns (uint256 payout, bool aboveFloor)
     // The sell flow quotes BEFORE sending so the button can explain a
     // below-floor redemption instead of letting the player sign and revert.
-    // The selector exists in the table above; the reader method was missing
-    // and every gem redemption threw `redeemQuote is not a function`.
+    // V6: payout is in DEEPWOOD (18 decimals), not ETH wei.
     redeemQuote: async (rarity = 0, count = 1n) => {
       const raw = await rpc.call(
         to,
@@ -613,19 +609,6 @@ export async function connect({ rpcUrl, address, player, fallbackRpcUrls = [] })
       return [w[0], w[1] !== 0n];
     },
     minRedeemWei: async () => dUint(await rpc.call(to, sel('minRedeemWei()'))),
-
-    // redeemQuoteToken(uint8,uint256) view returns (uint256 tokens, bool aboveFloor)
-    // The token rail's quote. Same shape as redeemQuote, but the payout is in
-    // $DEEPWOOD at the live pool price -- the card displays THIS number, so it
-    // can never promise a payout the contract would refuse.
-    redeemQuoteToken: async (rarity = 0, count = 1n) => {
-      const raw = await rpc.call(
-        to,
-        sel('redeemQuoteToken(uint8,uint256)') + arg8(rarity) + argUint(count)
-      );
-      const w = wordsOf(raw);
-      return { tokens: w[0], aboveFloor: w[1] !== 0n };
-    },
 
     // --- per-player ---
     // The settlement confirmation signal: settleHunt increments this, so
@@ -682,6 +665,15 @@ export async function connect({ rpcUrl, address, player, fallbackRpcUrls = [] })
         Promise.all([0, 1, 2, 3, 4].map((r) => chain.priceOf(r))),
         Promise.all([0, 1, 2, 3, 4].map((r) => chain.rarityWeight(r))),
       ]);
+      // V6: also read the new gem/tool price functions
+      const [quartzPrice, amberPrice, sapphirePrice, emeraldPrice, diamondPrice] = await Promise.all([
+        chain.quartzPrice(), chain.amberPrice(), chain.sapphirePrice(),
+        chain.emeraldPrice(), chain.diamondPrice(),
+      ]);
+      const [woodCost, bronzeCost, silverCost, goldCost, mithrilCost] = await Promise.all([
+        chain.woodCost(), chain.bronzeCost(), chain.silverCost(),
+        chain.goldCost(), chain.mithrilCost(),
+      ]);
       // Season gate. A CLOSED season is a legitimate state, not an error --
       // it used to be invisible to the client, which is how the footer ended up
       // advertising settlement against a shut season. Read it alongside the rest.
@@ -700,6 +692,8 @@ export async function connect({ rpcUrl, address, player, fallbackRpcUrls = [] })
         tiers,
         price,
         weight,
+        gemPrices: { quartzPrice, amberPrice, sapphirePrice, emeraldPrice, diamondPrice },
+        toolPrices: { woodCost, bronzeCost, silverCost, goldCost, mithrilCost },
       };
     },
   };
@@ -805,88 +799,8 @@ export function auditEconomy(onChain, mirror) {
 }
 
 // =====================================================================
-// V4: Price oracle and token buy
+// V6: Transaction builders
 // =====================================================================
-
-/**
- * Read sqrtPriceX96 from the Uniswap V4 pool via PoolManager extsload.
- * Pool state is at storage slot 6, keyed by keccak256(poolId, slot).
- */
-export async function readSqrtPriceX96(rpcUrl, fallbackRpcUrls, poolManager, poolId) {
-  // Compute state slot: keccak256(abi.encodePacked(poolId, bytes32(uint256(6))))
-  const slotData = poolId + '0000000000000000000000000000000000000000000000000000000000000006';
-  const stateSlot = await rawRpc(rpcUrl, 'web3_sha3', [slotData]);
-  if (stateSlot.error) throw new Error(stateSlot.error.message);
-  
-  // Read storage at that slot
-  const data = await rpcFirst(rpcUrl, fallbackRpcUrls, 'eth_getStorageAt', [poolManager, stateSlot.result, 'latest']);
-  // An empty read means the pool state slot has no data -- either the poolId is
-  // wrong, the PoolManager address is wrong, or the pool was never initialized.
-  // rpcFirst already tries every endpoint, so reaching here means the slot is
-  // genuinely empty, not that an endpoint was down. Surface the WHY (the slot
-  // and pool) so this is diagnosable from the thrown message, not a bare
-  // "eth_getStorageAt failed" that says nothing about which read is missing.
-  if (data === undefined || data === null || data === '') {
-    throw new Error(`pool state slot ${stateSlot.result} empty for poolId ${poolId} at ${poolManager} -- pool uninitialized or wrong address`);
-  }
-  
-  // Decode: low 160 bits = sqrtPriceX96. `data` IS the hex string -- rpcFirst
-  // returns j.result directly (not a {result} wrapper), so decode `data`, not
-  // data.result. The old `!data.result` guard always evaluated truthy and threw
-  // on every call, and BigInt(data.result) was reading a property off a string.
-  const raw = BigInt(data);
-  const sqrtPriceX96 = raw & ((1n << 160n) - 1n);
-  return sqrtPriceX96;
-}
-
-/**
- * Get ETH per DEEPWOOD token price from the pool.
- * Returns wei per token (18 decimals).
- */
-export async function getEthPerToken(rpcUrl, fallbackRpcUrls, poolManager, poolId) {
-  const sqrtPriceX96 = await readSqrtPriceX96(rpcUrl, fallbackRpcUrls, poolManager, poolId);
-  if (sqrtPriceX96 === 0n) throw new Error('sqrtPriceX96 is zero');
-  const Q96 = 2n ** 96n;
-  // sqrtPriceX96 = sqrt(token/eth) * 2^96  =>  eth/token = (2^96 / sqrtPriceX96)^2
-  // Computed in FIXED POINT scaled by 1e18 so it does not underflow to zero:
-  // when the pool prices the token BELOW 1 ETH (sqrtPriceX96 > Q96), the naive
-  // (Q96*Q96)/(sqrt*sqrt) floors to 0 and every downstream token cost divides
-  // by zero -- which is exactly what made "pay DeepWood" fail. The 1e18 scale
-  // keeps integer precision across the full uint256 range, so the returned value
-  // is wei-of-ETH per token, already scaled by 1e18 (i.e. it is "eth per token"
-  // in 1e18 fixed point). Divide a wei cost by it and multiply by 1e18 to get a
-  // token amount in the token's own 18-decimal units.
-  const ethPerTokenScaled = (Q96 * Q96 * 10n ** 18n) / (sqrtPriceX96 * sqrtPriceX96);
-  return ethPerTokenScaled;
-}
-
-/**
- * Get DEEPWOOD tokens per ETH from the pool.
- * Returns tokens per ETH (18 decimals).
- */
-export async function getTokensPerEth(rpcUrl, fallbackRpcUrls, poolManager, poolId) {
-  // ethPerToken is now 1e18-scaled (eth per token, fixed point). Invert it to
-  // tokens per ETH in the same 1e18 fixed point: 1e18 / (ethPerToken/1e18).
-  const ethPerToken = await getEthPerToken(rpcUrl, fallbackRpcUrls, poolManager, poolId);
-  if (ethPerToken === 0n) throw new Error('ethPerToken is zero');
-  return (10n ** 18n * 10n ** 18n) / ethPerToken;
-}
-
-/**
- * Get the player's current buy nonce.
- */
-export async function getBuyNonce(rpcUrl, fallbackRpcUrls, gameAddress, player) {
-  // rpcFirst returns j.result directly (the hex string), not a {result}
-  // wrapper -- decode `result` itself. BigInt(result.result) was reading a
-  // property off a string and threw "Cannot convert undefined to a BigInt".
-  // Only accept a non-empty hex word so an empty '0x' answer from one
-  // endpoint falls through to the next instead of failing BigInt().
-  const result = await rpcFirst(rpcUrl, fallbackRpcUrls, 'eth_call', [
-    { to: gameAddress, data: '0xe40afab2' + player.slice(2).padStart(64, '0') },
-    'latest'
-  ], (r) => typeof r === 'string' && /^0x[0-9a-fA-F]+$/.test(r));
-  return BigInt(result);
-}
 
 /**
  * Set the treasury address (owner-only on-chain).
@@ -904,7 +818,8 @@ export function setTreasuryTx(treasury) {
 
 /**
  * Approve the game contract to spend $DEEPWOOD tokens.
- * Must be called before buyToolWithToken — transferFrom reverts without it.
+ * Must be called before buyTool or buyToolWithToken -- transferFrom reverts
+ * without it.
  */
 export function approveTokenTx(spender, amount) {
   // approve(address,uint256)
@@ -939,16 +854,63 @@ export async function getAllowance(rpcUrl, fallbackRpcUrls, tokenAddress, owner,
 
 /**
  * Buy tool with $DEEPWOOD token at 10% discount.
+ * V6: buyToolWithToken(uint8,uint256) -- 2 args (tier, maxTokenCost).
  * Returns a transaction to be signed by the wallet.
  */
-export function buyToolWithTokenTx(tier, maxTokenCost, quoteExpiresAt, nonce) {
-  // buyToolWithToken(uint8,uint256,uint256,uint256)
-  const selector = '0xe030f7c7';
+export function buyToolWithTokenTx(tier, maxTokenCost) {
+  // buyToolWithToken(uint8,uint256)
+  const selector = '0x8fb21f44';
   const params = [
     tier.toString(16).padStart(64, '0'),
-    maxTokenCost.toString(16).padStart(64, '0'),
-    quoteExpiresAt.toString(16).padStart(64, '0'),
-    nonce.toString(16).padStart(64, '0')
+    maxTokenCost.toString(16).padStart(64, '0')
+  ].join('');
+  return selector + params;
+}
+
+/**
+ * Buy tool with ETH. V6: buyToolWithEth(uint8,bytes,uint256) swaps
+ * ETH→DEEPWOOD via Universal Router, then buys the tool in the same tx.
+ * This is the ONLY payable buy path in V6.
+ *
+ * @param {number} tier 1..5
+ * @param {string|Buffer} swapData encoded swap path data for the Universal Router
+ * @param {bigint|number} minTokens minimum DEEPWOOD tokens out (slippage protection)
+ * @returns {string} calldata hex
+ */
+export function buyToolWithEthTx(tier, swapData, minTokens) {
+  // buyToolWithEth(uint8,bytes,uint256)
+  const selector = '0xdba8dc9d';
+  const tierWord = tier.toString(16).padStart(64, '0');
+  const minTokensWord = BigInt(minTokens).toString(16).padStart(64, '0');
+  // Encode the bytes parameter
+  const swapDataHex = typeof swapData === 'string'
+    ? swapData.replace(/^0x/, '')
+    : Buffer.from(swapData).toString('hex');
+  const swapDataLength = swapDataHex.length / 2;
+  const paddedLength = Math.ceil(swapDataHex.length / 64) * 64;
+  const swapDataPadded = swapDataHex.padEnd(paddedLength, '0');
+  // Offset to bytes data = 3 words * 32 bytes = 96 (after tier, offset, minTokens)
+  const offset = (3 * 32).toString(16).padStart(64, '0');
+  return selector + tierWord + offset + minTokensWord +
+    swapDataLength.toString(16).padStart(64, '0') +
+    swapDataPadded;
+}
+
+/**
+ * Buy tool with $DEEPWOOD via transferFrom (non-payable).
+ * V6: buyTool(uint8,uint256) is NOT payable -- it pulls DEEPWOOD via
+ * transferFrom, so the frontend must approve first.
+ *
+ * @param {number} tier 1..5
+ * @param {bigint|number} maxTokenCost maximum DEEPWOOD tokens to spend
+ * @returns {string} calldata hex
+ */
+export function buyToolTx(tier, maxTokenCost) {
+  // buyTool(uint8,uint256)
+  const selector = '0x798588fc';
+  const params = [
+    tier.toString(16).padStart(64, '0'),
+    maxTokenCost.toString(16).padStart(64, '0')
   ].join('');
   return selector + params;
 }

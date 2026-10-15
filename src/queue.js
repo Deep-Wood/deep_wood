@@ -10,8 +10,8 @@
  *
  * HOW IT STAYS HONEST
  * ===================
- * The results are not invented locally. The contract's `previewHuntAt(player,
- * tier, offset)` returns the roll for the hunt `offset` digs from now -- the
+ * The results are not invented locally. The contract's `previewHunt(player,
+ * tier)` returns the roll for the hunt at the current queue position -- the
  * SAME roll `settleBatch` will recompute from the committed season seed. The
  * queue therefore holds chain-authorized results for hunt indexes
  * [base, base+n), where base is the chain's huntIndexOf(player) at queue
@@ -33,7 +33,7 @@ export const MAX_BATCH = 20;
 
 /**
  * The queue. One entry per QUEUED (dug-but-unsettled) hunt:
- *   { counts: bigint[5], bestSingleWei: bigint }
+ *   { counts: bigint[5] }
  * plus `base`, the chain hunt index the first entry corresponds to.
  */
 export class HuntQueue {
@@ -78,20 +78,19 @@ export class HuntQueue {
    * Queue one hunt's chain-authorized result.
    * @returns {boolean} false if the queue is full or the tier changed mid-run
    */
-  push(counts, bestSingleWei) {
+  push(counts) {
     if (this.entries.length >= MAX_BATCH) return false;
-    this.entries.push({ counts, bestSingleWei: BigInt(bestSingleWei) });
+    this.entries.push({ counts });
     return true;
   }
 
   /**
-   * The argument shape wallet.settleBatch wants: two parallel arrays in dig
+   * The argument shape wallet.settleBatch wants: an array of counts in dig
    * order. Copies out so the caller can clear without aliasing.
    */
   toCalldata() {
     return {
       batch: this.entries.map((e) => e.counts),
-      bests: this.entries.map((e) => e.bestSingleWei),
     };
   }
 

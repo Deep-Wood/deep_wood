@@ -2035,25 +2035,17 @@ export class ForestScene extends Phaser.Scene {
    */
   /**
    * Estimate the token cost for buying a tool tier, using the on-chain price.
-   * Returns wei (18 decimals) or 0 if price is unavailable.
+   * Returns DEEPWOOD (18 decimals) or 0 if price is unavailable.
+   *
+   * V6: toolCost(tier) returns the price directly in DEEPWOOD. The token buy
+   * gets a 10% discount, so the cost is toolCost(tier) * 9000 / 10000.
    */
   async estimateTokenCost(tier) {
     try {
-      const { getEthPerToken } = await import('./chain.js');
-      const ethPerToken = await getEthPerToken(
-        this.rpcUrl,
-        this.fallbackRpcUrls,
-        this.poolManager,
-        this.poolId
-      );
-      const cost = toolPrice(tier);
-      // tokenCost (in the token's 18-decimal units) = discounted ETH cost / ethPerToken.
-      // ethPerToken is now 1e18-scaled (eth per token, fixed point), so:
-      //   discountedEth = cost * 0.9   (wei)
-      //   tokenCost = discountedEth * 1e18 / ethPerToken   (token units, 18 dec)
-      const discountedEth = (cost * 9000n) / 10000n;
-      const tokenCost = (discountedEth * 10n ** 18n) / ethPerToken;
-      return tokenCost;
+      const reader = await getReader();
+      if (!reader) return 0n;
+      const cost = await reader.toolCost(tier);
+      return (cost * 9000n) / 10000n;
     } catch {
       return 0n;
     }
@@ -2083,28 +2075,18 @@ export class ForestScene extends Phaser.Scene {
     }
 
     // Get on-chain price
-    this.beltMsg('Reading pool price…', 'busy');
-    const { getEthPerToken, getBuyNonce, getAllowance, getTokenBalance } = await import('./chain.js');
+    this.beltMsg('Reading tool price…', 'busy');
+    const { getAllowance, getTokenBalance } = await import('./chain.js');
     const { getState, sendTo } = await import('./wallet.js');
     const { getReader, pollUntilChanged } = await import('./onchain.js');
-    const ethPerToken = await getEthPerToken(
-      this.rpcUrl,
-      this.fallbackRpcUrls,
-      this.poolManager,
-      this.poolId
-    );
-    const cost = toolPrice(tier);
-    // tokenCost (token's 18-decimal units) = discounted ETH cost / ethPerToken.
-    // ethPerToken is 1e18-scaled, so scale the discounted wei cost back up by
-    // 1e18 before dividing. (The old `ethPerToken * 10000n / 10000n` was a no-op
-    // and, with the old underflowing price, divided by zero.)
-    const discountedEth = (cost * 9000n) / 10000n;
-    const tokenCost = (discountedEth * 10n ** 18n) / ethPerToken;
-    // The buy nonce is keyed by the PLAYER ADDRESS. Use the live connected
-    // account from getState(), NOT this.wallet: this.wallet is a Phaser property
-    // set by the wallet-sync and can be stale/undefined mid-flight, and
-    // getBuyNonce does player.slice(2) -- passing undefined crashed with
-    // "Cannot read properties of undefined (reading 'slice')" (DEEPWOOD-B).
+    const reader = await getReader();
+    if (!reader) { this.beltMsg('chain not configured', 'bad'); return; }
+    const cost = await reader.toolCost(tier);
+    // V6: toolCost returns DEEPWOOD directly. Token buy has a 10% discount.
+    const tokenCost = (cost * 9000n) / 10000n;
+    // Use the live connected account from getState(), NOT this.wallet:
+    // this.wallet is a Phaser property set by the wallet-sync and can be
+    // stale/undefined mid-flight.
     const { account } = getState();
     if (!account) {
       this.beltMsg('Token buy requires a connected wallet', 'bad');
@@ -2152,25 +2134,11 @@ export class ForestScene extends Phaser.Scene {
       await new Promise(r => setTimeout(r, 2000));
     }
 
-    const nonce = await getBuyNonce(
-      this.rpcUrl,
-      this.fallbackRpcUrls,
-      this.gameAddress,
-      account
-    );
-    const quoteExpiresAt = Math.floor(Date.now() / 1000) + 30;
-
     // Show quote to user
     const shortToken = (Number(tokenCost) / 1e18).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
     const accepted = await this.showQuoteDialog(tier, shortToken, 30);
     if (!accepted) {
       this.beltMsg('Quote cancelled', 'bad');
-      return;
-    }
-
-    // Check if quote expired
-    if (Date.now() / 1000 > quoteExpiresAt) {
-      this.beltMsg('Quote expired - try again', 'bad');
       return;
     }
 
@@ -2184,7 +2152,7 @@ export class ForestScene extends Phaser.Scene {
 
     let r;
     try {
-      const txData = buyToolWithTokenTx(tier, tokenCost, quoteExpiresAt, nonce);
+      const txData = buyToolWithTokenTx(tier, tokenCost);
       r = await sendTo(this.gameAddress, txData);
     } finally {
       this.clearTxPending();
@@ -2539,8 +2507,8 @@ export class ForestScene extends Phaser.Scene {
         onQuote: async (rarity, amount) => {
           const { getReader } = await import('./onchain.js');
           const r = await getReader();
-          if (!r?.redeemQuoteToken) return null;
-          return r.redeemQuoteToken(rarity, BigInt(amount));
+          if (!r?.redeemQuote) return null;
+          return r.redeemQuote(rarity, BigInt(amount));
         },
         onRedeem: async (rarity, amount) => {
           const { redeemGemsOnchain } = await import('./onchain.js');
@@ -3535,8 +3503,8 @@ export class ForestScene extends Phaser.Scene {
       // right here; per the design it now PUSHES onto the in-memory queue,
       // and the SETTLE button is the only thing that ever talks to the wallet.
       //
-      // The numbers shown are the contract's own previewHuntAt(player, tier,
-      // queue.size), i.e. the roll for the hunt this dig WILL become once the
+      // The numbers shown are the contract's own previewHunt(player, tier),
+      // i.e. the roll for the hunt this dig WILL become once the
       // batch settles. settleBatch recomputes from the committed season seed
       // and reverts ResultMismatch on any difference, so what the player saw
       // is exactly what the contract banks -- as long as the queue base has
@@ -3569,8 +3537,8 @@ export class ForestScene extends Phaser.Scene {
         }
         this.queue = new HuntQueue(BigInt(this._huntIndex), tier);
       }
-      const { previewHuntAtFor } = await import('./onchain.js');
-      const preview = await previewHuntAtFor(tier, this.queue.size);
+      const { previewHuntFor } = await import('./onchain.js');
+      const preview = await previewHuntFor(tier);
       if (!preview) {
         // Preview failed (RPC hiccup or season boundary). Keep the node
         // diggable; charging a hunt we could not see would be guessing.
@@ -3579,12 +3547,10 @@ export class ForestScene extends Phaser.Scene {
         this.busy = false;
         return false;
       }
-      this.queue.push(preview.counts, preview.bestSingleWei ?? 0n);
+      this.queue.push(preview.counts);
       result = {
         counts: preview.counts.map((n) => Number(n)),
-        bestSingleWei: preview.bestSingleWei ?? 0n,
         total: preview.counts.reduce((a, b) => a + Number(b), 0),
-        valueWei: preview.bestSingleWei ?? 0n,
         pending: true,
       };
       this.huntIndex += 1;

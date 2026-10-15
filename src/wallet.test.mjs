@@ -59,7 +59,7 @@ const { GEM_PRICE } = await import('./season.js');
 const { config } = await import('./config.js');
 
 const require = createRequire(import.meta.url);
-const ART = '/home/administrator/gem-hunter/out/DeepWoodV2.sol/DeepWoodV2.json';
+const ART = '/home/administrator/gem-hunter/out/DeepWoodV6.sol/DeepWoodV6.json';
 
 const skip = (why) => console.log(`  skip  ${why}`);
 
@@ -116,11 +116,11 @@ test('selectors match the compiled artifact', async (t) => {
     return w;
   };
 
-  await t.test('buyTool(uint8)', () => {
+  await t.test('buyTool(uint8,uint256)', () => {
     const { sig, selector } = need('buyTool');
-    assert.equal(sig, 'buyTool(uint8)');
+    assert.equal(sig, 'buyTool(uint8,uint256)');
     assert.ok(selector, 'artifact must expose buyTool');
-    assert.equal(sel('buyTool(uint8)'), selector, 'table entry wallet.js reads');
+    assert.equal(sel('buyTool(uint8,uint256)'), selector, 'table entry wallet.js reads');
   });
 
   await t.test('repairTool()', () => {
@@ -153,11 +153,10 @@ test('selectors match the compiled artifact', async (t) => {
     }
   });
 
-  await t.test('buyTool is payable, the rest are not', () => {
-    // Only buyTool sends value. Sending ETH with repair/upgrade/redeem would
-    // strand funds: repair and upgrade are paid in GEMS, and redeem PAYS OUT.
-    assert.equal(need('buyTool').fn.stateMutability, 'payable');
-    for (const f of ['repairTool', 'upgradeSkill', 'redeemGems', 'settleHunt']) {
+  await t.test('all writes are nonpayable in V6', () => {
+    // V6: buyTool pulls DEEPWOOD via transferFrom, so NO write sends ETH.
+    // Sending ETH with any of them would strand funds in the contract.
+    for (const f of ['buyTool', 'repairTool', 'upgradeSkill', 'redeemGems', 'settleHunt']) {
       assert.equal(need(f).fn.stateMutability, 'nonpayable', `${f} must not be payable`);
     }
   });
@@ -168,26 +167,27 @@ test('selectors match the compiled artifact', async (t) => {
 // Encoding: decode the calldata BACK and check the words.
 // ---------------------------------------------------------------------------
 test('calldata encodes buyTool correctly', () => {
-  // A hand-typed selector is how this file nearly shipped wrong, so the
-  // assertion is on the DECODED bytes, not on a copied constant.
-  //
-  // V2 has FIVE tiers, not four. A client still capping at 4 would make Gold
-  // -- the top of the ladder -- unreachable from the UI.
+  // V6: buyTool(uint8,uint256) takes (tier, maxTokenCost) and is nonpayable.
+  // It pulls DEEPWOOD via transferFrom, so the maxTokenCost argument is the
+  // maximum DEEPWOOD tokens the player is willing to spend.
   for (const tier of [1, 2, 3, 4, 5]) {
-    const data = calldataBuyTool(tier);
-    assert.equal(data.length, 8 + 64, `buyTool(${tier}) is 4+32 bytes`);
+    const data = calldataBuyTool(tier, 1000n);
+    assert.equal(data.length, 8 + 64 + 64, `buyTool(${tier}) is 4+32+32 bytes`);
     assert.match(data, /^[0-9a-f]+$/, 'bare hex, exactly one 0x at most');
     assert.ok(!data.startsWith('0x'), 'calldata must not carry a 0x prefix');
     const head = '0x' + data.slice(0, 8);
-    const word = data.slice(8);
-    assert.equal(head, sel('buyTool(uint8)'));
+    const tierWord = data.slice(8, 72);
+    const costWord = data.slice(72);
+    assert.equal(head, sel('buyTool(uint8,uint256)'));
     assert.equal(head, decodeHeader(data));
-    assert.match(word, /^[0-9a-f]{64}$/);
+    assert.match(tierWord, /^[0-9a-f]{64}$/);
+    assert.match(costWord, /^[0-9a-f]{64}$/);
     // Left-padded: a uint8 argument occupies the LAST byte.
-    assert.equal(BigInt('0x' + word), BigInt(tier), `tier ${tier}`);
-    assert.equal(word.slice(0, 62), '0'.repeat(62), 'padding must be zero, not absent');
+    assert.equal(BigInt('0x' + tierWord), BigInt(tier), `tier ${tier}`);
+    assert.equal(tierWord.slice(0, 62), '0'.repeat(62), 'padding must be zero, not absent');
+    assert.equal(BigInt('0x' + costWord), 1000n, `maxTokenCost for tier ${tier}`);
   }
-  assert.equal(BigInt('0x' + calldataBuyTool(5).slice(8)), 5n);
+  assert.equal(BigInt('0x' + calldataBuyTool(5, 500n).slice(72)), 500n);
 });
 
 test('calldata encodes repairTool correctly', () => {
@@ -226,18 +226,17 @@ test('calldata encodes upgradeSkill and redeemGems correctly', () => {
   }
   // Distinct selectors: if these collided, one function's calldata would be
   // the other's and the test above would pass for the wrong reason.
-  assert.notEqual(sel('buyTool(uint8)'), sel('upgradeSkill(uint8)'));
+  assert.notEqual(sel('buyTool(uint8,uint256)'), sel('upgradeSkill(uint8)'));
   // Compare the ARGUMENT word, not the selector prefix: both are `...01` as a
   // tier, so slicing past the selector would compare two equal values and the
   // assertion would be vacuous.
-  assert.notEqual(calldataBuyTool(1), calldataUpgradeSkill(1), 'different selectors, different calldata');
+  assert.notEqual(calldataBuyTool(1, 100n), calldataUpgradeSkill(1), 'different selectors, different calldata');
 });
 
-test('payable value is NOT in the calldata', () => {
-  // value travels in the tx envelope. A buyTool call whose "value" appeared as
-  // a second word would be 4+32+32 bytes and would not decode.
-  assert.equal(calldataBuyTool(1).length, 8 + 64);
-  // And the non-payable writes must carry no value word at all.
+test('calldata has no value word', () => {
+  // V6: all writes are nonpayable. The calldata contains ONLY the selector
+  // and arguments -- no value word.
+  assert.equal(calldataBuyTool(1, 100n).length, 8 + 64 + 64);
   assert.equal(calldataRepairTool().length, 8);
   assert.equal(calldataUpgradeSkill(1).length, 8 + 64);
 });
@@ -266,14 +265,14 @@ test('buyTool tier validation mirrors ToolOutOfRange', () => {
   // UI could never offer Gold, and the test would agree with the bug.
   for (const t of [1, 2, 3, 4, 5]) assert.equal(checkTier(t), t);
   for (const t of [0, 6, -1, 255, 1.5, null, undefined, NaN]) {
-    assert.throws(() => calldataBuyTool(t), /tier must be/, `tier ${String(t)}`);
+    assert.throws(() => calldataBuyTool(t, 100n), /tier must be/, `tier ${String(t)}`);
   }
   // A numeric STRING is rejected rather than coerced: Number('2') === 2, so
   // accepting it would let a mistyped call site reach the chain looking right.
-  assert.throws(() => calldataBuyTool('2'), /tier must be an integer/, "string '2'");
-  assert.throws(() => calldataBuyTool(2n), /tier must be an integer/, 'bigint 2n');
+  assert.throws(() => calldataBuyTool('2', 100n), /tier must be an integer/, "string '2'");
+  assert.throws(() => calldataBuyTool(2n, 100n), /tier must be an integer/, 'bigint 2n');
   // The error names the range, so a UI can show the reason.
-  assert.throws(() => calldataBuyTool(6), /1\.\.5/);
+  assert.throws(() => calldataBuyTool(6, 100n), /1\.\.5/);
 
   // The bound is a PARAMETER, so the client can follow MAX_TIER() off the
   // chain instead of trusting a transcribed constant.
@@ -309,7 +308,7 @@ test('redeemGems validation mirrors ZeroAmount, with every rarity sellable', () 
 test('a rejected argument never becomes calldata', () => {
   const before = calldataRedeemGems(0, 1);
   assert.throws(() => calldataRedeemGems(9, 1), WalletError);
-  assert.throws(() => calldataBuyTool(0), WalletError);
+  assert.throws(() => calldataBuyTool(0, 100n), WalletError);
   // ...and the module is not left half-initialised by a throw.
   assert.equal(calldataRedeemGems(0, 1), before);
 });
@@ -336,7 +335,7 @@ test('no provider installed', async (t) => {
 
   await t.test('writes refuse with a typed result, never an exception', async () => {
     for (const r of [
-      await buyTool(1, { valueWei: 5000000000000n }),
+      await buyTool(1, { maxTokenCost: 5000000000000n }),
       await repairTool(),
       await upgradeSkill(1),
       await redeemGems(0, 1),
@@ -401,7 +400,7 @@ test('connect on the wrong chain is NOT connected', async () => {
   assert.equal(getState().rightChain, false);
   assert.equal(getAccount(), '0x1111111111111111111111111111111111111111', 'account is still known');
   // ...and writes are refused on exactly the same rule.
-  const w = await buyTool(1, { valueWei: 5000000000000n });
+  const w = await buyTool(1, { maxTokenCost: 5000000000000n });
   assert.equal(w.ok, false);
   assert.equal(w.code, 'wrong-chain');
 });
@@ -465,10 +464,10 @@ test('a throwing listener does not break the others', async () => {
 // ---------------------------------------------------------------------------
 // Payable write path, through an injected fake.
 // ---------------------------------------------------------------------------
-test('buyTool with no value is refused before the wallet opens', async () => {
-  // V2: the ONLY payable write is buyTool. Every other write sends no value
-  // at all, because repair and upgrade are paid in GEMS and redeemGems PAYS
-  // OUT -- sending ETH with those would strand funds in the contract.
+test('buyTool with no maxTokenCost is refused before the wallet opens', async () => {
+  // V6: buyTool is nonpayable and pulls DEEPWOOD via transferFrom.
+  // The maxTokenCost argument is required -- without it the call would
+  // fail on chain.
   const p = fakeProvider();
   await connect({ provider: p });
   const r = await buyTool(1);
@@ -480,21 +479,21 @@ test('the exact-cost buyTool sends a well-formed transaction', async () => {
   const p = fakeProvider();
   await connect({ provider: p });
   if (!config.gameAddress) return skip('GAME_ADDRESS not set - no contract to send to');
-  // Wood costs 0.005 ETH. Read from the client mirror rather than restating the
-  // digit, so this cannot drift from the contract the way a literal would.
+  // Wood costs 0.005 ETH equivalent in DEEPWOOD. Read from the client mirror
+  // rather than restating the digit.
   const price = TOOL_PRICE[1];
-  assert.equal(price, 5_000_000_000_000_000n, 'Wood costs 0.005 ETH, mirroring toolCost(1)');
+  assert.equal(price, 5_000_000_000_000_000n, 'Wood costs 0.005 ETH equivalent, mirroring woodCost()');
 
-  const r = await buyTool(1, { valueWei: price });
+  const r = await buyTool(1, { maxTokenCost: price });
   assert.equal(r.ok, true, JSON.stringify(r));
   assert.equal(r.hash, '0xdeadbeef');
-  assert.equal(r.tx.value, toQuantity(price), 'value must be a hex quantity');
+  assert.equal(r.tx.value, undefined, 'V6 buyTool is nonpayable -- no value attached');
   assert.equal(r.tx.from, '0x1111111111111111111111111111111111111111');
   assert.equal(r.tx.to, config.gameAddress);
   // Exactly ONE 0x -- the double-prefix bug this suite was written to catch.
-  assert.equal(r.tx.data, '0x' + calldataBuyTool(1));
+  assert.equal(r.tx.data, '0x' + calldataBuyTool(1, price));
   assert.ok(!/^0x0x/.test(r.tx.data), 'data must not be double-prefixed');
-  assert.match(r.tx.data, /^0x[0-9a-f]{72}$/, 'selector + 1 word');
+  assert.match(r.tx.data, /^0x[0-9a-f]{136}$/, 'selector + 2 words (tier + maxTokenCost)');
 });
 
 test('the non-payable writes send NO value', async () => {
@@ -519,7 +518,7 @@ test('a write with no configured address refuses rather than sending', async () 
   const p = fakeProvider();
   await connect({ provider: p });
   if (config.gameAddress) return skip('a game address IS configured here');
-  const r = await buyTool(1, { valueWei: 5_000_000_000_000_000n });
+  const r = await buyTool(1, { maxTokenCost: 5_000_000_000_000_000n });
   assert.equal(r.ok, false);
   assert.equal(r.code, 'not-configured');
 });
@@ -537,7 +536,7 @@ test('a rejected signature is reported, not thrown', async () => {
   const p = fakeProvider({ fail: { eth_sendTransaction: err } });
   await connect({ provider: p });
   if (!config.gameAddress) return skip('no contract address to send to in this checkout');
-  const r = await buyTool(1, { valueWei: 5_000_000_000_000_000n });
+  const r = await buyTool(1, { maxTokenCost: 5_000_000_000_000_000n });
   assert.equal(r.ok, false);
   assert.equal(r.code, 'rejected');
 });
@@ -640,37 +639,36 @@ test('no signing key is read anywhere in the client', async (t) => {
 const SETTLE_SIG = 'settleHunt(address,uint8,uint256[5],uint256,bytes)';
 const P = '0xf39Fd6e51aad88F6F4ce6aB8827279cfffb92266';
 const COUNTS = [4n, 1n, 0n, 0n, 0n];
-const BEST = 400000000000000n;
 const slot = (data, i) => BigInt('0x' + data.slice(8 + 64 * i, 8 + 64 * (i + 1)));
 
 test('calldataSettleHunt: keeps the keeper-era selector', () => {
-  const data = calldataSettleHunt(P, 1, COUNTS, BEST);
+  const data = calldataSettleHunt(P, 1, COUNTS);
   assert.equal(decodeHeader(data), sel(SETTLE_SIG), 'selector must be unchanged');
   assert.equal(data.length, 8 + 64 * 10, '4 bytes + 10 words');
 });
 
 test('calldataSettleHunt: points the bytes offset past the head', () => {
-  const data = calldataSettleHunt(P, 1, COUNTS, BEST);
-  // slots: 0 player, 1 tier, 2..6 counts, 7 best, 8 offset, 9 length
+  const data = calldataSettleHunt(P, 1, COUNTS);
+  // slots: 0 player, 1 tier, 2..6 counts, 7 best(0n), 8 offset, 9 length
   assert.equal(slot(data, 8), 9n * 32n, 'offset must be 0x120');
   assert.notEqual(slot(data, 8), 0n, 'offset 0 reverts on chain, with no error name');
   assert.equal(slot(data, 9), 0n, 'the ignored signature is empty');
 });
 
 test('calldataSettleHunt: inlines the fixed-size counts array', () => {
-  const data = calldataSettleHunt(P, 1, COUNTS, BEST);
+  const data = calldataSettleHunt(P, 1, COUNTS);
   assert.equal(slot(data, 0), BigInt(P), 'player is left-padded into slot 0');
   assert.equal(slot(data, 1), 1n, 'tier');
   COUNTS.forEach((c, i) => assert.equal(slot(data, 2 + i), c, `count ${i}`));
-  assert.equal(slot(data, 7), BEST, 'bestSingleWei');
+  assert.equal(slot(data, 7), 0n, 'bestSingleWei is 0n (removed in V6)');
 });
 
 test('calldataSettleHunt: refuses a counts array that is not five long', () => {
-  assert.throws(() => calldataSettleHunt(P, 1, [1, 2, 3], BEST), /exactly 5/);
-  assert.throws(() => calldataSettleHunt(P, 1, 'nope', BEST), /exactly 5/);
+  assert.throws(() => calldataSettleHunt(P, 1, [1, 2, 3]), /exactly 5/);
+  assert.throws(() => calldataSettleHunt(P, 1, 'nope'), /exactly 5/);
 });
 
 test('calldataSettleHunt: rejects an out-of-range tier rather than truncating', () => {
-  assert.throws(() => calldataSettleHunt(P, 9, COUNTS, BEST));
-  assert.throws(() => calldataSettleHunt(P, 0, COUNTS, BEST));
+  assert.throws(() => calldataSettleHunt(P, 9, COUNTS));
+  assert.throws(() => calldataSettleHunt(P, 0, COUNTS));
 });

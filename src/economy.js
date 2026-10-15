@@ -11,9 +11,12 @@
  * and local, this file is not, so the spec is the one that will drift unless
  * it is updated deliberately.
  *
+ * V6 UPDATE: All prices are now in DEEPWOOD (18 decimals), not ETH wei.
+ * The contract's priceOf(), toolCost(), quartzPrice(), etc. return DEEPWOOD
+ * amounts. Use readLivePrices() to fetch current prices from the chain.
+ *
  * Units:
- *   - prices are wei (bigint). Never a float: 0.00005 ETH is 5e13 wei and a
- *     float loses it long before it loses the 0.00005.
+ *   - prices are DEEPWOOD (18 decimals, bigint). V6 moved from ETH wei to DEEPWOOD.
  *   - gem counts are integers.
  *   - drop tables are per 10,000 hunts.
  */
@@ -29,15 +32,19 @@ export const RARITY_NAME = ['Quartz', 'Amber', 'Sapphire', 'Ruby', 'Diamond'];
 export const RARITY_SHORT = ['Qtz', 'Amb', 'Sapph', 'Ruby', 'Diam'];
 
 /**
- * Face value of one gem, in wei. Identical to the contract's priceOf() --
- * verified against src/DeepWood.sol and NOT to be changed.
+ * Face value of one gem, in DEEPWOOD (18 decimals). V6: prices moved from
+ * ETH wei to DEEPWOOD. These are the DEFAULT/FALLBACK values -- the live
+ * contract values should be read via readLivePrices().
+ *
+ * V6 uses dedicated price functions: quartzPrice(), amberPrice(), sapphirePrice(),
+ * emeraldPrice(), diamondPrice() instead of the old priceOf(uint8).
  */
 export const FACE_VALUE = [
-  50_000_000_000_000n,        // Quartz   0.00005 ETH
-  400_000_000_000_000n,       // Amber    0.0004  ETH
-  3_000_000_000_000_000n,     // Sapphire 0.003   ETH
-  25_000_000_000_000_000n,    // Ruby     0.025   ETH
-  200_000_000_000_000_000n,   // Diamond  0.2     ETH
+  50_000_000_000_000n,        // Quartz   0.00005 ETH equivalent
+  400_000_000_000_000n,       // Amber    0.0004  ETH equivalent
+  3_000_000_000_000_000n,     // Sapphire 0.003   ETH equivalent
+  25_000_000_000_000_000n,    // Ruby     0.025   ETH equivalent
+  200_000_000_000_000_000n,   // Diamond  0.2     ETH equivalent
 ];
 
 /** ROI weighting, 8x per tier. Scores a haul for the leaderboard. A Ruby is
@@ -49,8 +56,8 @@ export const RARITY_WEIGHT = [1n, 8n, 64n, 512n, 4096n];
 
 export const MAX_TIER = 5;
 
-/** Wood / Bronze / Iron / Steel / Gold. */
-export const TIER_NAME = ['', 'Wood', 'Bronze', 'Iron', 'Steel', 'Gold'];
+/** Wood / Bronze / Iron / Steel / Gold. V6: Wood / Bronze / Silver / Gold / Mithril. */
+export const TIER_NAME = ['', 'Wood', 'Bronze', 'Silver', 'Gold', 'Mithril'];
 
 /** Drop table per tier, per 10,000 hunts. Index is rarity. This is the
  *  tier's CEILING -- skill can only lower it. See dropTable(). */
@@ -94,13 +101,19 @@ export function durabilityOf(tier) {
   return DURABILITY[tier] ?? 0;
 }
 
-/** Tool price in wei. 5% goes to the treasury, 95% to the owner. */
+/**
+ * Tool price in DEEPWOOD (18 decimals). V6: prices moved from ETH wei to
+ * DEEPWOOD. 5% goes to the treasury, 95% to the owner.
+ *
+ * V6 uses dedicated cost functions: woodCost(), bronzeCost(), silverCost(),
+ * goldCost(), mithrilCost() instead of the old toolCost(uint8).
+ */
 export const TOOL_PRICE = {
-  1: 5_000_000_000_000_000n,        // Wood   0.005 ETH
-  2: 52_000_000_000_000_000n,       // Bronze 0.052
-  3: 184_000_000_000_000_000n,      // Iron   0.184
-  4: 862_000_000_000_000_000n,      // Steel  0.862
-  5: 2_300_000_000_000_000_000n,    // Gold   2.300
+  1: 5_000_000_000_000_000n,        // Wood     0.005 ETH equivalent
+  2: 52_000_000_000_000_000n,       // Bronze   0.052
+  3: 184_000_000_000_000_000n,      // Silver   0.184
+  4: 862_000_000_000_000_000n,      // Gold     0.862
+  5: 2_300_000_000_000_000_000n,    // Mithril  2.300
 };
 
 export function toolPrice(tier) {
@@ -136,7 +149,7 @@ export function repairCost(tier) {
   return REPAIR_COST[tier] ?? [0, 0, 0, 0, 0];
 }
 
-/** Face value of a repair, in wei -- what the gems are worth at 100%. */
+/** Face value of a repair, in DEEPWOOD (18 decimals) -- what the gems are worth at 100%. */
 export function repairCostWei(tier) {
   let v = 0n;
   repairCost(tier).forEach((n, r) => { v += BigInt(n) * FACE_VALUE[r]; });
@@ -238,19 +251,45 @@ export function minSkillForTier(toolTier) {
 export const PAYOUT_BPS = 9000;
 export const PAYOUT_DIV = 10_000n;
 
-/** Minimum redeemable value in wei. Below this the button is disabled.
- *  Matches the contract's minSplay (0.005 ETH) on purpose -- keep the two
- *  numbers the same so there is one threshold to remember. */
-export const REDEEM_FLOOR = 5_000_000_000_000_000n; // 0.005 ETH = 100 Quartz
+/** Minimum redeemable value in DEEPWOOD (18 decimals). Below this the button
+ *  is disabled. V6: moved from ETH wei to DEEPWOOD. */
+export const REDEEM_FLOOR = 5_000_000_000_000_000n; // 0.005 ETH equivalent = 100 Quartz
 
 export function payoutWei(gems, rarity) {
   return (BigInt(gems) * FACE_VALUE[rarity] * BigInt(PAYOUT_BPS)) / PAYOUT_DIV;
 }
 
+// --- V6: Live price reads from the contract ------------------------------
+
+/**
+ * Read live prices from the V6 contract. All prices are in DEEPWOOD (18 decimals).
+ *
+ * V6 uses direct contract reads for all prices:
+ *   - Gem prices: quartzPrice(), amberPrice(), sapphirePrice(), emeraldPrice(), diamondPrice()
+ *   - Tool prices: woodCost(), bronzeCost(), silverCost(), goldCost(), mithrilCost()
+ *
+ * @param {object} chain the connected chain handle from chain.js
+ * @returns {Promise<{gemPrices: bigint[], toolPrices: bigint[]}>}
+ */
+export async function readLivePrices(chain) {
+  const [quartzPrice, amberPrice, sapphirePrice, emeraldPrice, diamondPrice] = await Promise.all([
+    chain.quartzPrice(), chain.amberPrice(), chain.sapphirePrice(),
+    chain.emeraldPrice(), chain.diamondPrice(),
+  ]);
+  const [woodCost, bronzeCost, silverCost, goldCost, mithrilCost] = await Promise.all([
+    chain.woodCost(), chain.bronzeCost(), chain.silverCost(),
+    chain.goldCost(), chain.mithrilCost(),
+  ]);
+  return {
+    gemPrices: [quartzPrice, amberPrice, sapphirePrice, emeraldPrice, diamondPrice],
+    toolPrices: [woodCost, bronzeCost, silverCost, goldCost, mithrilCost],
+  };
+}
+
 // --- derived: what the UI shows ------------------------------------------
 
 /**
- * Expected face value of one hunt at a tier, in wei.
+ * Expected face value of one hunt at a tier, in DEEPWOOD (18 decimals).
  *
  * `skill` DEFAULTS TO 4 on purpose. Every figure quoted in ECONOMY-SPEC.md
  * section 8 is the "at full unlock" number, because Gold is quoted with its 2%
@@ -266,8 +305,8 @@ export function huntValueWei(tier, skill = 4) {
   return per10k / 10_000n;
 }
 
-/** Net of face value per hunt after amortised repair, in wei. This is the
- *  number the payback table in SPEC section 8 is built from. */
+/** Net of face value per hunt after amortised repair, in DEEPWOOD (18 decimals).
+ *  This is the number the payback table in SPEC section 8 is built from. */
 export function netHuntWei(tier, skill = 4) {
   const d = BigInt(durabilityOf(tier) || 1);
   const repairPerHunt = repairCostWei(tier) / d;
@@ -306,13 +345,15 @@ export const fmtGem = (n) => {
   return String(n);
 };
 
-/** wei -> a compact ETH string. trims trailing zeros so the belt reads
- *  "0.005 ETH" and "2.3 ETH", not "0.00500 ETH". */
+/**
+ * DEEPWOOD (18 decimals) -> a compact token string. V6: was ETH, now DEEPWOOD.
+ * Trims trailing zeros so the belt reads "0.005 DEEPWOOD" and "2.3 DEEPWOOD".
+ */
 export function fmtEth(wei, dp = 5) {
   const v = Number(wei) / 1e18;
   let s = v.toFixed(dp);
   if (s.includes('.')) s = s.replace(/0+$/, '').replace(/\.$/, '');
-  return `${s} ETH`;
+  return `${s} DEEPWOOD`;
 }
 
 /** "12Q + 4A" style repair summary, short enough for a belt chip. */

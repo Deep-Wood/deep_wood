@@ -149,7 +149,10 @@ export function mode() {
 }
 
 /**
- * Buy the ONE tool, or upgrade to the next tier, paying ETH.
+ * Buy the ONE tool, or upgrade to the next tier, paying DEEPWOOD tokens.
+ *
+ * V6: buyTool(uint8,uint256) is NOT payable. It pulls DEEPWOOD via
+ * transferFrom, so the frontend must approve the token spend first.
  *
  * Confirmation signal: `toolOf(account)` returns (tier, durability, broken),
  * and the tier must have RISEN to the one requested. In V2 exactly one tool is
@@ -160,29 +163,59 @@ export function mode() {
  * nothing.
  *
  * @param {number} tier 1..5
+ * @param {bigint|number} maxTokenCost DEEPWOOD tokens (18 decimals) the player
+ *        is willing to spend. Read from toolCost(tier) on chain.
  * @returns {Promise<{ok:boolean, code?:string, reason?:string, hash?:string,
  *                    confirmed?:boolean, tier?:number, durability?:bigint}>}
  */
-export async function buyToolOnchain(tier, costWei) {
+export async function buyToolOnchain(tier, maxTokenCost) {
   const r = await getReader();
   if (!r)
     return fail(
       "not-configured",
       "GAME_ADDRESS not set - no contract to write to",
     );
-  if (costWei === undefined || costWei === null) {
+  if (maxTokenCost === undefined || maxTokenCost === null) {
     // Never guess a price. Reading it live is one call; inventing it sends the
-    // player to sign a transaction the chain will reject with Underpaid.
+    // player to sign a transaction the chain will revert.
     return fail(
       "bad-arg",
-      "buyToolOnchain needs { costWei } from toolCost(tier)",
+      "buyToolOnchain needs { maxTokenCost } from toolCost(tier)",
     );
   }
 
   const { account } = getState();
   const before = await r.toolOf(account);
 
-  const sent = await wBuyTool(tier, { valueWei: costWei });
+  // V6: approve DEEPWOOD token spend first (buyTool pulls via transferFrom)
+  const { buyToolTx, approveTokenTx } = await import("./chain.js");
+  const { sendTo } = await import("./wallet.js");
+
+  // Check current allowance
+  const tokenAddr = await r.token();
+  const { getAllowance, getTokenBalance } = await import("./chain.js");
+  const allowance = await getAllowance(
+    config.rpcUrl, config.fallbackRpcUrls, tokenAddr, account, config.gameAddress
+  );
+  const tokenCost = BigInt(maxTokenCost);
+
+  if (allowance < tokenCost) {
+    // Approve the game contract to spend DEEPWOOD
+    const approveData = approveTokenTx(config.gameAddress, tokenCost);
+    const approveResult = await sendTo(tokenAddr, approveData);
+    if (!approveResult?.ok) {
+      return fail(
+        approveResult?.code || "send-failed",
+        approveResult?.reason || "token approval failed",
+      );
+    }
+    // Wait for the approval to propagate
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+
+  // Now call buyTool(uint8,uint256) -- NOT payable, no ETH value
+  const txData = buyToolTx(tier, tokenCost);
+  const sent = await sendTo(config.gameAddress, txData);
   if (!sent.ok)
     return fail(
       sent.code || "send-failed",
@@ -198,6 +231,67 @@ export async function buyToolOnchain(tier, costWei) {
   if (!after.changed) {
     // The tx was broadcast but the contract never applied it: it reverted. A
     // duplicate buy, a skipped tier, or a wrong value all land here.
+    return fail(
+      "reverted",
+      "contract did not apply the purchase (it reverted) - nothing granted",
+    );
+  }
+  if (after.value.tier !== tier) {
+    return fail(
+      "wrong-tier",
+      `bought tier ${tier} but the chain holds tier ${after.value.tier}`,
+    );
+  }
+
+  return {
+    ok: true,
+    hash: sent.hash,
+    confirmed: true,
+    tier: after.value.tier,
+    durability: after.value.durability,
+  };
+}
+
+/**
+ * Buy tool with ETH. V6: buyToolWithEth(uint8,bytes,uint256) is the ONLY
+ * payable buy path. It swaps ETH→DEEPWOOD via Universal Router, then buys
+ * the tool in the same transaction.
+ *
+ * @param {number} tier 1..5
+ * @param {string|Buffer} swapData encoded swap path for the Universal Router
+ * @param {bigint} minTokens minimum DEEPWOOD tokens out (slippage protection)
+ * @returns {Promise<{ok:boolean, code?:string, reason?:string, hash?:string,
+ *                    confirmed?:boolean, tier?:number, durability?:bigint}>}
+ */
+export async function buyToolWithEthOnchain(tier, swapData, minTokens) {
+  const r = await getReader();
+  if (!r)
+    return fail(
+      "not-configured",
+      "GAME_ADDRESS not set - no contract to write to",
+    );
+
+  const { account } = getState();
+  const before = await r.toolOf(account);
+
+  const { buyToolWithEthTx } = await import("./chain.js");
+  const { sendTo } = await import("./wallet.js");
+
+  const txData = buyToolWithEthTx(tier, swapData, minTokens);
+  const sent = await sendTo(config.gameAddress, txData);
+  if (!sent.ok)
+    return fail(
+      sent.code || "send-failed",
+      sent.reason || "transaction was not sent",
+    );
+
+  const after = await pollUntilChanged(
+    () => r.toolOf(account),
+    before,
+    (b, a) => a.tier > b.tier,
+  );
+
+  if (!after.changed) {
     return fail(
       "reverted",
       "contract did not apply the purchase (it reverted) - nothing granted",
@@ -337,13 +431,15 @@ export async function upgradeSkillOnchain(level, currentSkill) {
 /**
  * Cash gems out for $DEEPWOOD.
  *
+ * V6: redeemQuote returns DEEPWOOD (18 decimals), not ETH wei.
+ *
  * Confirmation signal: the gem balance FELL by the amount redeemed. The token
  * arrives in the same transaction, so there is nothing to poll on the token
  * side -- and the payout is the contract's, not the client's, so it must never
  * be computed locally or shown as guaranteed.
  *
  * The floor is enforced on chain with BelowMinRedeem. Ask the contract's own
- * `redeemQuoteToken` before sending so the button can explain why a redemption
+ * `redeemQuote` before sending so the button can explain why a redemption
  * is too small, rather than letting the player sign and fail.
  */
 export async function redeemGemsOnchain(rarity, count) {
@@ -367,30 +463,19 @@ export async function redeemGemsOnchain(rarity, count) {
     );
   }
 
-  // Quote first: the floor is a real rejection, not a formality. The token
-  // rail is the only rail V4 pays from, so the token quote is the one that
-  // decides whether the contract would accept this redemption.
+  // V6: redeemQuote returns DEEPWOOD (18 decimals), not ETH wei.
   let payout = 0n;
   try {
-    const q = await r.redeemQuoteToken(rarity, count);
-    payout = q.tokens ?? 0n;
-    if (!q.aboveFloor) {
+    const [tokenPayout, aboveFloor] = await r.redeemQuote(rarity, count);
+    payout = tokenPayout;
+    if (!aboveFloor) {
       return fail(
         "below-floor",
         `that redeems for ${payout} $DEEPWOOD, below the contract's minimum`,
       );
     }
   } catch {
-    // A reader without the token quote (older contract) falls through to the
-    // ETH quote below, which is the pre-token-rail behaviour.
-    const [ethPayout, aboveFloor] = await r.redeemQuote(rarity, count);
-    payout = ethPayout;
-    if (!aboveFloor) {
-      return fail(
-        "below-floor",
-        `that redeems for ${ethPayout} wei, below the contract's minimum`,
-      );
-    }
+    return fail("read-failed", "could not read redemption quote from chain");
   }
 
   const sent = await wRedeemGems(rarity, count);
@@ -417,8 +502,8 @@ export async function redeemGemsOnchain(rarity, count) {
     ok: true,
     hash: sent.hash,
     confirmed: true,
-    // The chain's own number, never a locally computed one.
-    payoutWei: payout,
+    // V6: payout is in DEEPWOOD (18 decimals), not ETH wei.
+    payoutTokens: payout,
   };
 }
 
@@ -435,8 +520,11 @@ export async function redeemGemsOnchain(rarity, count) {
  * would produce finds the chain refuses -- which is exactly what happened when
  * `rollHunt` hashed the 0x-prefixed address.
  *
+ * V6: previewHunt returns only (uint256[5] counts) -- bestSingleWei was
+ * removed. The contract computes bestSingleFind internally now.
+ *
  * @param {number} tier 1..4
- * @returns {Promise<{ok:boolean, counts?:bigint[], bestSingleWei?:bigint,
+ * @returns {Promise<{ok:boolean, counts?:bigint[],
  *                    hash?:string, code?:string, reason?:string}>}
  */
 export async function settleHuntOnchain(tier) {
@@ -476,7 +564,6 @@ export async function settleHuntOnchain(tier) {
     player: account,
     tier,
     counts: preview.counts,
-    bestSingleWei: preview.bestSingleWei,
   });
   if (!sent.ok)
     return fail(
@@ -503,7 +590,6 @@ export async function settleHuntOnchain(tier) {
     hash: sent.hash,
     confirmed: true,
     counts: preview.counts,
-    bestSingleWei: preview.bestSingleWei,
     huntIndex: after.value,
   };
 }
@@ -513,8 +599,10 @@ export async function settleHuntOnchain(tier) {
  * there is no contract / no committed seed. Read-only: safe to call for the
  * HUD without a wallet connected.
  *
+ * V6: returns { counts: bigint[5] } (no bestSingleWei).
+ *
  * @param {number} tier 1..4
- * @returns {Promise<{counts:bigint[], bestSingleWei:bigint}|null>}
+ * @returns {Promise<{counts:bigint[]}|null>}
  */
 export async function previewHuntFor(tier) {
   const r = await getReader();
@@ -523,27 +611,6 @@ export async function previewHuntFor(tier) {
   if (!account) return null;
   try {
     return await r.previewHunt(account, tier);
-  } catch {
-    return null;
-  }
-}
-
-/**
- * The chain's authorized result for the hunt `offset` digs from now -- the
- * roll settleBatch will recompute and accept for hunt index
- * huntIndexOf(player)+offset. Free (eth_call): the whole batch is pre-rolled
- * before the player has signed anything.
- *
- * null when unreadable; the caller shows nothing rather than a local guess,
- * because a locally rolled find is exactly what the contract rejects.
- */
-export async function previewHuntAtFor(tier, offset) {
-  const r = await getReader();
-  if (!r) return null;
-  const { account } = getState();
-  if (!account) return null;
-  try {
-    return await r.previewHuntAt(account, tier, offset);
   } catch {
     return null;
   }
@@ -572,7 +639,7 @@ export async function settleBatchOnchain(queue) {
   if (queue.empty) return fail("empty", "nothing to settle");
 
   const { account } = getState();
-  const { batch, bests } = queue.toCalldata();
+  const { batch } = queue.toCalldata();
 
   // Refuse to open the wallet for a queue the contract is certain to reject:
   // a moved hunt index means a settle happened underneath us, and a tier
@@ -595,7 +662,6 @@ export async function settleBatchOnchain(queue) {
     player: account,
     tier: queue.tier,
     batch,
-    bests,
   });
   if (!sent.ok)
     return fail(
