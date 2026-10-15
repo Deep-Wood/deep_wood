@@ -851,18 +851,18 @@ export function buyToolWithTokenTx(tier, maxTokenCost) {
  */
 export function buyToolWithEthTx(tier, swapData, minTokens) {
   // buyToolWithEth(uint8,bytes,uint256)
+  // ABI encoding: selector + tier (1 word) + bytes_offset (1 word = 0x60) +
+  //               minTokens (1 word) + bytes_length + bytes_data
   const selector = '0xdba8dc9d';
   const tierWord = tier.toString(16).padStart(64, '0');
   const minTokensWord = BigInt(minTokens).toString(16).padStart(64, '0');
-  // Encode the bytes parameter
+  const offset = '60'.padStart(64, '0'); // 3 words * 32 bytes = 96 = 0x60
   const swapDataHex = typeof swapData === 'string'
     ? swapData.replace(/^0x/, '')
     : Buffer.from(swapData).toString('hex');
   const swapDataLength = swapDataHex.length / 2;
   const paddedLength = Math.ceil(swapDataHex.length / 64) * 64;
   const swapDataPadded = swapDataHex.padEnd(paddedLength, '0');
-  // Offset to bytes data = 3 words * 32 bytes = 96 (after tier, offset, minTokens)
-  const offset = (3 * 32).toString(16).padStart(64, '0');
   return selector + tierWord + offset + minTokensWord +
     swapDataLength.toString(16).padStart(64, '0') +
     swapDataPadded;

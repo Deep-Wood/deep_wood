@@ -1605,7 +1605,7 @@ export class ForestScene extends Phaser.Scene {
         optEth.type = 'button';
         optEth.textContent = 'Pay ETH';
         optEth.title = `pay ${fmtEth(cost)}`;
-        optEth.onclick = (e) => { e.stopPropagation(); closeBuyDropdown(); this.doBuyTool(nt); };
+        optEth.onclick = (e) => { e.stopPropagation(); closeBuyDropdown(); this.doBuyToolWithEth(nt); };
 
         const optToken = document.createElement('button');
         optToken.className = 'wm-item';
@@ -2179,6 +2179,109 @@ export class ForestScene extends Phaser.Scene {
     p.max = durabilityOf(tier);
     recordToolSpend(this.board, this.wallet ?? '0xplayer', cost);
     this.beltMsg(`Bought ${toolName(tier)} with $DEEPWOOD — ${p.left}/${p.max} uses`, 'ok');
+    this.refreshBelt();
+    window.renderGems?.(); window.renderHunter?.();
+    this.updateHud();
+  }
+
+  /**
+   * Buy tool with ETH via Universal Router swap.
+   * V6: buyToolWithEth(uint8,bytes,uint256) swaps ETH→DEEPWOOD via UR,
+   * then buys the tool in the same tx. This is the ONLY payable buy path.
+   */
+  async doBuyToolWithEth(tier) {
+    if (this.txBusy) return;
+    this.txBusy = true;
+    try {
+      await this._doBuyToolWithEth(tier);
+    } finally {
+      this.txBusy = false;
+    }
+  }
+
+  async _doBuyToolWithEth(tier) {
+    const p = this.econ;
+
+    // OFFLINE: the local economy is authoritative and nothing leaves the page.
+    if (!onchainActive()) {
+      const res = buyTool(p, tier, this.simBalance);
+      if (!res.ok) { this.beltMsg(res.reason, 'bad'); return; }
+
+      this.simBalance -= (res.cost ?? toolPrice(tier));
+      recordToolSpend(this.board, this.wallet ?? '0xplayer', res.cost ?? toolPrice(tier));
+
+      const verb = res.replaced ? 'Upgraded to' : 'Bought';
+      const extra = res.replaced ? ` (replaced ${res.replaced})` : '';
+      this.beltMsg(
+        `${verb} ${toolName(tier)}${extra} — ${res.left}/${res.max} uses`,
+        'ok',
+      );
+      this.refreshBelt();
+      window.renderGems?.(); window.renderHunter?.();
+      this.updateHud();
+      return;
+    }
+
+    // ON-CHAIN: read the real tool cost from the contract
+    this.beltMsg('Reading tool price…', 'busy');
+    const { getReader, pollUntilChanged } = await import('./onchain.js');
+    const { getState, sendTo } = await import('./wallet.js');
+    const reader = await getReader();
+    if (!reader) { this.beltMsg('chain not configured', 'bad'); return; }
+    const cost = await reader.toolCost(tier);
+
+    const { account } = getState();
+    if (!account) {
+      this.beltMsg('ETH buy requires a connected wallet', 'bad');
+      return;
+    }
+
+    // Read the REAL balance BEFORE the local mirror is touched
+    await this.refreshChainBalance();
+
+    // Build the tx: buyToolWithEth(tier, hookData, minTokens)
+    // hookData is empty bytes (the pool hook doesn't need extra data)
+    // minTokens is 0 (slippage is absorbed by the game per spec)
+    const { buyToolWithEthTx } = await import('./chain.js');
+    const before = await reader.toolOf(account);
+
+    // The ETH value sent must cover the tool cost. We add a 20% buffer
+    // for swap slippage since the contract absorbs any excess.
+    const ethValue = (cost * 12000n) / 10000n;
+
+    this.beltMsg('Confirm in wallet…', 'busy');
+    this.setTxPending('belt-buy', 'buying');
+    let r;
+    try {
+      const txData = buyToolWithEthTx(tier, '0x', 0n);
+      r = await sendTo(this.gameAddress, txData, { valueWei: ethValue });
+    } finally {
+      this.clearTxPending();
+    }
+
+    if (!r?.ok) {
+      this.beltMsg(r?.reason || 'ETH buy failed', 'bad');
+      return;
+    }
+
+    // Poll until the tool tier changes on-chain
+    const after = await pollUntilChanged(
+      () => reader.toolOf(account),
+      before,
+      (b, a) => a.tier > b.tier,
+    );
+
+    if (!after.changed) {
+      this.beltMsg('Transaction was sent but tool tier did not change — it may have reverted', 'bad');
+      return;
+    }
+
+    // Confirmed by the chain. Mirror locally.
+    p.tier = tier;
+    p.left = Number(after.value.durability ?? 0);
+    p.max = durabilityOf(tier);
+    recordToolSpend(this.board, this.wallet ?? '0xplayer', cost);
+    this.beltMsg(`Bought ${toolName(tier)} with ETH — ${p.left}/${p.max} uses`, 'ok');
     this.refreshBelt();
     window.renderGems?.(); window.renderHunter?.();
     this.updateHud();
