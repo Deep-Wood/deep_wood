@@ -99,9 +99,9 @@ export function rollHunt(seed, player, huntIndex, toolTier, skill = 1) {
     // so keeping the prefix makes every client render disagree with the chain.
     utf8(String(player).toLowerCase().replace(/^0x/, '')),
   ));
-  // One rarity per hunt, 1-5 of that same gem -- mirrors the contract's
-  // _rollHunt. Mixing rarities in a single dig made the outcome confusing.
-  const gemCount = 1 + (h[0] % 5);
+  // One rarity per hunt, exactly ONE gem of it -- mirrors the contract's
+  // _rollHunt. The 1-5 multiplier was never spec'd; every dig is one stone.
+  const gemCount = 1;
 
   const counts = [0, 0, 0, 0, 0];
   let valueWei = 0n;
