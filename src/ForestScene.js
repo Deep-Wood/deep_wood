@@ -1565,9 +1565,9 @@ export class ForestScene extends Phaser.Scene {
       // handlers below, not in the paint path.
 
       // Dropdown: one button, two payment options.
-      // "pay eth" always available; "pay DeepWood 10% off" only when the token
-      // rail is configured (tokenAddress + poolManager + poolId all set).
-      const hasTokenRail = !!(this.tokenAddress && this.poolManager && this.poolId);
+      // V6: pool params are hardcoded in the contract, so only tokenAddress
+      // is needed to offer the token-buy option.
+      const hasTokenRail = !!this.tokenAddress;
       if (hasTokenRail && nt <= 5) {
         buy.classList.add('has-dropdown');
         buy.setAttribute('aria-haspopup', 'true');
