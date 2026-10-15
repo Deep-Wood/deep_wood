@@ -2146,8 +2146,6 @@ export class ForestScene extends Phaser.Scene {
     this.beltMsg('Confirm in wallet…', 'busy');
     this.setTxPending('belt-buy-token', 'buying');
     const { buyToolWithTokenTx } = await import('./chain.js');
-    const reader = await getReader();
-    if (!reader) { this.beltMsg('chain not configured', 'bad'); return; }
     const before = await reader.toolOf(account);
 
     let r;
