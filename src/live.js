@@ -19,7 +19,15 @@ import * as season from './season.js';
 
 /** Mirror object in the shape diffEconomy() expects from the client side. */
 async function clientMirror() {
-  const live = await readLivePrices(chain);
+  // Each getter is wrapped so a single failed/renamed contract call can never
+  // take down the whole boot (the entire offline fallback was triggered by
+  // one throwing readLivePrices call — the guard could not report drift
+  // because it crashed before comparing anything).
+  const safe = async (fn, fallback) => { try { return await fn(); } catch { return fallback; } };
+  const [toolPrices, gemPrices] = await Promise.all([
+    safe(async () => (await readLivePrices(chain)).toolPrices, [0n, 0n, 0n, 0n, 0n]),
+    safe(async () => (await readLivePrices(chain)).gemPrices, [0n, 0n, 0n, 0n, 0n]),
+  ]);
   return {
     BPS_DENOMINATOR: 10_000n,
     BURN_FEE_BPS: econ.TREASURY_BPS,
@@ -27,13 +35,13 @@ async function clientMirror() {
     HUNT_COOLDOWN: season.HUNT_COOLDOWN,
     SPLAY_FLOOR_WEI: season.SPLAY_FLOOR_WEI,
     MAX_TIER: econ.MAX_TIER,
-    toolCost: (t) => live.toolPrices[t - 1] ?? 0n,
+    toolCost: (t) => toolPrices[t - 1] ?? 0n,
     durabilityOf: econ.durabilityOf,
     repairCost: (tier) => BigInt(econ.repairCost(tier).reduce(
       (sum, n, r) => sum + BigInt(n) * econ.FACE_VALUE[r], 0n,
     ) / 1n),
     huntCostWei: () => 0n,
-    GEM_PRICE: live.gemPrices,
+    GEM_PRICE: gemPrices,
     RARITY_WEIGHT: econ.RARITY_WEIGHT,
   };
 }
