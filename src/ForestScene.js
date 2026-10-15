@@ -2245,9 +2245,13 @@ export class ForestScene extends Phaser.Scene {
     const { buyToolWithEthTx } = await import('./chain.js');
     const before = await reader.toolOf(account);
 
-    // The ETH value sent must cover the tool cost. We add a 20% buffer
-    // for swap slippage since the contract absorbs any excess.
-    const ethValue = (cost * 12000n) / 10000n;
+    // toolCost() returns DEEPWOOD wei (e.g. 200,000 DEEPWOOD = 2e22).
+    // That is NOT the ETH amount to send. The contract swaps msg.value ETH
+    // for DEEPWOOD tokens and checks received >= cost. We must send a
+    // reasonable ETH amount, not the DEEPWOOD cost directly.
+    // Testnet pool is thin — 0.1 ETH should be plenty for a small tool purchase.
+    // The contract refunds excess TOKENS back to the player.
+    const ethValue = 100_000_000_000_000_000n; // 0.1 ETH
 
     this.beltMsg('Confirm in wallet…', 'busy');
     this.setTxPending('belt-buy', 'buying');
