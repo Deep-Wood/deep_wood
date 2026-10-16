@@ -77,15 +77,15 @@ export const DROP_TABLE = {
  * the row always sums to 10,000 and an unskilled hunter is 100% Quartz at
  * every tier -- they always earn something and can always dig out.
  *
- * This replaces an earlier special case that only gated Gold's Diamond band
- * (`if (tier === 5 && skill < 4) return GOLD_NO_SKILL4`). The gate is now
- * general: skill N unlocks Rarity(N), so a tier-3 tool at skill 0 mines pure
- * Quartz rather than rolling Sapphire the contract would then reject.
+ * Skills are 1..5 (Greenhorn..Lapidary); skill 0 = None (tool-less).
+ * Skill S opens rarity S-1: Greenhorn(1) mines pure Quartz, Prospector(2)
+ * adds Amber, Delver(3) Sapphire, Assayer(4) Ruby. Locked bands fold
+ * back into Quartz so the table always sums to 10,000.
  */
 export function dropTable(tier, skill = 0) {
   const t = (DROP_TABLE[tier] ?? DROP_TABLE[1]).slice();
   for (let r = 1; r <= 4; r++) {
-    if (r > skill) { t[0] += t[r]; t[r] = 0; }
+    if (skill === 0 || r >= skill) { t[0] += t[r]; t[r] = 0; }
   }
   return t;
 }
@@ -176,10 +176,10 @@ export function repairCostWei(tier) {
  * Read the live value from `chain.skillCost(level)` when you can -- this table
  * exists so the UI can render a price before any RPC round trip.
  */
-export const SKILL_COST_QUARTZ = { 1: 200, 2: 400, 3: 600, 4: 800 };
+export const SKILL_COST_QUARTZ = { 1: 0, 2: 20, 3: 40, 4: 60, 5: 80 };
 
-/** Total Quartz to reach each level from skill 0 (cumulative). */
-export const SKILL_TOTAL_QUARTZ = { 1: 200, 2: 600, 3: 1200, 4: 2000 };
+/** Total Quartz to reach each level from Greenhorn (cumulative). */
+export const SKILL_TOTAL_QUARTZ = { 1: 0, 2: 20, 3: 60, 4: 120, 5: 200 };
 
 /** Quartz burned to go from `cur` to the next level, or null when maxed. */
 export function skillUpCostQuartz(cur) {
@@ -188,63 +188,68 @@ export function skillUpCostQuartz(cur) {
 }
 
 /**
- * The rarity each skill level unlocks. Skill N -> Rarity(N): 1=Amber,
- * 2=Sapphire, 3=Ruby, 4=Diamond.
+ * The rarity each skill level unlocks. Skill S opens rarity S-1:
+ * Greenhorn(1)=Quartz, Prospector(2)=Amber, Delver(3)=Sapphire,
+ * Assayer(4)=Ruby. Lapidary(5) is the cap -- no new rarity.
  *
- * A level is INERT until the tool catches up. Skill 1 unlocks Amber, but a
- * Wood tool's table is 100% Quartz, so a Wood hunter who buys skill 1 sees no
- * change until they upgrade to Bronze. The skill is the PERMISSION to mine the
- * next rarity; the tool is the ABILITY.
+ * A level is INERT until the tool catches up. Prospector unlocks Amber, but
+ * a Wood tool's table is 100% Quartz, so a Wood hunter who buys Prospector
+ * sees no change until they upgrade to Bronze. The skill is the PERMISSION
+ * to mine the next rarity; the tool is the ABILITY.
  */
-export const SKILL_UNLOCKS = { 1: 1, 2: 2, 3: 3, 4: 4 };
+export const SKILL_UNLOCKS = { 1: 0, 2: 1, 3: 2, 4: 3, 5: 4 };
 
 /**
- * The craft title for each skill level: 0 Greenhorn, 1 Prospector, 2 Delver,
- * 3 Assayer, 4 Lapidary.
+ * The craft title for each skill level: 0 None, 1 Greenhorn, 2 Prospector,
+ * 3 Delver, 4 Assayer, 5 Lapidary.
  *
  * A title beats "skill 3" on the button because it tells the player who they
  * ARE, not just a number. Paired with SKILL_UNLOCKS it also answers the only
  * question that matters in the moment: what can I find now?
  */
-export const SKILL_NAME = ['Greenhorn', 'Prospector', 'Delver', 'Assayer', 'Lapidary'];
+export const SKILL_NAME = ['None', 'Greenhorn', 'Prospector', 'Delver', 'Assayer', 'Lapidary'];
 
 /** Uppercase form for the button label and HUD chips. */
 export const SKILL_NAME_UC = SKILL_NAME.map((n) => n.toUpperCase());
 
 /**
  * The one-line subtitle for a skill level -- what that level unlocked, in the
- * player's language. Skill 0 is the baseline (Quartz only, no unlock yet).
+ * player's language. Skill 0 = None (no tool yet).
  */
 export function skillSubtitle(level) {
-  const lv = Math.max(0, Math.min(4, Number(level) || 0));
-  if (lv === 0) return 'Quartz only';
+  const lv = Math.max(0, Math.min(5, Number(level) || 0));
+  if (lv === 0) return 'No tool yet';
+  if (lv === 1) return 'Quartz only';
   const gem = RARITY_NAME[SKILL_UNLOCKS[lv]] || '';
-  return lv >= 3 ? `${gem} + extra slot` : `${gem} unlocked`;
+  return lv >= 4 ? `${gem} + extra slot` : `${gem} unlocked`;
 }
 
-/** Craft title for a level, falling back to Greenhorn for bad input. */
+/** Craft title for a level, falling back to None for bad input. */
 export function skillName(level) {
-  const lv = Math.max(0, Math.min(4, Number(level) || 0));
+  const lv = Math.max(0, Math.min(5, Number(level) || 0));
   return SKILL_NAME[lv];
 }
 
 /**
  * The highest skill level a player may buy, given the tool they hold.
- * One level per tier: upgradeSkill requires targetSkill <= heldTier.
+ * The skill may lead the tool by ONE rung: holding Wood(1) you may buy
+ * Prospector(2), which is what unlocks Bronze. Without the +1 the ladder
+ * deadlocks. buyTool requires skillOf >= tier, so the climb is
+ * skill t -> tool t -> skill t+1 -> tool t+1 ...
  */
 export function maxBuyableSkill(toolTier) {
   if (!toolTier || toolTier < 1) return 0;
-  return Math.min(4, toolTier);
+  return Math.min(5, toolTier + 1);
 }
 
 /**
  * The lowest skill level a player may hold at a given tool tier -- the
- * interlock floor. buyTool requires skillOf >= tier-1, so holding tier T means
- * skill T-1 or T. Below this the player cannot climb.
+ * interlock floor. buyTool requires skillOf >= tier, so holding tier T means
+ * at least skill T. Below this the player cannot climb.
  */
 export function minSkillForTier(toolTier) {
-  if (!toolTier || toolTier < 2) return 0;
-  return Math.min(4, toolTier - 1);
+  if (!toolTier || toolTier < 1) return 0;
+  return Math.min(5, toolTier);
 }
 
 // --- section 7: redemption -----------------------------------------------
@@ -429,4 +434,4 @@ function skillAvatar(rank) {
 export const TOOL_AVATARS = ['', toolAvatar(1), toolAvatar(2), toolAvatar(3), toolAvatar(4), toolAvatar(5)];
 
 /** The five skill avatars, index 0..4. */
-export const SKILL_AVATARS = [skillAvatar(0), skillAvatar(1), skillAvatar(2), skillAvatar(3), skillAvatar(4)];
+export const SKILL_AVATARS = [skillAvatar(0), skillAvatar(1), skillAvatar(2), skillAvatar(3), skillAvatar(4), skillAvatar(5)];
