@@ -2539,6 +2539,11 @@ export class ForestScene extends Phaser.Scene {
     // them. Call it here so the satchel updates as soon as the batch lands
     // rather than waiting for the next dig.
     window.renderGems?.(); window.renderHunter?.();
+    // The belt DOM (tool durability, gem counts, action buttons) is painted by
+    // syncBeltDom() which only runs via refreshBelt(). Without this the post-settle
+    // belt shows stale values until the next dig/buy/repair happens to trigger it.
+    this.refreshBelt();
+    this.updateHud();
   }
 
   async _doRepair() {
