@@ -120,6 +120,45 @@ export function toolPrice(tier) {
   return TOOL_PRICE[tier] ?? 0n;
 }
 
+// V7: live owner-tunable tables, populated by readLivePrices()
+export let LIVE_DURABILITY_TABLE = [20n, 25n, 30n, 35n, 40n];
+export let LIVE_REPAIR_COST_TABLE = [
+  [5n, 0n, 0n, 0n, 0n],
+  [3n, 2n, 0n, 0n, 0n],
+  [3n, 3n, 1n, 0n, 0n],
+  [3n, 3n, 2n, 0n, 0n],
+  [5n, 5n, 4n, 2n, 0n],
+];
+export let LIVE_DROP_TABLE_TIERS = [
+  [10000n, 0n, 0n, 0n, 0n],
+  [6000n, 4000n, 0n, 0n, 0n],
+  [4500n, 3500n, 2000n, 0n, 0n],
+  [3500n, 3500n, 2400n, 600n, 0n],
+  [3000n, 3000n, 2500n, 1300n, 200n],
+];
+export let LIVE_SKILL_COST_TABLE = [0n, 20n, 40n, 60n, 80n];
+export let LIVE_RARITY_WEIGHT_TABLE = [1n, 8n, 64n, 512n, 4096n];
+export let LIVE_MAX_BATCH = 20n;
+
+export function setDurabilityTable(table) {
+  LIVE_DURABILITY_TABLE = table;
+}
+export function setRepairCostTable(table) {
+  LIVE_REPAIR_COST_TABLE = table;
+}
+export function setDropTableTiers(table) {
+  LIVE_DROP_TABLE_TIERS = table;
+}
+export function setSkillCostTable(table) {
+  LIVE_SKILL_COST_TABLE = table;
+}
+export function setRarityWeightTable(table) {
+  LIVE_RARITY_WEIGHT_TABLE = table;
+}
+export function setMaxBatch(val) {
+  LIVE_MAX_BATCH = val;
+}
+
 export function setToolPrices(prices) {
   for (let i = 0; i < 5; i++) TOOL_PRICE[i + 1] = prices[i] ?? 0n;
 }
@@ -310,9 +349,65 @@ export async function readLivePrices(chain) {
   ]);
   const toolPrices = [woodCost, bronzeCost, silverCost, goldCost, mithrilCost];
   setToolPrices(toolPrices);
+
+  // V7: owner-tunable gameplay tables — read live from chain storage vars
+  const [durability0, durability1, durability2, durability3, durability4] = await Promise.all([
+    safe(() => chain.durabilityOf(1), 20n),
+    safe(() => chain.durabilityOf(2), 25n),
+    safe(() => chain.durabilityOf(3), 30n),
+    safe(() => chain.durabilityOf(4), 35n),
+    safe(() => chain.durabilityOf(5), 40n),
+  ]);
+  setDurabilityTable([durability0, durability1, durability2, durability3, durability4]);
+
+  const [repairWood, repairBronze, repairIron, repairSteel, repairMithril] = await Promise.all([
+    safe(() => chain.repairNeeds(1), [5n, 0n, 0n, 0n, 0n]),
+    safe(() => chain.repairNeeds(2), [3n, 2n, 0n, 0n, 0n]),
+    safe(() => chain.repairNeeds(3), [3n, 3n, 1n, 0n, 0n]),
+    safe(() => chain.repairNeeds(4), [3n, 3n, 2n, 0n, 0n]),
+    safe(() => chain.repairNeeds(5), [5n, 5n, 4n, 2n, 0n]),
+  ]);
+  setRepairCostTable([repairWood, repairBronze, repairIron, repairSteel, repairMithril]);
+
+  const [drop1, drop2, drop3, drop4, drop5] = await Promise.all([
+    safe(() => chain.dropTable(1, 0), [10000n, 0n, 0n, 0n, 0n]),
+    safe(() => chain.dropTable(2, 0), [6000n, 4000n, 0n, 0n, 0n]),
+    safe(() => chain.dropTable(3, 0), [4500n, 3500n, 2000n, 0n, 0n]),
+    safe(() => chain.dropTable(4, 0), [3500n, 3500n, 2400n, 600n, 0n]),
+    safe(() => chain.dropTable(5, 0), [3000n, 3000n, 2500n, 1300n, 200n]),
+  ]);
+  setDropTableTiers([drop1, drop2, drop3, drop4, drop5]);
+
+  const [skill1, skill2, skill3, skill4, skill5] = await Promise.all([
+    safe(() => chain.skillCost(1), 0n),
+    safe(() => chain.skillCost(2), 20n),
+    safe(() => chain.skillCost(3), 40n),
+    safe(() => chain.skillCost(4), 60n),
+    safe(() => chain.skillCost(5), 80n),
+  ]);
+  setSkillCostTable([skill1, skill2, skill3, skill4, skill5]);
+
+  const [w0, w1, w2, w3, w4] = await Promise.all([
+    safe(() => chain.rarityWeight(0), 1n),
+    safe(() => chain.rarityWeight(1), 8n),
+    safe(() => chain.rarityWeight(2), 64n),
+    safe(() => chain.rarityWeight(3), 512n),
+    safe(() => chain.rarityWeight(4), 4096n),
+  ]);
+  setRarityWeightTable([w0, w1, w2, w3, w4]);
+
+  const maxBatch = await safe(() => chain.maxBatch(), 20n);
+  setMaxBatch(maxBatch);
+
   return {
     gemPrices: [quartzPrice, amberPrice, sapphirePrice, emeraldPrice, diamondPrice],
     toolPrices,
+    durabilityTable: [durability0, durability1, durability2, durability3, durability4],
+    repairCostTable: [repairWood, repairBronze, repairIron, repairSteel, repairMithril],
+    dropTableTiers: [drop1, drop2, drop3, drop4, drop5],
+    skillCostTable: [skill1, skill2, skill3, skill4, skill5],
+    rarityWeightTable: [w0, w1, w2, w3, w4],
+    maxBatch,
   };
 }
 

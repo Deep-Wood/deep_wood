@@ -12,7 +12,7 @@
  */
 
 import { connect, diffEconomy } from './chain.js';
-import { readLivePrices } from './economy.js';
+import { readLivePrices, LIVE_DURABILITY_TABLE, LIVE_REPAIR_COST_TABLE, LIVE_RARITY_WEIGHT_TABLE, LIVE_MAX_BATCH } from './economy.js';
 import { config, configProblem, isConfigured } from './config.js';
 import * as econ from './economy.js';
 import * as season from './season.js';
@@ -36,13 +36,15 @@ async function clientMirror() {
     SPLAY_FLOOR_WEI: season.SPLAY_FLOOR_WEI,
     MAX_TIER: econ.MAX_TIER,
     toolCost: (t) => toolPrices[t - 1] ?? 0n,
-    durabilityOf: econ.durabilityOf,
-    repairCost: (tier) => BigInt(econ.repairCost(tier).reduce(
-      (sum, n, r) => sum + BigInt(n) * econ.FACE_VALUE[r], 0n,
-    ) / 1n),
+    durabilityOf: (t) => LIVE_DURABILITY_TABLE[t - 1] ?? econ.durabilityOf(t),
+    repairCost: (tier) => {
+      const needs = LIVE_REPAIR_COST_TABLE[tier - 1] ?? econ.repairCost(tier);
+      return needs.reduce((sum, n, r) => sum + BigInt(n) * econ.FACE_VALUE[r], 0n);
+    },
     huntCostWei: () => 0n,
     GEM_PRICE: gemPrices,
-    RARITY_WEIGHT: econ.RARITY_WEIGHT,
+    RARITY_WEIGHT: (r) => LIVE_RARITY_WEIGHT_TABLE[r] ?? econ.RARITY_WEIGHT[r],
+    maxBatch: LIVE_MAX_BATCH,
   };
 }
 

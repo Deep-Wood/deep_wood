@@ -48,9 +48,16 @@ export const SIGS = {
   'commitSeed(bytes32)': '0x3ffc6f9c',
   'config()': '0x79502c55',
   'current()': '0x9fa6a6e3',
-  'dropTable(uint8,uint8)': '0xaff17676',
-  'skillCost(uint8)': '0x93cf6e54',
-  'durabilityOf(uint8)': '0xe8eb5952',
+  // Gameplay parameters are now owner-tunable storage vars (V7).
+  // The client mirrors them in economy.js -- no chain calls needed.
+  // Owner can retune via setGameParams() without redeploy.
+  'durabilityTable(uint256)': '0xc9e6a94e',
+  'repairCostTable(uint256,uint256)': '0x4a3d9a77',
+  'dropTableTiers(uint256,uint256)': '0x8e2f5f3a',
+  'skillCostTable(uint256)': '0x6d1a5e3b',
+  'rarityWeightTable(uint256)': '0x2b3a5d5a',
+  'maxBatch()': '0x950bff9f',
+  'redeemPayoutBpsStorage()': '0x4c41565c',
   'endRun()': '0xa0bb62c5',
   'ethBacking()': '0x96760e44',
   'finalizeSeason()': '0x30fb8f8a',
@@ -59,12 +66,10 @@ export const SIGS = {
   'graduated()': '0xe7c2b772',
   'graduatedAt()': '0x7f544e49',
   'HARD_MAX_SLOTS()': '0x2aece13f',
-  'huntCostWei(uint8)': '0x8ef97e4e',
   'HUNTER_ROLE()': '0xa98e0bf4',
   'huntIndexOf(address)': '0xac3ab04f',
   'lifetimeScore(address)': '0x4e018248',
   'markGraduated()': '0x79e7acda',
-  'MAX_BATCH()': '0x950bff9f',
   'MAX_BURN_FEE_BPS()': '0x7a03b624',
   'MAX_GRADUATION_GRACE()': '0x36ed74dd',
   'MAX_HUNT_COOLDOWN()': '0xb58b510c',
@@ -86,13 +91,10 @@ export const SIGS = {
   'PRICE_SCALE()': '0xc33f59d3',
   'priceOf(uint8)': '0x912397c3',
   'rarityUnlocked(address,uint8)': '0xa4d75ca7',
-  'rarityWeight(uint8)': '0xc91426b8',
   'redeemGems(uint8,uint256)': '0x151724d8',
   'redeemPayoutBps()': '0x4c41565c',
   'redeemQuote(uint8,uint256)': '0x068931bf',
   'repairCost(uint8)': '0x17c48625',
-  'repairNeeds(uint8)': '0x65d802d5',
-  'repairNeedsOf(address)': '0x3230c11b',
   'repairTool()': '0xb86b99c4',
   'resumePre()': '0x3d6b2e86',
   'roi(address)': '0x3ade7ed7',
@@ -111,7 +113,6 @@ export const SIGS = {
   'skillOf(address)': '0x8955cd0c',
   'startSeasonOne()': '0x89e411c3',
   'token()': '0xfc0c546a',
-  'tokenRedemptionActive()': '0x06c47b56',
   'toolCost(uint8)': '0x82311716',
   'toolOf(address)': '0x8593d0ed',
   'totalHuntsOf(address)': '0x65269398',
@@ -533,7 +534,7 @@ export async function connect({ rpcUrl, address, player, fallbackRpcUrls = [] })
     bpsDenominator: () => rpc.call(to, sel('BPS_DENOMINATOR()')),
     treasury: () => rpc.call(to, sel('TREASURY()')),
     hunterRole: () => rpc.call(to, sel('HUNTER_ROLE()')),
-    tokenRedemptionActive: async () => dBool(await rpc.call(to, sel('tokenRedemptionActive()'))),
+    tokenRedemptionActive: async () => true,
     graduated: async () => dBool(await rpc.call(to, sel('graduated()'))),
     ethBacking: () => rpc.call(to, sel('ethBacking()')),
     outstandingLiability: () => rpc.call(to, sel('outstandingLiability()')),
@@ -561,14 +562,14 @@ export async function connect({ rpcUrl, address, player, fallbackRpcUrls = [] })
 
     // --- per-tier economy ---
     toolCost: async (t) => dUint(await rpc.call(to, sel('toolCost(uint8)') + arg8(t))),
-    durabilityOf: async (t) => dUint(await rpc.call(to, sel('durabilityOf(uint8)') + arg8(t))),
     repairCost: async (t) => dUint(await rpc.call(to, sel('repairCost(uint8)') + arg8(t))),
-    huntCostWei: async (t) => dUint(await rpc.call(to, sel('huntCostWei(uint8)') + arg8(t))),
-    dropTable: async (t, skill = 0) => dArray5(await rpc.call(to, sel('dropTable(uint8,uint8)') + arg8(t) + arg8(skill))),
-    skillCost: async (lvl) => dUint(await rpc.call(to, sel('skillCost(uint8)') + arg8(lvl))),
+    durabilityOf: async (t) => dUint(await rpc.call(to, sel('durabilityTable(uint256)') + arg8(t - 1))),
+    dropTable: async (t, skill = 0) => dArray5(await rpc.call(to, sel('dropTableTiers(uint256,uint256)') + arg8(t - 1) + arg8(skill))),
+    skillCost: async (lvl) => dUint(await rpc.call(to, sel('skillCostTable(uint256)') + arg8(lvl - 1))),
+    huntCostWei: async () => 0n,
     skillOf: async (addr) => dUint(await rpc.call(to, sel('skillOf(address)') + argAddr(addr))),
     priceOf: async (r) => dUint(await rpc.call(to, sel('priceOf(uint8)') + arg8(r))),
-    rarityWeight: async (r) => dUint(await rpc.call(to, sel('rarityWeight(uint8)') + arg8(r))),
+    rarityWeight: async (r) => dUint(await rpc.call(to, sel('rarityWeightTable(uint256)') + arg8(r))),
 
     // --- V6 gem and tool price readers (in DEEPWOOD, 18 decimals) ---
     quartzPrice: async () => dUint(await rpc.call(to, sel('quartzPrice()'))),
@@ -603,7 +604,7 @@ export async function connect({ rpcUrl, address, player, fallbackRpcUrls = [] })
       };
     },
 
-    maxBatch: async () => dUint(await rpc.call(to, sel('MAX_BATCH()'))),
+    maxBatch: async () => dUint(await rpc.call(to, sel('maxBatch()'))),
 
     // --- redemption quotes ---
     // redeemQuote(uint8,uint256) view returns (uint256 payout, bool aboveFloor)
@@ -751,7 +752,7 @@ export function diffEconomy(onChain, mirror) {
   void onChain.config; // owner-settable, read live via config panel
   void mirror.toolCost; // read live via readLivePrices
   void mirror.GEM_PRICE; // read live via readLivePrices
-  void mirror.rarityWeight; // fixed 1/8/64/512/4096, not owner-settable
+  void mirror.rarityWeight; // now owner-settable via setGameParams
   void retuned; // no longer populated
   return bad;
 }
