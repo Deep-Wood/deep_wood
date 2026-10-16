@@ -27,8 +27,8 @@ import * as season from './season.js';
 import { SIGS } from './chain.js';
 
 const require = createRequire(import.meta.url);
-const ART = '/home/administrator/gem-hunter/out/DeepWoodV4.sol/DeepWoodV4.json';
-const SOL = '/home/administrator/gem-hunter/src/DeepWoodV4.sol';
+const ART = '/home/administrator/gem-hunter/out/DeepWoodV6.sol/DeepWoodV6.json';
+const SOL = '/home/administrator/gem-hunter/src/DeepWoodV6.sol';
 
 let pass = 0;
 let fail = 0;
@@ -91,8 +91,9 @@ group('every selector names a function the artifact actually has');
 
 group('client ABI covers the real functions');
 {
-  // spot-check that the shapes the client decodes exist with the right types
-  const need = ['current', 'playerStats', 'toolOf', 'dropTable', 'toolCost', 'roi'];
+  // spot-check that the shapes the client decodes exist with the right types.
+  // dropTable was renamed dropTableTiers in V6/V7 (owner-tunable storage var).
+  const need = ['current', 'playerStats', 'toolOf', 'dropTableTiers', 'toolCost', 'roi'];
   for (const n of need) {
     const f = abi.find((e) => e.type === 'function' && e.name === n);
     check(`${n}() in artifact`, !!f, f ? `${(f.inputs || []).length} in / ${(f.outputs || []).length} out` : 'MISSING');
@@ -179,10 +180,13 @@ group('client mirror is internally consistent');
   }
   check('no per-hunt fee: hunt cost is 0 at every tier',
     [1, 2, 3, 4, 5].every((t) => season.HUNT_COST[t - 1] === 0n), 'all HUNT_COST are 0n');
-  check('tier 1 tool COSTS 0.005 ETH now', econ.toolPrice(1) === 5_000_000_000_000_000n,
-    `got ${econ.toolPrice(1)}`);
-  check('tier 5 tool costs 2.3 ETH', econ.toolPrice(5) === 2_300_000_000_000_000_000n,
-    `got ${econ.toolPrice(5)}`);
+  // V6+/V7: tool prices are DEEPWOOD-denominated, live from the contract via
+  // readLivePrices() -- the offline defaults are 0 until the chain populates
+  // LIVE_TOOL_PRICE. The old 0.005/2.3 ETH assertions described the pre-V6
+  // ETH-era economy and were failing every run since.
+  check('tool prices default to 0 offline (chain fills them live)',
+    [1, 2, 3, 4, 5].every((t) => econ.toolPrice(t) === 0n),
+    `got ${[1, 2, 3, 4, 5].map(econ.toolPrice).join(',')}`);
   check('there are five tiers', econ.MAX_TIER, 5);
   check('durability is 20/25/30/35/40',
     [1, 2, 3, 4, 5].map(econ.durabilityOf).join(','), '20,25,30,35,40');
