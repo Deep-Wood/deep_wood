@@ -576,7 +576,16 @@ export async function connect({ rpcUrl, address, player, fallbackRpcUrls = [] })
     toolCost: async (t) => dUint(await rpc.call(to, sel('toolCost(uint8)') + arg8(t))),
     repairCost: async (t) => dUint(await rpc.call(to, sel('repairCost(uint8)') + arg8(t))),
     durabilityOf: async (t) => dUint(await rpc.call(to, sel('durabilityTable(uint256)') + arg8(t - 1))),
-    dropTable: async (t, skill = 0) => dArray5(await rpc.call(to, sel('dropTableTiers(uint256,uint256)') + arg8(t - 1) + arg8(skill))),
+    // V7 storage getters return ONE uint256 per call -- the auto-generated
+    // getter for a uint256[5][5] public var takes (row, col), not row->array.
+    // The old dArray5 read past the 32-byte result and threw
+    // "Cannot convert 0x to a BigInt", which aborted the whole boot.
+    dropTable: async (t, skill = 0) => Promise.all(
+      // (row, col): col is the RARITY index. The skill dimension of the old
+      // pure-function form is gone in V7 -- tables are skill-independent.
+      [0, 1, 2, 3, 4].map(async (r) =>
+        dUint(await rpc.call(to, sel('dropTableTiers(uint256,uint256)') + arg8(t - 1) + arg8(r))))
+    ),
     skillCost: async (lvl) => dUint(await rpc.call(to, sel('skillCostTable(uint256)') + arg8(lvl - 1))),
     huntCostWei: async () => 0n,
     skillOf: async (addr) => dUint(await rpc.call(to, sel('skillOf(address)') + argAddr(addr))),
