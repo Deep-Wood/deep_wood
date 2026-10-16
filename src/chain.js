@@ -229,33 +229,44 @@ function sel(sig) {
 
 /** Minimal JSON-RPC client. */
 class Rpc {
-  constructor(url) {
-    this.url = url;
+  constructor(urls) {
+    // A primary plus its fallbacks, as one rotation list. The primary testnet
+    // RPC rate-limits boot-time bursts with 429s whose CORS headers are
+    // malformed -- a DUPLICATED `Access-Control-Allow-Origin: *, *` -- which
+    // the browser fails as a transport error. Retrying the same endpoint just
+    // eats more 429s while the healthy fallback sits unused; rotating the
+    // endpoint per attempt moves the call to drpc on the first failure.
+    this.urls = (Array.isArray(urls) ? urls : [urls]).filter(Boolean);
+    this.url = this.urls[0];
     this.id = 0;
   }
 
   async call(to, data) {
     const id = ++this.id;
-    // Per-call transport retry. readEconomy issues ~20 sequential eth_calls and
-    // the testnet RPCs intermittently drop one outright (bare "Failed to
-    // fetch"); without a retry here a single drop aborted the whole boot and
-    // the site fell back to the offline simulation. A JSON-RPC error object is
-    // a real revert and is thrown immediately, not retried.
+    // Per-call transport retry, rotating the endpoint each attempt.
+    // readEconomy issues ~20 sequential eth_calls and the testnet RPCs
+    // intermittently drop one outright (bare "Failed to fetch"); without a
+    // retry here a single drop aborted the whole boot and the site fell back
+    // to the offline simulation. A JSON-RPC error object is a real revert
+    // and is thrown immediately, not retried.
     let lastErr;
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < Math.max(3, this.urls.length); attempt++) {
+      const url = this.urls[attempt % this.urls.length];
       try {
         let res;
         try {
-          res = await fetch(this.url, {
+          res = await fetch(url, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ jsonrpc: '2.0', id, method: 'eth_call', params: [{ to, data }, 'latest'] }),
           });
         } catch (e) {
-          // Transport-level failure (fetch rejection) — retry, not propagate
+          // Transport-level failure (fetch rejection, which is how a browser
+          // presents a CORS-violating 429) — rotate to the next endpoint.
           throw new Error(`eth_call: network error ${e.message}`);
         }
-        if (!res.ok && res.status >= 500) throw new Error(`eth_call: HTTP ${res.status}`);
+        // 429 is the rate limiter talking, not the chain: rotate, don't read.
+        if (!res.ok && (res.status >= 500 || res.status === 429)) throw new Error(`eth_call: HTTP ${res.status}`);
         const j = await res.json();
         if (j.error) throw new Error(`eth_call failed: ${j.error.message}`);
         return j.result;
@@ -299,6 +310,10 @@ async function fetchOnce(rpcUrl, method, params) {
 }
 
 export async function rawRpc(rpcUrl, method, params) {
+  // 429 from the primary's rate limiter carries a duplicated CORS header
+  // (see class Rpc), which the browser fails as a TypeError -- so rawRpc
+  // retries it like any transport failure. The backoff below is the only
+  // thing that keeps a boot-time burst from cascading into "offline".
   let lastErr;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
@@ -485,7 +500,9 @@ function dTool(hex) {
 export async function connect({ rpcUrl, address, player, fallbackRpcUrls = [] }) {
   if (!rpcUrl) throw new Error('rpcUrl is required');
   if (!address) throw new Error('contract address is required');
-  const rpc = new Rpc(rpcUrl);
+  // Primary first, then fallbacks -- passed as a rotation list to Rpc so a
+  // rate-limited primary hands its calls to drpc instead of failing the boot.
+  const rpc = new Rpc([rpcUrl, ...fallbackRpcUrls]);
   const to = address;
 
   const chain = {

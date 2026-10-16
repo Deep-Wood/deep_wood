@@ -1152,12 +1152,14 @@ button.chip { position: relative; }
   padding: var(--s3);
   display: grid;
   /* head / blurb / header row / rows / footer. The rows track is the only one
-     that grows; `minmax(0,1fr)` lets it shrink so the panel holds 50vh
-     instead of being pushed taller by its content. */
+     that grows; `minmax(0,1fr)` lets it shrink so the panel holds its frame
+     instead of being pushed taller by its content. As a right-docked column
+     the frame is 100vh tall, so the rows area takes nearly the whole column
+     and the header stays pinned at the top. */
   grid-template-rows: auto auto auto minmax(0, 1fr) auto;
   gap: var(--s2);
   box-sizing: border-box;
-  box-shadow: 6px 6px 0 rgba(124, 58, 237, 0.3);
+  box-shadow: -6px 0 0 rgba(124, 58, 237, 0.3);
 }
 .lb-head { display: flex; align-items: center; justify-content: space-between; }
 .lb-title { font-weight: 700; color: #c4b5fd; letter-spacing: 0.5px; font-size: 15px; }
@@ -1196,20 +1198,30 @@ button.chip { position: relative; }
 }
 .lb-table td {
   padding: 6px 8px;
-  border-bottom: 1px solid rgba(124, 58, 237, 0.18);
+  /* Real grid: a vertical rule between every column, plus the row rule.
+     `border-collapse: collapse` is set above, so adjacent cells share one
+     1px line instead of doubling to 2px. */
+  border-right: 1px solid rgba(124, 58, 237, 0.35);
+  border-bottom: 1px solid rgba(124, 58, 237, 0.25);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.lb-table td:last-child { border-right: none; }
+.lb-table thead th {
+  border-right: 1px solid rgba(124, 58, 237, 0.35);
+}
+.lb-table thead th:last-child { border-right: none; }
 .lb-table th:nth-child(1), .lb-table td:nth-child(1) { width: 5ch; text-align: center; }
 .lb-table th:nth-child(3), .lb-table td:nth-child(3) { width: 10ch; text-align: right; }
 .lb-table th:nth-child(4), .lb-table td:nth-child(4) { width: 9ch; text-align: right; }
 /* Scrolling tbody: keep the header pinned while the rows scroll inside the
-   50vh sheet. */
-.lb-table tbody { display: block; overflow-y: auto; max-height: calc(50vh - 130px); }
+   column. The panel is a full-height column now, so the rows budget is the
+   viewport minus the head/footer chrome (~130px), not `50vh - 130px`. */
+.lb-table tbody { display: block; overflow-y: auto; max-height: calc(100vh - 180px); }
 .lb-table thead, .lb-table tbody tr { display: table; width: 100%; table-layout: fixed; }
 /* The only scrolling region. Rows are fixed-height so the grid stays legible
-   and the panel never grows past its 50vh frame. */
+   and the column frame is never pushed past the viewport. */
 .lb-rows {
   overflow-y: auto;
   display: flex;

@@ -9,7 +9,6 @@
 import Phaser from 'phaser';
 import { buildAllTextures, PAL, rng } from './art.js';
 import { createAmbience } from './ambience.js';
-import { panelFrame } from './layout.js';
 import { retireWalletFoot } from './hud-idle.js';
 import { config } from './config.js';
 
@@ -1313,11 +1312,13 @@ export class ForestScene extends Phaser.Scene {
     if (gen === undefined) gen = (this.lbGen = (this.lbGen ?? 0) + 1);
     this.releaseTouch();
 
-    const W = this.scale.width, H = this.scale.height;
-    const f = panelFrame(W, H, 430, 396);
-    const { pw, ph, px: cx, py: cy, sheet } = f;
-    this.lbFrame = { pw, ph, px: cx, py: cy, sheet };
-
+    // HALF THE SCREEN, VERTICALLY. The earlier builds got this wrong twice:
+    // first as a 430x396 card, then as a full-width bottom band -- a
+    // horizontal half. The ask is a tall column: full viewport height,
+    // half the viewport width, docked to the right edge. The panelFrame()
+    // geometry above (the f/pw/ph vars) is kept for the toolbelt but is
+    // deliberately not used here; the DOM column sizes itself with vh/vw
+    // units so it re-flows on rotation without a scene-side resize handler.
     const me = String(this.wallet ?? '0xplayer').toLowerCase();
 
     // Data: chain first, local mirror as fallback. Both paths hand the same
@@ -1362,14 +1363,16 @@ export class ForestScene extends Phaser.Scene {
     // instead of centred. Each declaration is terminated explicitly now.
     el.style.cssText =
       'position:fixed;inset:0;z-index:1000;display:flex;'
-      + 'align-items:center;justify-content:center;'
-      + 'background:rgba(0,0,0,.62);';
-    // Half the viewport, always. The panel is a fixed-height sheet anchored to
-    // the bottom on small screens, so `50vh` is the whole vertical budget --
-    // the rows area scrolls inside it rather than growing the panel.
-    const frame = sheet
-      ? 'left:0;right:0;top:auto;bottom:0;width:100%;max-width:none;height:50vh;max-height:50vh;margin:0;'
-      : 'width:min(560px,92vw);height:50vh;max-height:50vh;';
+      + 'align-items:stretch;justify-content:flex-end;'
+      + 'background:rgba(0,0,0,.45);';
+    // A vertical half: full height, half the width, flush to the right edge.
+    // The old `height:50vh` bottom-sheet frame is gone -- that was the
+    // horizontal half the user rejected. `align-items:stretch` + this frame
+    // make the column run edge-to-edge vertically.
+    const frame =
+      'left:auto;right:0;top:0;bottom:0;'
+      + 'width:50vw;max-width:50vw;height:100vh;max-height:100vh;'
+      + 'margin:0;border-left:2px solid #7c3aed;border-top:none;border-bottom:none;border-right:none;';
 
     const top10 = rows.slice(0, TOP_N);
     const iAmHere = top10.some((r) => r.address === me && r.onBoard);
