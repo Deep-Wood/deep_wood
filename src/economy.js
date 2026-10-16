@@ -40,11 +40,11 @@ export const RARITY_SHORT = ['Qtz', 'Amb', 'Sapph', 'Ruby', 'Diam'];
  * emeraldPrice(), diamondPrice() instead of the old priceOf(uint8).
  */
 export const FACE_VALUE = [
-  50_000_000_000_000n,        // Quartz   0.00005 ETH equivalent
-  400_000_000_000_000n,       // Amber    0.0004  ETH equivalent
-  3_000_000_000_000_000n,     // Sapphire 0.003   ETH equivalent
-  25_000_000_000_000_000n,    // Ruby     0.025   ETH equivalent
-  200_000_000_000_000_000n,   // Diamond  0.2     ETH equivalent
+  400_000_000_000_000_000_000n,        // Quartz   400 DEEPWOOD
+  7_800_000_000_000_000_000_000n,      // Amber    7,800 DEEPWOOD
+  86_000_000_000_000_000_000_000n,     // Sapphire 86,000 DEEPWOOD
+  1_000_000_000_000_000_000_000_000n,  // Ruby     1,000,000 DEEPWOOD (emeraldPrice)
+  4_000_000_000_000_000_000_000_000n,  // Diamond  4,000,000 DEEPWOOD
 ];
 
 /** ROI weighting, 8x per tier. Scores a haul for the leaderboard. A Ruby is
@@ -257,7 +257,7 @@ export const PAYOUT_DIV = 10_000n;
 
 /** Minimum redeemable value in DEEPWOOD (18 decimals). Below this the button
  *  is disabled. V6: moved from ETH wei to DEEPWOOD. */
-export const REDEEM_FLOOR = 5_000_000_000_000_000n; // 0.005 ETH equivalent = 100 Quartz
+export const REDEEM_FLOOR = 20_000_000_000_000_000_000_000n; // 20,000 DEEPWOOD = 50 Quartz
 
 export function payoutWei(gems, rarity) {
   return (BigInt(gems) * FACE_VALUE[rarity] * BigInt(PAYOUT_BPS)) / PAYOUT_DIV;

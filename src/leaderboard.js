@@ -51,7 +51,7 @@ export async function enumeratePlayers(rpcUrl, fallbacks, gameAddress, deployBlo
  *
  * seasonScore is the ROI numerator the contract uses (rarity-weight earned this
  * CURRENT run -- it resets at startSeasonOne, so preseason cannot carry).
- * playerStats.ethSpent is the denominator. ordering matches DeepWoodV3's
+ * playerStats.tokenSpent is the denominator. ordering matches DeepWoodV3's
  * board logic: ROI, then best find, then legendary-equivalents.
  */
 export async function playerRow(chain, player) {
@@ -63,7 +63,7 @@ export async function playerRow(chain, player) {
   ]);
   return {
     address: player.toLowerCase(),
-    ethSpent: stats.ethSpent,
+    tokenSpent: stats.tokenSpent,
     totalEarned: stats.totalEarned,
     bestWei: stats.best,
     leq: stats.leq,

@@ -58,7 +58,7 @@ group('recording a hunt');
   check('  5 gems', r.entry.hunts, 1);
   check('  leq = 4x1 + 1x8', r.entry.leq, 12n);
   check('  value = 4 quartz + 1 amber', r.valueWei, 600_000_000_000_000n);
-  check('  a free hunt spends nothing', r.entry.ethSpent, 0n);
+  check('  a free hunt spends nothing', r.entry.tokenSpent, 0n);
   check('  best find recorded', r.entry.bestWei, 600_000_000_000_000n);
 }
 
@@ -79,9 +79,9 @@ group('the splay floor -- the point of the whole design');
   // Nothing spent at all, so the ratio is not merely large, it is unbounded.
   // roiOf() returns 0n for a zero denominator rather than throwing.
   check('  no spend means no ratio, not a crash', roiOf(l), 0n);
-  check('  and the denominator really is zero', l.ethSpent, 0n);
+  check('  and the denominator really is zero', l.tokenSpent, 0n);
   check('  so the player is EXCLUDED', onRoiBoard(l), false);
-  check('  and scores zero for ranking', compareRoi(l, { leq: 1n, ethSpent: SPLAY_FLOOR_WEI }) === -1, true);
+  check('  and scores zero for ranking', compareRoi(l, { leq: 1n, tokenSpent: SPLAY_FLOOR_WEI }) === -1, true);
   check('  shortOfFloor reports the whole floor as the gap', shortOfFloor(l), SPLAY_FLOOR_WEI);
 
   // The player it is protecting: they bought Wood, did 50 real hunts, and are
@@ -104,8 +104,8 @@ group('the splay floor -- the point of the whole design');
   for (let i = 0; i < 100; i++) recordHunt(real, '0xreal', counts(4, 0, 0, 0, 0), 1, T0 + i);
   recordToolSpend(real, '0xreal', wei('0.052'));
   const e = [...real.players.values()][0];
-  check('  spend above floor', e.ethSpent > SPLAY_FLOOR_WEI, true);
-  const expected = (e.leq * WEI_PER_ETH) / e.ethSpent;
+  check('  spend above floor', e.tokenSpent > SPLAY_FLOOR_WEI, true);
+  const expected = (e.leq * WEI_PER_ETH) / e.tokenSpent;
   check('  ROI uses real spend', roiOf(e), expected);
 }
 
@@ -136,7 +136,7 @@ group('scale invariance -- a whale ties a small player');
   const g = [...greedy.players.values()][0];
   const s2 = [...small.players.values()][0];
   check('  same numerator', g.leq, s2.leq);
-  check('  but far more committed', g.ethSpent > s2.ethSpent * 10n, true);
+  check('  but far more committed', g.tokenSpent > s2.tokenSpent * 10n, true);
   check('  so worse ROI', roiOf(g) < roiOf(s2), true);
 }
 
@@ -186,7 +186,7 @@ group('tie-breaks: best find, then legendary-equivalents');
   const A = rows.find((r) => r.address === '0xa');
   const B = rows.find((r) => r.address === '0xb');
   check('equal leq', A.leq, B.leq);
-  check('  identical spend too', A.ethSpent, B.ethSpent);
+  check('  identical spend too', A.tokenSpent, B.tokenSpent);
   check('  so ROI is exactly tied', compareRoi(A, B), 0);
   check('  but the best finds differ', A.bestWei !== B.bestWei, true);
   check('  A wins the tie-break on best find', A.rank, 1);
@@ -310,8 +310,8 @@ group('top 10');
   recordToolSpend(tie, '0xwhale', 800n * wei('0.0001'));
   const sm = [...tie.players.values()].find((e) => e.address === '0xsmall');
   const wh = [...tie.players.values()].find((e) => e.address === '0xwhale');
-  check('  small is above the floor', sm.ethSpent > SPLAY_FLOOR_WEI, true);
-  check('  whale is 4x the size', wh.ethSpent, sm.ethSpent * 4n);
+  check('  small is above the floor', sm.tokenSpent > SPLAY_FLOOR_WEI, true);
+  check('  whale is 4x the size', wh.tokenSpent, sm.tokenSpent * 4n);
   check('  and they tie EXACTLY', compareRoi(sm, wh), 0);
   const sScore = roiFloat(sm), wScore = roiFloat(wh);
   check('  display scores agree to 0.1%', Math.abs(sScore - wScore) / sScore < 0.001, true);

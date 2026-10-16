@@ -6,8 +6,8 @@
  * and a single `common` counter. The new design (SPEC sections 1-7) is
  *
  *   - ONE tool. Upgrading replaces it. No rotation, no stow, no equip.
- *   - ETH buys and upgrades tools. Gems never do.
- *   - Gems repair, and gems sell for ETH.
+ *   - DEEPWOOD buys and upgrades tools. Gems never do.
+ *   - Gems repair, and gems sell for DEEPWOOD.
  *   - Gem balances are tracked PER RARITY. The old code kept `common` plus a
  *     separate `totals[]` array for the satchel, both fed from counts[0], so
  *     the card showed two different numbers for the same gem and they drifted
@@ -21,7 +21,7 @@ import {
   repairCost, REDEEM_FLOOR, payoutWei,
 } from './economy.js';
 
-/** Fresh player: no tool, no gems, no skills. They must buy Wood with ETH. */
+/** Fresh player: no tool, no gems, no skills. They must buy Wood with DEEPWOOD. */
 export function newPlayer() {
   return {
     /** @type {number} 0 = no tool yet. 1..5 once bought. */
@@ -40,7 +40,7 @@ export function newPlayer() {
     // silently doing nothing, because the throw happened after the afford
     // check but before the state was committed.
     feesPaid: 0n,     // lifetime treasury fees, in wei
-    spent: 0n,        // lifetime ETH spent on tools, in wei
+    spent: 0n,        // lifetime DEEPWOOD spent on tools, in wei
   };
 }
 
@@ -109,7 +109,7 @@ export function canBuyTool(p, tier, balance = 0n) {
 }
 
 /**
- * Buy the first tool or upgrade to the next one, paying ETH.
+ * Buy the first tool or upgrade to the next one, paying DEEPWOOD.
  *
  * The old tool is REPLACED, not stowed: the new tool takes the slot and the
  * old one is gone. That is the spec (section 1) and it removes the whole
@@ -164,7 +164,7 @@ export function canRepair(p) {
 const RARITY_LABEL = ['Q', 'A', 'S', 'R', 'D'];
 
 /**
- * Repair with gems. Burns them outright -- no treasury claim, no ETH
+ * Repair with gems. Burns them outright -- no treasury claim, no DEEPWOOD
  * liability (SPEC section 10).
  */
 export function repairTool(p) {
@@ -193,7 +193,7 @@ export function redeemValueWei(p) {
 }
 
 /**
- * Can the player redeem? The 0.005 ETH floor exists so a player cannot
+ * Can the player redeem? The 20,000 DEEPWOOD floor exists so a player cannot
  * dust-fence the contract one gem at a time (SPEC section 7).
  */
 export function canRedeem(p) {
@@ -205,7 +205,7 @@ export function canRedeem(p) {
   return { ok: true, value: v };
 }
 
-/** Sell all gems for ETH. Clears the balance and returns the payout. */
+/** Sell all gems for DEEPWOOD. Clears the balance and returns the payout. */
 export function redeemGems(p) {
   const check = canRedeem(p);
   if (!check.ok) return check;
@@ -242,5 +242,5 @@ export function fmtEth(wei, dp = 5) {
   const v = Number(wei) / 1e18;
   let s = v.toFixed(dp);
   if (s.includes('.')) s = s.replace(/0+$/, '').replace(/\.$/, '');
-  return `${s} ETH`;
+  return `${s} DEEPWOOD`;
 }

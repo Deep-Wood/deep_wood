@@ -419,7 +419,7 @@ function dCurrent(hex) {
 
 /**
  * Decode `playerStats` (6 static words).
- *   uint256 totalEarned, uint256 ethSpent, uint256 burned,
+ *   uint256 totalEarned, uint256 tokenSpent, uint256 burned,
  *   uint256 best, uint256 leq, uint64 hunts
  */
 function dStats(hex) {
@@ -427,7 +427,7 @@ function dStats(hex) {
   const u = (i) => BigInt('0x' + h.slice(i * 64, (i + 1) * 64));
   return {
     totalEarned: u(0),
-    ethSpent: u(1),
+    tokenSpent: u(1),
     burned: u(2),
     best: u(3),
     leq: u(4),

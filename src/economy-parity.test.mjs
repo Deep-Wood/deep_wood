@@ -8,8 +8,8 @@
  *     the contract) give Wood pure Quartz. That copy also had no tier-5 row, so
  *     Gold threw outright.
  *
- *  2. "ROI 5800%" -- the card computed `leq / Math.max(1, ethSpent) * 100`.
- *     When the tool spend had not been recorded, ethSpent was 0, the divisor
+ *  2. "ROI 5800%" -- the card computed `leq / Math.max(1, tokenSpent) * 100`.
+ *     When the tool spend had not been recorded, tokenSpent was 0, the divisor
  *     became 1, and 58 leq WAS the percentage. Reproduced exactly below.
  *
  * A second copy of the economy is precisely the drift engine.js's own header
@@ -28,7 +28,7 @@ const engineSrc = readFileSync(new URL('./engine.js', import.meta.url), 'utf8');
 /**
  * Strip comments. The fixes here are all EXPLAINED in comments that quote the
  * old buggy code -- so a raw text match finds `this.player.tier` and
- * `Math.max(1, ...ethSpent)` in the explanation and fails against correct code.
+ * `Math.max(1, ...tokenSpent)` in the explanation and fails against correct code.
  */
 const bare = (s) => s.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
 
@@ -91,7 +91,10 @@ test('the 5800% case is impossible under the new formula', () => {
   const FACE = FACE_VALUE.map(Number);
   const gems = [60, 0, 0, 0, 0];
   const found = gems.reduce((a, n, i) => a + n * FACE[i], 0);
-  const pct = (found / 5e15 * 100).toFixed(1);
-  assert.equal(pct, '60.0', '15 Wood digs on a 0.005 tool is 60% back');
+  // The old ETH-era check hardcoded a 0.005 ETH (5e15) denominator. Prices are
+  // DEEPWOOD now: 60 Quartz at 400 each is 24,000 DEEPWOOD found on a 200,000
+  // DEEPWOOD Wood tool -- 12% back, still bounded, still not 5800%.
+  const pct = (found / 200_000e18 * 100).toFixed(1);
+  assert.equal(pct, '12.0', '15 Wood digs on a 200k DEEPWOOD tool is 12% back');
   assert.notEqual(pct, '5800.0');
 });

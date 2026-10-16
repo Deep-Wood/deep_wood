@@ -11,7 +11,7 @@
  * failure the floor exists to prevent.
  *
  * Ranking, in order:
- *   1. ROI        = rarityWeight earned / ETH spent
+ *   1. ROI        = rarityWeight earned / DEEPWOOD spent
  *   2. Best find  = single highest-value hunt (rewards nerve, not hours)
  *   3. Legendary-equivalents (makes a Diamond worth more than 40 Quartz)
  *
@@ -49,7 +49,7 @@ export const RARITY_WEIGHT = [1n, 8n, 64n, 512n, 4_096n];
  * solvency. Zeroing them removes a fiction rather than adding a cost.
  *
  * Kept as an array so recordHunt() and the ROI denominator keep their shape;
- * every entry is 0n, so `e.ethSpent += 0n` leaves the arithmetic intact.
+ * every entry is 0n, so `e.tokenSpent += 0n` leaves the arithmetic intact.
  */
 /**
  * Seconds between hunts. Read live from getConfig() -- the owner can change it,
@@ -79,7 +79,7 @@ export const SEASON_LENGTH_SEC = 14 * 24 * 60 * 60;
 // single tier-1 hunt and therefore never fired: every player, including the
 // one-lucky-hunt-and-quit case the floor exists to stop, was scored on raw
 // spend. The season test caught it.
-export const SPLAY_FLOOR_WEI = 5_000_000_000_000_000n; // 0.005 ETH
+export const SPLAY_FLOOR_WEI = 20_000_000_000_000_000_000_000n; // 20,000 DEEPWOOD (token-denominated)
 
 export const TOP_N = 10;
 
@@ -106,7 +106,7 @@ function entryFor(board, address) {
     e = {
       address: key,
       leq: 0n,        // rarity-weight earned -- ROI numerator
-      ethSpent: 0n,   // raw spend, before the splay floor
+      tokenSpent: 0n,   // raw spend, before the splay floor
       bestWei: 0n,    // best single find
       hunts: 0,
       gems: [0, 0, 0, 0, 0],
@@ -129,19 +129,19 @@ function entryFor(board, address) {
  * Record ETH the player spent on a TOOL.
  *
  * This replaces the per-hunt fee as the ROI denominator. Under the old economy
- * a hunt cost 0.0001 ETH and `recordHunt` incremented `ethSpent` by it, so ROI
+ * a hunt cost 0.0001 ETH and `recordHunt` incremented `tokenSpent` by it, so ROI
  * had something to divide by. HUNT_COST is now 0 at every tier (spec s12 item 8)
  * -- a 0.0001 fee against Wood's 0.00005 yield would make the entry tier
  * net-negative -- so tool purchases are the only real spend, and therefore the
  * only honest denominator.
  *
- * Without this, ethSpent stayed 0 forever and every ROI computation divided by
+ * Without this, tokenSpent stayed 0 forever and every ROI computation divided by
  * zero.
  */
 export function recordToolSpend(board, addr, wei) {
   const e = entryFor(board, addr);
-  e.ethSpent += BigInt(wei);
-  return e.ethSpent;
+  e.tokenSpent += BigInt(wei);
+  return e.tokenSpent;
 }
 
 export function recordHunt(board, address, counts, toolTier, nowSec) {
@@ -165,7 +165,7 @@ export function recordHunt(board, address, counts, toolTier, nowSec) {
   e.leq += leqGain;
   // NOT a spend. HUNT_COST is 0 at every tier now (see HUNT_COST), and the ROI
   // denominator is tool purchases -- see recordToolSpend(). Adding a hunt fee
-  // here kept `ethSpent` pinned to zero for players who had bought a tool but
+  // here kept `tokenSpent` pinned to zero for players who had bought a tool but
   // not recorded it on the board, which divided every ROI to Infinity or NaN.
   e.hunts += 1;
   if (valueWei > e.bestWei) e.bestWei = valueWei;
@@ -179,13 +179,13 @@ export function recordHunt(board, address, counts, toolTier, nowSec) {
 /**
  * ROI for one player, with the splay floor applied.
  *
- * The floor is the design: a player who has spent less than 0.005 ETH has
+ * The floor is the design: a player who has spent less than the floor has
  * their spend rounded UP to it. That is deliberately harsh to the one-lucky-
  * hunt-and-quit strategy, and it is the reason a 0.0001 ETH player cannot
  * post a 10x ROI.
  */
 /**
- * ROI = rarity-weight earned / ETH spent, with the splay floor on the
+ * ROI = rarity-weight earned / DEEPWOOD spent, with the splay floor on the
  * denominator. Raw that is ~1e-13, so any BigInt division of it is either 0
  * or badly quantised.
  *
@@ -221,7 +221,7 @@ export const WEI_PER_ETH = 1_000_000_000_000_000_000n;
  * agree or the preview ranks people the chain will refuse to rank.
  */
 export function onRoiBoard(entry) {
-  return entry.ethSpent >= SPLAY_FLOOR_WEI;
+  return entry.tokenSpent >= SPLAY_FLOOR_WEI;
 }
 
 /**
@@ -230,16 +230,16 @@ export function onRoiBoard(entry) {
  * An earlier version RAISED sub-floor spend to the floor instead of
  * excluding the player. That is measurably wrong: a one-diamond-hunt player
  * who spent 0.0001 ETH scored 819,200 against 40,000 for a diligent player
- * who spent the full 0.005 ETH -- i.e. flooring handed the top of the board
+ * who spent the full floor -- i.e. flooring handed the top of the board
  * to exactly the lucky-and-quit strategy the floor exists to stop. Exclusion
  * is what the contract does, and it is the policy that works.
  */
 export function roiDenom(entry) {
-  return entry.ethSpent;
+  return entry.tokenSpent;
 }
 
 /**
- * ROI in rarity-weight per ETH, as an integer.
+ * ROI in rarity-weight per DEEPWOOD, as an integer.
  *
  * DISPLAY ONLY. Two players with equal ratios can differ in the last digit
  * here because of integer truncation -- use compareRoi() for ordering, which
@@ -254,7 +254,7 @@ export function roiOf(entry) {
   // and `(bigint / 0n)` throws a RangeError -- which took down the whole
   // leaderboard read on the season board, not just one row.
   //
-  // 0 is the honest answer: no ETH committed, no ratio. The floor already
+  // 0 is the honest answer: no DEEPWOOD committed, no ratio. The floor already
   // excludes such a player from ranking (onRoiBoard is false), so this only
   // affects the displayed number.
   if (d === 0n) return 0n;
@@ -326,7 +326,7 @@ export function topN(board, n = TOP_N) {
  * seeing themselves missing.
  */
 export function shortOfFloor(entry) {
-  const short = SPLAY_FLOOR_WEI - entry.ethSpent;
+  const short = SPLAY_FLOOR_WEI - entry.tokenSpent;
   return short > 0n ? short : 0n;
 }
 
@@ -349,7 +349,7 @@ export function standing(board, address) {
 
 // --- formatting --------------------------------------------------------
 
-export const eth = (wei) => `${(Number(wei) / 1e18).toFixed(5)} ETH`;
+export const eth = (wei) => `${fmt(Number(wei) / 1e18)} DEEPWOOD`;
 export const fmt = (n) => {
   if (n >= 1e9) return (n / 1e9).toFixed(2).replace(/\.?0+$/, '') + 'B';
   if (n >= 1e6) return (n / 1e6).toFixed(2).replace(/\.?0+$/, '') + 'M';

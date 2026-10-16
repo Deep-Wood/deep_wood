@@ -176,8 +176,8 @@ group('rollover is permissionless, matching finalizeSeason()');
 group('splay floor matches the contract (exclude, not floor)');
 {
   // DeepWood.roi() returns 0 below MIN_SPLAY and onRoiBoard() is false.
-  const lucky = { leq: 4096n, ethSpent: 100_000_000_000_000n, hunts: 1, bestWei: 0n, gems: [] };
-  const diligent = { leq: 200n, ethSpent: SPLAY_FLOOR_WEI, hunts: 50, bestWei: 0n, gems: [] };
+  const lucky = { leq: 4096n, tokenSpent: 100_000_000_000_000n, hunts: 1, bestWei: 0n, gems: [] };
+  const diligent = { leq: 200n, tokenSpent: SPLAY_FLOOR_WEI, hunts: 50, bestWei: 0n, gems: [] };
   check('lucky-and-quit is OFF the board', onRoiBoard(lucky) === false, 'excluded');
   check('diligent is ON the board', onRoiBoard(diligent) === true, 'on board');
   // The whole point: flooring used to let the lucky player score 819,200

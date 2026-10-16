@@ -619,7 +619,7 @@ export class ForestScene extends Phaser.Scene {
       }
       // Commitment is a TOOL purchase now, not a per-hunt fee, so hunt count no
       // longer buys board eligibility. Without this every rival sits at
-      // ethSpent 0, fails the 0.005 ETH splay floor, and the demo board is
+      // tokenSpent 0, fails the 0.005 ETH splay floor, and the demo board is
       // empty except the player. Scaled with hunt count so ROI still ranks the
       // dedicated players above the casual ones.
       recordToolSpend(this.board, n, BigInt(hunts) * 100_000_000_000_000n);
@@ -1381,7 +1381,7 @@ export class ForestScene extends Phaser.Scene {
     const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
     const short = (a) => a === '0xplayer' ? 'you (not connected)' : `${a.slice(0, 6)}…${a.slice(-4)}`;
     const roiTxt = (r) => r.onBoard ? r.roi.toLocaleString('en-US') + 'x' : '--';
-    const bestTxt = (r) => seasonEth(r.bestWei) + ' ETH';
+    const bestTxt = (r) => seasonEth(r.bestWei);
     const shortAddr = (a) => a === '0xplayer' ? 'YOU' : `${a.slice(0, 6)}…${a.slice(-4)}`;
     const medal = (rank) => {
       if (rank === 1) return '<span class="lb-medal gold">🥇</span>';
@@ -1404,7 +1404,7 @@ export class ForestScene extends Phaser.Scene {
     const statsFoot = myRow
       ? (myRow.onBoard
           ? `<div class="lb-foot">You're <b>#${myRow.rank}</b> of ${onBoard} ranked hunters${myRow.rank <= TOP_N ? ' — inside the prizes' : ''}.</div>`
-          : `<div class="lb-foot off">You're not ranked yet. Spend ${seasonEth(myRow.ethSpent)} of the 0.005 ETH needed to get on the board.</div>`)
+          : `<div class="lb-foot off">You're not ranked yet. Spend ${seasonEth(myRow.tokenSpent)} of the 20,000 DEEPWOOD needed to get on the board.</div>`)
       : '';
 
     el.innerHTML = `
