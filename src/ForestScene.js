@@ -1961,7 +1961,7 @@ export class ForestScene extends Phaser.Scene {
    * Adopt the chain's own gem balances into the local satchel.
    *
    * The satchel, the "N gems" count and the sell button all render from
-   * `econ.gems`. Nothing wrote that array from the chain -- gemsOf() was only
+   * `econ.gems` is in whole gems (wei / 1e18). gemsOf() returns wei.
    * ever read to confirm that a sale had landed -- so a player who had mined on
    * chain was shown "no gems yet" forever, with sell disabled against a balance
    * they actually held.
@@ -1980,7 +1980,7 @@ export class ForestScene extends Phaser.Scene {
       const { account } = getState();
       if (!account) return;
       const held = await Promise.all(ALL_RARITIES.map((x) => r.gemsOf(account, x)));
-      this.econ.gems = held.map((n) => Number(n ?? 0));
+      this.econ.gems = held.map((n) => Number(n ?? 0) / 1e18);
       // Whether the token rail has opened. The redemption card gates on this:
       // before graduation the contract reverts TokenRailLocked, so the card
       // must say "opens when the season graduates" rather than let the player
