@@ -1148,7 +1148,10 @@ button.chip { position: relative; }
 .lb-panel {
   background: linear-gradient(180deg, #1a0a2e 0%, #0d1a10 100%);
   border: 2px solid #7c3aed;
-  border-radius: 0;
+  /* Rounded 3D card: the geometry lives on the inline frame (75vw/75vh
+     centered); this surface keeps the corners and the elevation in sync so
+     the CSS and the inline style never fight. */
+  border-radius: 18px;
   padding: var(--s3);
   display: grid;
   /* head / blurb / header row / rows / footer. The rows track is the only one
@@ -1159,7 +1162,7 @@ button.chip { position: relative; }
   grid-template-rows: auto auto auto minmax(0, 1fr) auto;
   gap: var(--s2);
   box-sizing: border-box;
-  box-shadow: -6px 0 0 rgba(124, 58, 237, 0.3);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(124, 58, 237, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.14), inset 0 -14px 32px rgba(0, 0, 0, 0.35);
 }
 .lb-head { display: flex; align-items: center; justify-content: space-between; }
 .lb-title { font-weight: 700; color: #c4b5fd; letter-spacing: 0.5px; font-size: 15px; }
@@ -1181,6 +1184,10 @@ button.chip { position: relative; }
   width: 100%;
   border-collapse: collapse;
   border: 2px solid #7c3aed;
+  /* Inner edge of the 3D card: slightly softened so the hard table frame
+     does not fight the 18px panel radius. */
+  border-radius: 10px;
+  overflow: hidden;
   font-size: 12px;
   color: #e8f0e0;
   table-layout: fixed;
@@ -1216,9 +1223,8 @@ button.chip { position: relative; }
 .lb-table th:nth-child(3), .lb-table td:nth-child(3) { width: 10ch; text-align: right; }
 .lb-table th:nth-child(4), .lb-table td:nth-child(4) { width: 9ch; text-align: right; }
 /* Scrolling tbody: keep the header pinned while the rows scroll inside the
-   column. The panel is a full-height column now, so the rows budget is the
-   viewport minus the head/footer chrome (~130px), not `50vh - 130px`. */
-.lb-table tbody { display: block; overflow-y: auto; max-height: calc(100vh - 180px); }
+   centered 75vh card. Rows budget = card height minus head/footer chrome. */
+.lb-table tbody { display: block; overflow-y: auto; max-height: calc(75vh - 190px); }
 .lb-table thead, .lb-table tbody tr { display: table; width: 100%; table-layout: fixed; }
 /* The only scrolling region. Rows are fixed-height so the grid stays legible
    and the column frame is never pushed past the viewport. */

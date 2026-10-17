@@ -1363,16 +1363,19 @@ export class ForestScene extends Phaser.Scene {
     // instead of centred. Each declaration is terminated explicitly now.
     el.style.cssText =
       'position:fixed;inset:0;z-index:1000;display:flex;'
-      + 'align-items:stretch;justify-content:flex-end;'
+      + 'align-items:center;justify-content:center;'
       + 'background:rgba(0,0,0,.45);';
-    // A vertical half: full height, half the width, flush to the right edge.
-    // The old `height:50vh` bottom-sheet frame is gone -- that was the
-    // horizontal half the user rejected. `align-items:stretch` + this frame
-    // make the column run edge-to-edge vertically.
+    // CENTERED CARD, 3D, ROUNDED. The user's spec, fourth cut: a rounded,
+    // 3D-elevated card sitting in the middle of the screen, covering 75%
+    // of it -- not a docked half-column. 75% of BOTH axes so the card is
+    // visibly the dominant object with the game framing it on all sides.
     const frame =
-      'left:auto;right:0;top:0;bottom:0;'
-      + 'width:50vw;max-width:50vw;height:100vh;max-height:100vh;'
-      + 'margin:0;border-left:2px solid #7c3aed;border-top:none;border-bottom:none;border-right:none;';
+      'left:12.5%;right:12.5%;top:12.5%;bottom:12.5%;'
+      + 'width:75vw;max-width:75vw;height:75vh;max-height:75vh;'
+      + 'margin:0;border-radius:18px;'
+      + 'border:2px solid #7c3aed;'
+      + 'box-shadow:0 24px 64px rgba(0,0,0,.65),0 0 0 1px rgba(124,58,237,.45),'
+      + 'inset 0 1px 0 rgba(255,255,255,.14),inset 0 -14px 32px rgba(0,0,0,.35);';
 
     const top10 = rows.slice(0, TOP_N);
     const iAmHere = top10.some((r) => r.address === me && r.onBoard);
@@ -3874,10 +3877,16 @@ export class ForestScene extends Phaser.Scene {
       }
     });
 
-    // collapse the spent node
+    // collapse the spent node. `node.destroy?.()` -- the dig flow can re-enter
+    // reveal() while a previous collapse tween still holds the node (a fast
+    // double-dig on the same beacon), and the second destroy() on an
+    // already-destroyed object threw "L.destroy is not a function", which
+    // killed the rest of reveal() -- including the finds.push and the
+    // deepwood:find dispatch the satchel reads. The dig then looked like it
+    // produced nothing.
     this.tweens.add({
       targets: node, scale: 0, duration: 500, delay: 350,
-      onComplete: () => node.destroy(),
+      onComplete: () => { try { node.destroy?.(); } catch { /* already gone */ } },
     });
 
     const entry = {
