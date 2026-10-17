@@ -63,7 +63,9 @@ export function createRedeemCard({
 
   const held = () => {
     const b = getBalances?.() ?? [];
-    return Math.max(0, Math.floor(Number(b[selected]) || 0));
+    const v = b[selected];
+    try { return typeof v === 'bigint' ? v : BigInt(Math.trunc(Number(v)) || 0); }
+    catch { return 0n; }
   };
 
   // --- rendering -----------------------------------------------------------
@@ -97,7 +99,7 @@ export function createRedeemCard({
     const h = held();
     elPcts.innerHTML = PERCENT_STEPS.map((p) => (
       `<button type="button" class="redeem-pct" data-pct="${p}"`
-      + `${h > 0 ? '' : ' disabled'}>${p}%</button>`
+      + `${h > 0n ? '' : ' disabled'}>${p}%</button>`
     )).join('');
     elPcts.querySelectorAll('.redeem-pct').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -118,7 +120,7 @@ export function createRedeemCard({
     // Selection may point at a rarity that just went empty (a redemption
     // landed). Fall back to the first non-empty one so the card is never
     // stuck on a dead row.
-    if (h <= 0) {
+    if (h <= 0n) {
       const rows = rarityRows(getBalances?.() ?? []);
       const first = rows.find((r) => r.selectable);
       if (first) selected = first.rarity;

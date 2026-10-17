@@ -19,10 +19,10 @@ export const PERCENT_STEPS = [25, 50, 75, 100];
  * full drain.
  */
 export function percentAmount(held, pct) {
-  const h = Number(held) || 0;
-  if (h <= 0) return 0;
+  const h = typeof held === 'bigint' ? held : BigInt(Math.trunc(Number(held)) || 0);
+  if (h <= 0n) return 0n;
   if (pct >= 100) return h;
-  return Math.floor((h * pct) / 100);
+  return (h * BigInt(pct)) / 100n;
 }
 
 /**
@@ -38,12 +38,15 @@ export function percentAmount(held, pct) {
  * position they meant to sample.
  */
 export function clampAmount(raw, held) {
-  const h = Math.max(0, Math.floor(Number(held) || 0));
+  const h = typeof held === 'bigint' ? held : BigInt(Math.trunc(Number(held)) || 0);
+  if (h < 0n) return 0n;
   const digits = String(raw ?? '').replace(/[^0-9]/g, '');
-  if (digits === '') return 0;
-  const n = Number(digits);
-  if (!Number.isFinite(n)) return 0;
-  return Math.min(Math.max(0, Math.floor(n)), h);
+  if (digits === '') return 0n;
+  // Digits-only input cannot overflow BigInt, but cap the parse anyway.
+  let n;
+  try { n = BigInt(digits); } catch { return 0n; }
+  if (n < 0n) return 0n;
+  return n > h ? h : n;
 }
 
 /**
@@ -57,9 +60,15 @@ export function clampAmount(raw, held) {
  */
 export function rarityRows(balances) {
   const names = ['Quartz', 'Amber', 'Sapphire', 'Ruby', 'Diamond'];
+  // Raw BigInt counts (whole gems) from the scene; accept legacy Numbers too.
+  const raw = (i) => {
+    const v = balances?.[i];
+    try { return typeof v === 'bigint' ? v : BigInt(Math.trunc(Number(v)) || 0); }
+    catch { return 0n; }
+  };
   return names.map((name, i) => {
-    const held = Math.max(0, Math.floor(Number(balances?.[i]) || 0));
-    return { rarity: i, name, held, selectable: held > 0 };
+    const held = raw(i);
+    return { rarity: i, name, held, selectable: held > 0n };
   });
 }
 
@@ -82,10 +91,10 @@ export function redeemState({ held, amount, quoteWei, floorWei, railActive }) {
       reason: 'Redemption opens when the season graduates.',
     };
   }
-  if (!(held > 0)) {
+  if (!(held > 0n)) {
     return { ok: false, kind: 'empty', reason: 'No gems of that kind.' };
   }
-  if (!(amount > 0)) {
+  if (!(amount > 0n)) {
     return { ok: false, kind: 'zero', reason: 'Choose an amount to redeem.' };
   }
   if (amount > held) {

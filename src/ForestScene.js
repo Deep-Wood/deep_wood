@@ -1731,7 +1731,10 @@ export class ForestScene extends Phaser.Scene {
       // Skill costs Quartz: 200, 400, 600, 800
       const skillCosts = { 1: 200, 2: 400, 3: 600, 4: 800 };
       const cost = skillCosts[nextLevel] || 0;
-      const quartz = p.gems?.[0] ?? 0;
+      // Raw BigInt balance vs raw unit cost -- same units, exact compare.
+      const quartz = p.gems?.[0] ?? 0n;
+      const have = typeof quartz === 'bigint' ? quartz : BigInt(Math.trunc(quartz) || 0);
+      const affordable = have >= BigInt(cost);
       // Upward arrow glyph: skill progression.
       skill.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">'
         + '<path d="M12 4l-7 7h4v7h6v-7h4z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>'
@@ -1745,8 +1748,8 @@ export class ForestScene extends Phaser.Scene {
       } else if (!interlockOk) {
         skill.title = `${nextName} needs a tier ${nextLevel} tool first — you hold ${TIER_NAME[tier] || 'none'}`;
         skill.disabled = true;
-      } else if (quartz < cost) {
-        skill.title = `${nextName} costs ${cost} Quartz (have ${quartz}) — unlocks ${skillSubtitle(nextLevel)}`;
+      } else if (!affordable) {
+        skill.title = `${nextName} costs ${cost} Quartz (have ${have}) — unlocks ${skillSubtitle(nextLevel)}`;
         skill.disabled = true;
       } else {
         skill.title = `Upgrade to ${nextName} — ${cost} Quartz, unlocks ${skillSubtitle(nextLevel)}`;
@@ -1967,7 +1970,8 @@ export class ForestScene extends Phaser.Scene {
    * Adopt the chain's own gem balances into the local satchel.
    *
    * The satchel, the "N gems" count and the sell button all render from
-   * `econ.gems` is in whole gems (wei / 1e18). gemsOf() returns wei.
+   * `econ.gems` is RAW gem counts (BigInt, whole units). gemsOf() returns
+   * single-unit counts -- gems are items, not wei -- so no scaling here.
    * ever read to confirm that a sale had landed -- so a player who had mined on
    * chain was shown "no gems yet" forever, with sell disabled against a balance
    * they actually held.
@@ -1986,7 +1990,12 @@ export class ForestScene extends Phaser.Scene {
       const { account } = getState();
       if (!account) return;
       const held = await Promise.all(ALL_RARITIES.map((x) => r.gemsOf(account, x)));
-      this.econ.gems = held.map((n) => Number(n ?? 0) / 1e18);
+      // RAW GEM COUNTS. gemsOf() returns single-unit counts -- gems are
+      // whole items, not wei. The old `/ 1e18` here was the bug that made
+      // settled hunts invisible: a balance of 6e18+5 (6 legacy migrated
+      // units + 5 real settled gems) divided to 6.000...005 and rendered
+      // as "6". Keep the BigInt words untouched; consumers normalize.
+      this.econ.gems = held.map((n) => n ?? 0n);
       // Whether the token rail has opened. The redemption card gates on this:
       // before graduation the contract reverts TokenRailLocked, so the card
       // must say "opens when the season graduates" rather than let the player
@@ -2624,11 +2633,11 @@ export class ForestScene extends Phaser.Scene {
           const { getReader } = await import('./onchain.js');
           const r = await getReader();
           if (!r?.redeemQuote) return null;
-          return r.redeemQuote(rarity, BigInt(amount));
+          return r.redeemQuote(rarity, typeof amount === 'bigint' ? amount : BigInt(amount));
         },
         onRedeem: async (rarity, amount) => {
           const { redeemGemsOnchain } = await import('./onchain.js');
-          const res = await redeemGemsOnchain(rarity, amount);
+          const res = await redeemGemsOnchain(rarity, typeof amount === 'bigint' ? amount : BigInt(amount));
           if (res.ok) {
             // The chain moved; pull the authoritative balances back so the
             // satchel, the strip and the card all agree with it.
@@ -2687,16 +2696,15 @@ export class ForestScene extends Phaser.Scene {
 
     // Which rarities actually hold something. Zero rows are skipped so a
     // player with one rarity does not sign four no-op transactions.
-    // gems is a plain Number array in both modes (preview seeds [0,0,0,0,0]
-    // and the chain mirror Number()s each gemsOf word), so compare against 0,
-    // not 0n -- `number > 0n` throws "Cannot mix BigInt and other types".
-    const held = ALL_RARITIES.filter((r) => (p.gems[r] ?? 0) > 0);
+    // gems is a raw-count array now (BigInt words from gemsOf), so compare
+    // against 0n -- `number > 0n` throws "Cannot mix BigInt and other types".
+    const held = ALL_RARITIES.filter((r) => BigInt(p.gems[r] ?? 0n) > 0n);
     if (!held.length) { this.beltMsg('No gems to sell.', 'bad'); return; }
 
     if (!onchainActive()) {
       const check = canRedeem(p);
       if (!check.ok) { this.beltMsg(check.reason, 'bad'); return; }
-      const total = p.gems.reduce((a, b) => a + b, 0);
+      const total = p.gems.reduce((a, b) => a + BigInt(b ?? 0n), 0n);
       const res = redeemGems(p);
       if (!res.ok) { this.beltMsg(res.reason, 'bad'); return; }
       this.simBalance += res.value;
@@ -2712,8 +2720,8 @@ export class ForestScene extends Phaser.Scene {
     let totalPayout = 0n;
     let totalSold = 0;
     for (const rarity of held) {
-      const count = p.gems[rarity] ?? 0;
-      if (count <= 0) continue;
+      const count = BigInt(p.gems[rarity] ?? 0n);
+      if (count <= 0n) continue;
       this.beltMsg(`Selling ${RARITY_NAMES[rarity]} (${count})\u2026`, 'busy');
       // Sell is SEVERAL transactions, so the pending label has to be re-raised
       // for each one -- cleared by the loop's own finally, then set again.
@@ -2736,9 +2744,9 @@ export class ForestScene extends Phaser.Scene {
         break;
       }
       totalPayout += r.payoutWei ?? 0n;
-      totalSold += count;
+      totalSold += Number(count); // display-only accumulator; count fits a double for sane balances
       // Zero it locally only once the chain has confirmed THAT rarity.
-      p.gems[rarity] = 0;
+      p.gems[rarity] = 0n;
     }
 
     if (totalSold > 0) {

@@ -440,9 +440,26 @@
     // `playerBalance()` is defined below and reads the single balance the
     // economy owns. The satchel can no longer disagree with it.
     const totals = [0, 0, 0, 0, 0];
+    // RAW COUNTS: econ.gems holds BigInt words from gemsOf (whole gems, not
+    // wei). Normalize once here for display; the satchel/gemstrip/quotes all
+    // read through this helper so no other site needs to know the type.
     function playerBalance() {
       const p = window.__scene?.econ;
-      return p && Array.isArray(p.gems) ? p.gems : totals;
+      const raw = p && Array.isArray(p.gems) ? p.gems : totals;
+      return raw.map((v) => {
+        try { return typeof v === 'bigint' ? v : BigInt(Math.trunc(Number(v)) || 0); }
+        catch { return 0n; }
+      });
+    }
+    function balDisplay(v) {
+      const b = typeof v === 'bigint' ? v : 0n;
+      // 6e18 legacy balances render compact ("6M"), honest raw counts ("5")
+      // render plain -- same format, driven by magnitude.
+      if (b >= 1000000000000000000n) {
+        const m = Number(b) / 1e18;
+        return m >= 1e6 ? (m / 1e6).toFixed(1).replace(/\.0$/, '') + 'M' : m.toFixed(1).replace(/\.0$/, '');
+      }
+      return String(b);
     }
 
     // The gem strip (top-centre) replaces the satchel entirely. Five
@@ -470,8 +487,8 @@
       // Satchel markup is kept for backwards compat but the element is
       // hidden. The top-centre gemstrip is the live display.
       gemlist.innerHTML = gemNames.map((n, i) => {
-        const c = bal[i];
-        return `<div class="gem${c ? '' : ' none'}" title="${n}: ${c}">`
+        const c = balDisplay(bal[i]);
+        return `<div class="gem${c === '0' ? ' none' : ''}" title="${n}: ${bal[i]}">`
           + `<span class="n" style="color:${gemColors[i]}">${n.slice(0, 3)}</span>`
           + `<span class="c">${c}</span></div>`;
       }).join('');
@@ -482,7 +499,7 @@
       gemstrip.innerHTML = `<div class="gs-row">` + bal.map((c, i) =>
         `<div class="gem-ic" title="${gemNames[i]}: ${c}">`
         + `<img src="${gemIcons[i]}" alt="${gemNames[i]}" draggable="false">`
-        + `<span class="gc${c ? '' : ' zero'}">${c}</span></div>`
+        + `<span class="gc${c === 0n ? ' zero' : ''}">${balDisplay(c)}</span></div>`
       ).join('') + `</div>`
       + `<div class="gs-row">`
       + '<div class="gem-ic" id="gs-tool">'

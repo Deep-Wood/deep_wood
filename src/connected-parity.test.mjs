@@ -35,7 +35,7 @@ import { durabilityOf as maxDurabilityOf } from './economy.js';
 const require = createRequire(import.meta.url);
 const puppeteer = require('puppeteer');
 
-const GAME = '0x871cb5c1d764788c17d2d9ba7df266c32fe6a7fa';
+const GAME = '0x6bb69514fa74957bf3f8492c52f29cd4ea22d4ce'; // V7, live. Was 0x871c…a7fa (dead V2) — the test's "chain truth" was fiction.
 const RPCS = [
   'https://robinhood-testnet.drpc.org',
   'https://rpc.testnet.chain.robinhood.com',
@@ -102,10 +102,12 @@ async function chainTruth() {
   const gems = [];
   for (let r = 0; r < 5; r++) {
     const out = await readContract(await gemsSelector(), ['address', 'uint8'], [WALLET, r]);
-    gems.push(Number(BigInt('0x' + out.slice(2))));
+    // RAW COUNTS: the mirror now carries BigInt words (whole gems), not
+    // Number/1e18. Compare like with like.
+    gems.push(BigInt('0x' + out.slice(2)));
   }
   const balWei = BigInt(await rpc('eth_getBalance', [WALLET, 'latest']));
-  return { toolTier, durability, broken, gems, balWei, held: gems.reduce((a, b) => a + b, 0) };
+  return { toolTier, durability, broken, gems, balWei, held: gems.reduce((a, b) => a + b, 0n) };
 }
 
 /** Selectors are derived from the deployed ABI, not hand-typed. */
@@ -244,14 +246,15 @@ test.after(async () => { await browser?.close(); });
 const dom = () => page.evaluate(() => {
   const s = window.__scene;
   return {
-    tool: document.getElementById('belt-tool')?.textContent.trim() ?? null,
+    tool: document.getElementById('gs-tool-name')?.textContent.trim() ?? null,
+    dur: window.__scene?.econ ? `${window.__scene.econ.left}/${window.__scene.econ.max}` : null,
     counts: document.getElementById('belt-counts')?.textContent.trim() ?? null,
     roi: document.getElementById('roi')?.textContent.trim() ?? null,
     rank: document.getElementById('rank')?.textContent.trim() ?? null,
     finds: document.getElementById('finds')?.textContent.trim() ?? null,
     mode: document.getElementById('belt-mode')?.textContent.trim() ?? null,
     chain: document.getElementById('chaintext')?.textContent.trim() ?? null,
-    mirror: s ? { tier: s.econ.tier, left: s.econ.left, max: s.econ.max, gems: [...s.econ.gems] } : null,
+    mirror: s ? { tier: s.econ.tier, left: s.econ.left, max: s.econ.max, gems: [...s.econ.gems].map(String) } : null,
     connected: window.__walletState?.connected ?? null,
   };
 });
@@ -268,10 +271,12 @@ test('the card shows the chain tool state, not the local simulation', async () =
   assert.equal(truth.broken, false, 'precondition: chain reports not broken');
   assert.ok(!/BROKEN/i.test(d.tool || ''),
     `card claims the tool is broken; chain says tier ${truth.toolTier} ${truth.durability}/${truth.durability} broken=false. tool=${JSON.stringify(d.tool)}`);
-  // The count is chain durability over the tier's max -- "16/20", not "16/16",
+  // The count is chain durability over the tier's max -- "15/20", not "15/15",
   // because the tier table, not the remaining uses, sets the denominator.
-  assert.match(d.tool || '', new RegExp(`${truth.durability}/${maxDurabilityOf(truth.toolTier)}`),
-    `card must show ${truth.durability}/${maxDurabilityOf(truth.toolTier)} from the chain. got ${JSON.stringify(d.tool)}`);
+  // Read from the econ mirror (the gs-tool-name chip carries the tier NAME,
+  // the numeric pips live in econ.left/econ.max).
+  assert.match(d.dur || '', new RegExp(`${truth.durability}/${maxDurabilityOf(truth.toolTier)}`),
+    `card must show ${truth.durability}/${maxDurabilityOf(truth.toolTier)} from the chain. got dur=${JSON.stringify(d.dur)} tool=${JSON.stringify(d.tool)}`);
 });
 
 test('the mirror holds the chain tool, not zeros', async () => {
@@ -289,8 +294,10 @@ test('the satchel shows the chain gem balances, not local finds', async () => {
     assert.ok(!/gems/i.test(d.counts || '') || /no gems/i.test(d.counts || ''),
       `chain holds 0 gems in all rarities; card says ${JSON.stringify(d.counts)}`);
   }
-  assert.deepEqual(d.mirror?.gems, truth.gems,
-    `mirror gems ${JSON.stringify(d.mirror?.gems)} != chain ${JSON.stringify(truth.gems)}`);
+  // Both sides are strings now (BigInt does not survive JSON in the assert
+  // message path), so compare stringified chain words against the mirror.
+  assert.deepEqual(d.mirror?.gems, truth.gems.map(String),
+    `mirror gems ${JSON.stringify(d.mirror?.gems)} != chain ${JSON.stringify(truth.gems.map(String))}`);
 });
 
 test('a page that boots with an already-authorised wallet is ON-CHAIN', async () => {
@@ -363,30 +370,34 @@ test('the harness itself is sound: it read a real chain', async () => {
 });
 
 test('a connected HUNT routes through the contract, not the local roll', async () => {
-  // The connected reveal must call the contract's previewHunt (an eth_call)
-  // rather than rolling locally. This harness's provider refuses WRITES, so
-  // settleHuntOnchain returns send-failed and reveal() must report failure,
-  // grant NOTHING, and leave the hunt index unmoved.
+  // V6/V7 discipline: a connected dig is READ-ONLY (previewHunt via eth_call)
+  // and pushes a PENDING result onto the in-memory queue. The wallet only
+  // opens at SETTLE. With a read-only provider the dig must therefore still
+  // succeed, credit NOTHING (the credit happens at settle), and advance only
+  // the local queue bookkeeping -- the provider refusing writes must be
+  // irrelevant to the dig itself.
   const before = await page.evaluate(() => ({
-    gems: window.__scene ? [...window.__scene.econ.gems] : null,
+    gems: window.__scene ? [...window.__scene.econ.gems].map(String) : null,
     hunts: window.__scene ? window.__scene.huntIndex : null,
+    queued: window.__scene?.queue ? window.__scene.queue.size : null,
   }));
   const r = await page.evaluate(async () => {
     const s = window.__scene;
     if (!s) return { err: 'no scene' };
     // A synthetic dig-node: reveal only needs x/y/active/setData/scale tweens.
-    const calls = { previews: 0 };
     const node = { x: 0, y: 0, active: true, depth: 5, setData() {} };
-    const out = { ok: null, gems: null, hunts: null };
+    const out = { ok: null, gems: null, hunts: null, queued: null };
     try {
       out.ok = await s.reveal(node);
-      out.gems = [...s.econ.gems];
+      out.gems = [...s.econ.gems].map(String);
       out.hunts = s.huntIndex;
+      out.queued = s.queue ? s.queue.size : null;
     } catch (e) { out.err = String((e && e.message) || e); }
     return out;
   });
-  assert.equal(r.ok, false,
-    `settlement through a read-only provider must fail cleanly, got ${JSON.stringify(r)}`);
-  assert.deepEqual(r.gems, before.gems, 'a failed settlement must not credit gems');
-  assert.equal(r.hunts, before.hunts, 'a failed settlement must not advance the hunt index');
+  assert.ok(!r.err, `a connected dig must not throw under a read-only provider: ${r.err}`);
+  assert.equal(r.gems?.[0], before.gems?.[0],
+    `a queued (unsettled) dig must not credit gems: ${JSON.stringify({ before: before.gems, after: r.gems })}`);
+  assert.equal(r.queued, (before.queued ?? 0) + 1,
+    `the dig must land in the settle queue: queued before=${before.queued} after=${r.queued}`);
 });

@@ -449,14 +449,18 @@ export async function redeemGemsOnchain(rarity, count) {
       "not-configured",
       "GAME_ADDRESS not set - no contract to write to",
     );
-  if (!Number.isInteger(count) || count <= 0) {
+  // Count is a raw whole-gem amount; BigInt flows through from the redeem
+  // card. Accept legacy positive Numbers too.
+  const asBig = typeof count === 'bigint' ? count
+    : (Number.isInteger(count) && count > 0 ? BigInt(count) : 0n);
+  if (asBig <= 0n) {
     return fail("bad-arg", `count must be a positive integer, got ${count}`);
   }
 
   const { account } = getState();
   const before = await r.gemsOf(account, rarity);
 
-  if (before < BigInt(count)) {
+  if (before < asBig) {
     return fail(
       "insufficient-gems",
       `you hold ${before}, cannot redeem ${count}`,
@@ -466,7 +470,7 @@ export async function redeemGemsOnchain(rarity, count) {
   // V6: redeemQuote returns DEEPWOOD (18 decimals), not ETH wei.
   let payout = 0n;
   try {
-    const [tokenPayout, aboveFloor] = await r.redeemQuote(rarity, count);
+    const [tokenPayout, aboveFloor] = await r.redeemQuote(rarity, asBig);
     payout = tokenPayout;
     if (!aboveFloor) {
       return fail(
@@ -478,7 +482,7 @@ export async function redeemGemsOnchain(rarity, count) {
     return fail("read-failed", "could not read redemption quote from chain");
   }
 
-  const sent = await wRedeemGems(rarity, count);
+  const sent = await wRedeemGems(rarity, asBig);
   if (!sent.ok)
     return fail(
       sent.code || "send-failed",
