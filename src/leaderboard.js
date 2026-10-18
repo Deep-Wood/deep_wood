@@ -40,16 +40,19 @@ const TOPIC_HUNT_SETTLED =
  */
 export async function enumeratePlayers(rpcUrl, fallbacks, gameAddress, deployBlock = null) {
   const fromHex = deployBlock ? '0x' + Number(deployBlock).toString(16) : null;
-  const [batches, migrations, legacyMigrations, singleHunts] = await Promise.all([
-    ethGetLogsChunked(rpcUrl, fallbacks, { address: gameAddress, topics: [TOPIC_BATCH_SETTLED] }, { fromHex }),
-    ethGetLogsChunked(rpcUrl, fallbacks, { address: gameAddress, topics: [TOPIC_MIGRATION] }, { fromHex }),
-    ethGetLogsChunked(rpcUrl, fallbacks, { address: gameAddress, topics: [TOPIC_LEGACY_MIGRATED] }, { fromHex }),
-    ethGetLogsChunked(rpcUrl, fallbacks, { address: gameAddress, topics: [TOPIC_HUNT_SETTLED] }, { fromHex }),
-  ]);
+  // The Robinhood testnet RPC does NOT reliably support topic-filtered
+  // eth_getLogs — a filtered query for an existing event can return [] while
+  // an unfiltered query returns it. So we fetch ALL events from the contract
+  // in one scan and filter client-side by topic0. This also reduces 4 RPC
+  // round-trips to 1.
+  const ALL_TOPICS = new Set([TOPIC_BATCH_SETTLED, TOPIC_MIGRATION, TOPIC_LEGACY_MIGRATED, TOPIC_HUNT_SETTLED]);
+  const logs = await ethGetLogsChunked(rpcUrl, fallbacks, { address: gameAddress }, { fromHex });
   const players = new Set();
-  for (const l of [...batches, ...migrations, ...legacyMigrations, ...singleHunts]) {
-    const t = l.topics?.[1];
-    if (typeof t === 'string' && t.length >= 42) players.add('0x' + t.slice(26).toLowerCase());
+  for (const l of logs) {
+    const t0 = l.topics?.[0];
+    const t1 = l.topics?.[1];
+    if (!ALL_TOPICS.has(t0)) continue;
+    if (typeof t1 === 'string' && t1.length >= 42) players.add('0x' + t1.slice(26).toLowerCase());
   }
   return [...players];
 }
