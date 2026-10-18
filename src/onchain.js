@@ -284,11 +284,18 @@ export async function buyToolWithTokenOnchain(tier, maxTokenCost) {
   const { sendTo } = await import("./wallet.js");
 
   const tokenAddr = await r.token();
+
+  // Always read the ACTUAL on-chain cost, never trust the local cache.
+  // The owner can change tool prices via setToolPrices(); a stale cached
+  // value sends a maxTokenCost that's too low, and the contract reverts
+  // AboveMaxCost (cost > maxTokenCost).
+  const onchainCost = await r.toolCost(tier);
+  const tokenCost = onchainCost && onchainCost > 0n ? onchainCost : BigInt(maxTokenCost);
+
   const { getAllowance } = await import("./chain.js");
   const allowance = await getAllowance(
     config.rpcUrl, config.fallbackRpcUrls, tokenAddr, account, config.gameAddress
   );
-  const tokenCost = BigInt(maxTokenCost);
 
   if (allowance < tokenCost) {
     const approveData = approveTokenTx(config.gameAddress, tokenCost);
