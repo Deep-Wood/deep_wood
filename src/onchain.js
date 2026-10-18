@@ -253,6 +253,92 @@ export async function buyToolOnchain(tier, maxTokenCost) {
 }
 
 /**
+ * Buy tool with DEEPWOOD token. V6: buyToolWithToken(uint8,uint256) pulls
+ * DEEPWOOD via transferFrom, so the frontend must approve the token spend
+ * first -- same pattern as buyToolOnchain.
+ *
+ * @param {number} tier 1..5
+ * @param {bigint|number} maxTokenCost DEEPWOOD tokens (18 decimals) the player
+ *        is willing to spend. Read from toolCost(tier) on chain.
+ * @returns {Promise<{ok:boolean, code?:string, reason?:string, hash?:string,
+ *                    confirmed?:boolean, tier?:number, durability?:bigint}>}
+ */
+export async function buyToolWithTokenOnchain(tier, maxTokenCost) {
+  const r = await getReader();
+  if (!r)
+    return fail(
+      "not-configured",
+      "GAME_ADDRESS not set - no contract to write to",
+    );
+  if (maxTokenCost === undefined || maxTokenCost === null) {
+    return fail(
+      "bad-arg",
+      "buyToolWithTokenOnchain needs { maxTokenCost } from toolCost(tier)",
+    );
+  }
+
+  const { account } = getState();
+  const before = await r.toolOf(account);
+
+  const { buyToolWithTokenTx, approveTokenTx } = await import("./chain.js");
+  const { sendTo } = await import("./wallet.js");
+
+  const tokenAddr = await r.token();
+  const { getAllowance } = await import("./chain.js");
+  const allowance = await getAllowance(
+    config.rpcUrl, config.fallbackRpcUrls, tokenAddr, account, config.gameAddress
+  );
+  const tokenCost = BigInt(maxTokenCost);
+
+  if (allowance < tokenCost) {
+    const approveData = approveTokenTx(config.gameAddress, tokenCost);
+    const approveResult = await sendTo(tokenAddr, approveData);
+    if (!approveResult?.ok) {
+      return fail(
+        approveResult?.code || "send-failed",
+        approveResult?.reason || "token approval failed",
+      );
+    }
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+
+  const txData = buyToolWithTokenTx(tier, tokenCost);
+  const sent = await sendTo(config.gameAddress, txData);
+  if (!sent.ok)
+    return fail(
+      sent.code || "send-failed",
+      sent.reason || "transaction was not sent",
+    );
+
+  const after = await pollUntilChanged(
+    () => r.toolOf(account),
+    before,
+    (b, a) => a.tier > b.tier,
+  );
+
+  if (!after.changed) {
+    return fail(
+      "reverted",
+      "contract did not apply the purchase (it reverted) - nothing granted",
+    );
+  }
+  if (after.value.tier !== tier) {
+    return fail(
+      "wrong-tier",
+      `bought tier ${tier} but the chain holds tier ${after.value.tier}`,
+    );
+  }
+
+  return {
+    ok: true,
+    hash: sent.hash,
+    confirmed: true,
+    tier: after.value.tier,
+    durability: after.value.durability,
+  };
+}
+
+/**
  * Buy tool with ETH. V6: buyToolWithEth(uint8,bytes,uint256) is the ONLY
  * payable buy path. It swaps ETH→DEEPWOOD via Universal Router, then buys
  * the tool in the same transaction.

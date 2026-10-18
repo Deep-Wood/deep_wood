@@ -76,7 +76,7 @@ import {
 } from './commitment.js';
 import {
   onchainActive, mode as chainMode,
-  buyToolOnchain, repairToolOnchain, upgradeSkillOnchain, redeemGemsOnchain,
+  buyToolOnchain, buyToolWithTokenOnchain, repairToolOnchain, upgradeSkillOnchain, redeemGemsOnchain,
   walletBalanceWeiOnchain, priceFor, ALL_RARITIES, RARITY_NAMES,
 } from './onchain.js';
 import sha3 from 'js-sha3';
@@ -2403,7 +2403,7 @@ export class ForestScene extends Phaser.Scene {
     this.setTxPending('belt-buy', 'buying');
     let r;
     try {
-      r = await buyToolOnchain(tier, cost);
+      r = await buyToolWithTokenOnchain(tier, cost);
     } finally {
       // Cleared before the local mirror is updated, because that path calls
       // refreshBelt() and the belt must not stay stuck in the busy label.
