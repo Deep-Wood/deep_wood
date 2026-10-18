@@ -2658,7 +2658,7 @@ export class ForestScene extends Phaser.Scene {
             <h3>How to Play</h3>
             <p>Explore the forest and hunt gems. Each hunt rolls a rarity based
                on your <strong>tool tier</strong> and <strong>skill level</strong>.
-               <strong>Quartz</strong> is the entry-level gem — every tool tier drops it. <strong>Amber and above are hunt-only</strong> — there is no path that converts money directly into a find.
+               Every gem is earned by hunting — none can be bought. <strong>Quartz</strong> is found at every tool tier; <strong>Amber and above</strong> require higher tools and skill.
                Settle hunts on-chain to record them, then redeem gems for $DEEPWOOD.</p>
           </div>
           <div class="about-section">
