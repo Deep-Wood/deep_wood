@@ -267,3 +267,43 @@ test('repairNeeds matches the tier table', () => {
   assert.deepEqual(repairNeeds(withTool(1)), [9, 0, 0, 0, 0]);
   assert.deepEqual(repairNeeds(withTool(5)), [12, 10, 8, 4, 0]);
 });
+
+// --- BigInt gem counts (chain sync) -----------------------------------------
+//
+// gemsOf() returns WHOLE gems as BigInt once the client syncs from the chain,
+// while newPlayer() starts them as Numbers and REPAIR_COST is a Number table.
+// Arithmetic across the two threw "Cannot mix BigInt and other types", which
+// froze the game the moment a tool broke:
+//   finishDig -> refreshBelt -> syncActionDom -> canRepair -> repairShortfall.
+
+test('repair math survives BigInt gem counts', () => {
+  const p = withTool(1);
+  p.left = 0;
+  p.gems = [9n, 0n, 0n, 0n, 0n];          // exactly enough, as the chain reports
+  assert.deepEqual(repairShortfall(p), [0, 0, 0, 0, 0]);
+  assert.equal(canRepair(p).ok, true);
+  const r = repairTool(p);
+  assert.equal(r.ok, true);
+  assert.deepEqual(p.gems, [0n, 0n, 0n, 0n, 0n], 'a debit must keep the BigInt type');
+  assert.equal(p.burned, 9);
+  assert.equal(p.left, p.max);
+});
+
+test('repair shortfall is named when gems are BigInt', () => {
+  const p = withTool(1);
+  p.left = 0;
+  p.gems = [5n, 0n, 0n, 0n, 0n];          // four Quartz short
+  assert.deepEqual(repairShortfall(p), [4, 0, 0, 0, 0]);
+  assert.match(canRepair(p).reason, /Need 4 Q/);
+});
+
+test('creditGems keeps BigInt slots BigInt and Number slots Number', () => {
+  const big = withTool(1);
+  big.gems = [0n, 0n, 0n, 0n, 0n];
+  creditGems(big, [2, 1, 0, 0, 0]);
+  assert.deepEqual(big.gems, [2n, 1n, 0n, 0n, 0n]);
+
+  const num = newPlayer();
+  creditGems(num, [2, 1, 0, 0, 0]);
+  assert.deepEqual(num.gems, [2, 1, 0, 0, 0]);
+});

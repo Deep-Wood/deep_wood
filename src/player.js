@@ -141,13 +141,41 @@ export function buyTool(p, tier, balance = 0n) {
 
 // --- repair ----------------------------------------------------------------
 
+/**
+ * Gem counts are BigInt once synced from the chain (`gemsOf` returns WHOLE
+ * gems) but plain Numbers in preview (`newPlayer`), while the repair tables
+ * (REPAIR_COST) are Numbers. Doing arithmetic across the two throws
+ * "Cannot mix BigInt and other types" -- which is exactly what froze the game
+ * the moment a tool broke:
+ *   finishDig -> refreshBelt -> syncActionDom -> canRepair -> repairShortfall.
+ * Normalise at the operation so BOTH modes keep working.
+ */
+const gemNum = (v) => {
+  if (typeof v === 'bigint') return Number(v);
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+const gemBig = (v) => {
+  if (typeof v === 'bigint') return v;
+  const n = Number(v);
+  return Number.isFinite(n) ? BigInt(Math.trunc(n)) : 0n;
+};
+/** Add to a gem slot, preserving that slot's own numeric type. */
+const gemAdd = (cur, n) =>
+  typeof cur === 'bigint' ? cur + gemBig(n) : gemNum(cur) + gemNum(n);
+/** Subtract from a gem slot, preserving that slot's own numeric type. */
+const gemSub = (cur, n) =>
+  typeof cur === 'bigint' ? cur - gemBig(n) : gemNum(cur) - gemNum(n);
+
 /** The gem cost of a repair at this tier, as a sparse array per rarity. */
 export function repairNeeds(p) {
   return repairCost(p.tier);
 }
 
 export function repairShortfall(p) {
-  return repairCost(p.tier).map((n, r) => Math.max(0, n - p.gems[r]));
+  // Returns plain Numbers (the UI formats them); only the gem side needs
+  // normalising, because it may be a BigInt from the chain.
+  return repairCost(p.tier).map((n, r) => Math.max(0, n - gemNum(p.gems[r])));
 }
 
 export function canRepair(p) {
@@ -171,7 +199,7 @@ export function repairTool(p) {
   const check = canRepair(p);
   if (!check.ok) return check;
   const cost = repairCost(p.tier);
-  cost.forEach((n, r) => { p.gems[r] -= n; p.burned += n; });
+  cost.forEach((n, r) => { p.gems[r] = gemSub(p.gems[r], n); p.burned += gemNum(n); });
   p.left = p.max;
   return { ok: true };
 }
@@ -181,7 +209,7 @@ export function repairTool(p) {
 /** Total face value of a player's gems, in wei. */
 export function gemValueWei(p) {
   let v = 0n;
-  p.gems.forEach((n, r) => { v += BigInt(n) * FACE_VALUE[r]; });
+  p.gems.forEach((n, r) => { v += gemBig(n) * FACE_VALUE[r]; });
   return v;
 }
 
@@ -217,7 +245,7 @@ export function redeemGems(p) {
 
 /** Credit a find: split the haul into spendable balance and lifetime totals. */
 export function creditGems(p, counts) {
-  counts.forEach((n, r) => { p.gems[r] += n; });
+  counts.forEach((n, r) => { p.gems[r] = gemAdd(p.gems[r], n); });
 }
 
 /** Spend one use. Returns {ok, broke} -- the caller charges durability only

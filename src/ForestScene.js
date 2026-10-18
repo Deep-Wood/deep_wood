@@ -3552,7 +3552,7 @@ export class ForestScene extends Phaser.Scene {
         node,
         done: 0,
         // Harder picks crack the rock faster: fewer frames between swings.
-        cooldown: Math.max(140, 320 - (this.player.tier || 1) * 40),
+        cooldown: Math.max(140, 320 - (this.econ.tier || 1) * 40),
         // Guards against a double-tap landing two strikes on one frame.
         lastAt: 0,
       };
@@ -3644,6 +3644,16 @@ export class ForestScene extends Phaser.Scene {
           // site.
           this.completeNodeDig();
         }
+      }).catch((e) => {
+        // reveal() is async and nothing else consumes its promise, so a throw
+        // inside it became a bare "unhandled rejection: [object Object]" in
+        // Sentry AND left `this.busy` latched true -- every later dig was then
+        // refused with no visible reason, which reads as a frozen game. Clear
+        // the latch and say something the player can act on.
+        this.busy = false;
+        if (node?.setData) node.setData('used', false);
+        this.flash('The dig could not be recorded \u2014 walk on and try another site.');
+        try { console.error('[deepwood] reveal failed', e); } catch { /* ignore */ }
       });
 
       // One message about the pick, not two. This block used to be reached twice
@@ -3655,9 +3665,13 @@ export class ForestScene extends Phaser.Scene {
       // Warning rather than surprise is the point: durability is charged on the
       // final strike, so without this the player only learns the pick is dead
       // by pressing HUNT afterwards and being refused.
-      const left = this.player.left;
+      // `this.econ`, NOT `this.player`: `this.player` is the Phaser SPRITE, so
+      // its `left`/`tier` are undefined. That made `left <= 2` always false, so
+      // the low-durability warning never fired, and a break printed
+      // "None broke" instead of naming the pick.
+      const left = this.econ.left;
       if (used.broke) {
-        this.flash(`${toolName(this.player.tier)} broke \u2014 repair with gems or upgrade to keep hunting.`);
+        this.flash(`${toolName(this.econ.tier)} broke \u2014 repair with gems or upgrade to keep hunting.`);
       } else if (left <= 2) {
         this.flash(`Pick has ${left} use${left === 1 ? '' : 's'} left.`);
       }
