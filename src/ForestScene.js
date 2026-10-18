@@ -2665,7 +2665,7 @@ export class ForestScene extends Phaser.Scene {
             <h3>Tools</h3>
             <table class="about-table">
               <tr><th>Tier</th><th>Cost ($DEEPWOOD)</th><th>Durability</th></tr>
-              <tr><td>Wood</td><td>200,000</td><td>20 hunts</td></tr>
+              <tr><td>Wood</td><td>200,000,000</td><td>20 hunts</td></tr>
               <tr><td>Bronze</td><td>5,000,000</td><td>25 hunts</td></tr>
               <tr><td>Silver</td><td>20,000,000</td><td>30 hunts</td></tr>
               <tr><td>Gold</td><td>50,000,000</td><td>35 hunts</td></tr>
