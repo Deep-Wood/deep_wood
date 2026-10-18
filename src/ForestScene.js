@@ -1723,13 +1723,14 @@ export class ForestScene extends Phaser.Scene {
       skill.id = 'belt-skill';
       const curSkill = p.skill ?? 1;
       const nextLevel = curSkill + 1;
-      const maxSkill = 4;
+      const maxSkill = 5;
       const tier = p.tier ?? 0;
-      // Interlock: upgradeSkill(N) requires tier >= N
-      const interlockOk = tier >= nextLevel;
+      // Interlock: skill may lead the tool by ONE rung (contract: targetSkill <= heldTier + 1).
+      // Holding Wood(1) you may buy Prospector(2), which is what unlocks Bronze.
+      const interlockOk = nextLevel <= tier + 1;
       const isMaxed = curSkill >= maxSkill;
-      // Skill costs Quartz: 200, 400, 600, 800
-      const skillCosts = { 1: 200, 2: 400, 3: 600, 4: 800 };
+      // Skill costs Quartz: 0, 20, 40, 60, 80 (mirrors SKILL_COST_QUARTZ / LIVE_SKILL_COST_TABLE)
+      const skillCosts = { 1: 0, 2: 20, 3: 40, 4: 60, 5: 80 };
       const cost = skillCosts[nextLevel] || 0;
       // Raw BigInt balance vs raw unit cost -- same units, exact compare.
       const quartz = p.gems?.[0] ?? 0n;
