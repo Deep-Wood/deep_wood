@@ -115,7 +115,7 @@ export function rollHunt(seed, player, huntIndex, toolTier, skill = 1) {
     if (rarityRoll < acc) { picked = r; break; }
   }
   counts[picked] = gemCount;
-  valueWei = PRICE[picked] * BigInt(gemCount);
+  valueWei = BigInt(PRICE[picked]) * BigInt(gemCount);
   highest = picked;
 
   return { counts, valueWei, total: gemCount, highest };
