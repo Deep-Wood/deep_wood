@@ -2624,6 +2624,92 @@ export class ForestScene extends Phaser.Scene {
    * every render, so there is nothing to keep in sync between openings, and
    * building it once avoids re-attaching listeners on every tap.
    */
+  /**
+   * Open the About Game panel — a static card documenting game mechanics,
+   * tool/skill costs, and gem redemption, plus community links at the bottom.
+   * Same 75vw/75vh centered card as the leaderboard, opened from the wallet menu.
+   */
+  openAboutCard() {
+    if (this._aboutCardEl) {
+      this._aboutCardEl.remove();
+      this._aboutCardEl = null;
+    }
+    const el = document.createElement('div');
+    el.className = 'lb-overlay';
+    el.style.cssText =
+      'position:fixed;inset:0;z-index:1000;display:flex;'
+      + 'align-items:center;justify-content:center;'
+      + 'background:rgba(0,0,0,.45);';
+    const frame =
+      'left:12.5%;right:12.5%;top:12.5%;bottom:12.5%;'
+      + 'width:75vw;max-width:75vw;height:75vh;max-height:75vh;'
+      + 'margin:0;border-radius:18px;'
+      + 'border:2px solid #7c3aed;'
+      + 'box-shadow:0 24px 64px rgba(0,0,0,.65),0 0 0 1px rgba(124,58,237,.45),'
+      + 'inset 0 1px 0 rgba(255,255,255,.14),inset 0 -14px 32px rgba(0,0,0,.35);';
+    el.innerHTML = `
+      <div class="lb-panel" style="${frame}">
+        <div class="lb-head">
+          <span class="lb-title">About DeepWood</span>
+          <button class="lb-close" type="button" aria-label="Close">✕</button>
+        </div>
+        <div class="about-body">
+          <div class="about-section">
+            <h3>How to Play</h3>
+            <p>Explore the forest and hunt gems. Each hunt rolls a rarity based
+               on your <strong>tool tier</strong> and <strong>skill level</strong>.
+               Common gems can be bought; <strong>Rare and above are hunt-only</strong>.
+               Settle hunts on-chain to record them, then redeem gems for $DEEPWOOD.</p>
+          </div>
+          <div class="about-section">
+            <h3>Tools</h3>
+            <table class="about-table">
+              <tr><th>Tier</th><th>Cost ($DEEPWOOD)</th><th>Durability</th></tr>
+              <tr><td>Wood</td><td>200,000</td><td>20 hunts</td></tr>
+              <tr><td>Bronze</td><td>5,000,000</td><td>25 hunts</td></tr>
+              <tr><td>Silver</td><td>20,000,000</td><td>30 hunts</td></tr>
+              <tr><td>Gold</td><td>50,000,000</td><td>35 hunts</td></tr>
+              <tr><td>Mithril</td><td>150,000,000</td><td>40 hunts</td></tr>
+            </table>
+            <p class="about-note">Repair tools with gems — no ETH repair path.</p>
+          </div>
+          <div class="about-section">
+            <h3>Skills</h3>
+            <table class="about-table">
+              <tr><th>Level</th><th>Cost (Quartz)</th><th>Unlocks</th></tr>
+              <tr><td>Greenhorn</td><td>Free</td><td>Quartz</td></tr>
+              <tr><td>Prospector</td><td>20</td><td>Amber</td></tr>
+              <tr><td>Delver</td><td>40</td><td>Sapphire</td></tr>
+              <tr><td>Assayer</td><td>60</td><td>Ruby</td></tr>
+              <tr><td>Lapidary</td><td>80</td><td>Diamond</td></tr>
+            </table>
+            <p class="about-note">Skill raises the ceiling on what you can find.</p>
+          </div>
+          <div class="about-section">
+            <h3>Gem Redemption</h3>
+            <p>Redeem gems for $DEEPWOOD at <strong>90%</strong> of face value.
+               Minimum redemption: <strong>20,000 DEEPWOOD</strong>.
+               A 5% burn fee applies on all redemptions.</p>
+          </div>
+        </div>
+        <div class="about-footer">
+          <a href="https://x.com/deepwoodrh" target="_blank" rel="noopener">X / Twitter</a>
+          <a href="https://t.me/deepwoodann" target="_blank" rel="noopener">Telegram</a>
+        </div>
+      </div>`;
+    this._aboutCardEl = el;
+    document.body.appendChild(el);
+    el.querySelector('.lb-close').addEventListener('click', () => this.closeAboutCard());
+    el.addEventListener('pointerdown', (ev) => { if (ev.target === el) this.closeAboutCard(); });
+  }
+
+  closeAboutCard() {
+    if (this._aboutCardEl) {
+      this._aboutCardEl.remove();
+      this._aboutCardEl = null;
+    }
+  }
+
   openRedeemCard() {
     if (!this._redeemCard) {
       this._redeemCard = createRedeemCard({

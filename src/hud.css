@@ -1144,6 +1144,71 @@ button.chip { position: relative; }
 /* ---- season leaderboard ---- */
 /* The trigger is an .icon-btn now (see the icon button block above), so only
    the overlay needs styling here. */
+/* About Game panel — reuses .lb-overlay/.lb-panel for the same 75vw×75vh card */
+.about-body {
+  overflow-y: auto;
+  padding: var(--s2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+.about-section h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #c4b5fd;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.about-section p {
+  margin: 0;
+  font-size: 12.5px;
+  color: #b8c4b0;
+  line-height: 1.5;
+}
+.about-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 6px 0;
+  font-size: 12px;
+}
+.about-table th {
+  text-align: left;
+  color: #9d92c4;
+  font-weight: 600;
+  padding: 3px 8px 3px 0;
+  border-bottom: 1px solid #2a1a4a;
+}
+.about-table td {
+  padding: 3px 8px 3px 0;
+  color: #b8c4b0;
+}
+.about-note {
+  font-size: 11px !important;
+  color: #9d92c4 !important;
+  font-style: italic;
+  margin-top: 4px !important;
+}
+.about-footer {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  padding: var(--s2) 0 var(--s1);
+  border-top: 1px solid #2a1a4a;
+  margin-top: auto;
+}
+.about-footer a {
+  color: #c4b5fd;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  transition: color 0.15s;
+}
+.about-footer a:hover {
+  color: #e0d4ff;
+  text-decoration: underline;
+}
 .lb-overlay { font-family: inherit; color: #e8f0e0; }
 .lb-panel {
   background: linear-gradient(180deg, #1a0a2e 0%, #0d1a10 100%);

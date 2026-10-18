@@ -805,6 +805,7 @@
         '<div class="wm-box">' +
           '<button class="wm-item" type="button" id="wm-leaderboard">Leaderboard</button>' +
           '<button class="wm-item" type="button" id="wm-redeem">Redeem gems</button>' +
+          '<button class="wm-item" type="button" id="wm-about">About Game</button>' +
         '</div>' +
         '<button class="wm-item wm-disconnect" type="button">Disconnect</button>';
       // Append the menu to the button and DO NOT touch its position.
@@ -831,6 +832,18 @@
           scene.toggleLeaderboard();
         } else {
           setPending('Leaderboard is not ready yet — try again in a moment.');
+        }
+      });
+
+      // About Game — opens the about panel.
+      walletMenu.querySelector('#wm-about').addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeWalletMenu();
+        const scene = window.__scene || window.__game?.scene;
+        if (scene && typeof scene.openAboutCard === 'function') {
+          scene.openAboutCard();
+        } else {
+          setPending('About panel is not ready yet — try again in a moment.');
         }
       });
 
