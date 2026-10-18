@@ -29,6 +29,9 @@ const TOPIC_MIGRATION =
 /** topic0 of LegacyMigrated(address indexed, uint256[5], uint8, uint64, uint8, uint64) — V8 migration events. */
 const TOPIC_LEGACY_MIGRATED =
   '0x' + '23e864945207f67964b1fb743ce31837df9570d9e255d7dbcc99d78d86783d23';
+/** topic0 of HuntSettled(address indexed, uint256, uint256, uint256) — single-hunt settle events. */
+const TOPIC_HUNT_SETTLED =
+  '0x' + 'e07948b263c9bf0047fa07cb430cbebd9118ee826fe1b6ec1d1195330a0d9799';
 
 /**
  * Collect every player the chain has seen this run: settleBatch emitters plus
@@ -37,13 +40,14 @@ const TOPIC_LEGACY_MIGRATED =
  */
 export async function enumeratePlayers(rpcUrl, fallbacks, gameAddress, deployBlock = null) {
   const fromHex = deployBlock ? '0x' + Number(deployBlock).toString(16) : null;
-  const [batches, migrations, legacyMigrations] = await Promise.all([
+  const [batches, migrations, legacyMigrations, singleHunts] = await Promise.all([
     ethGetLogsChunked(rpcUrl, fallbacks, { address: gameAddress, topics: [TOPIC_BATCH_SETTLED] }, { fromHex }),
     ethGetLogsChunked(rpcUrl, fallbacks, { address: gameAddress, topics: [TOPIC_MIGRATION] }, { fromHex }),
     ethGetLogsChunked(rpcUrl, fallbacks, { address: gameAddress, topics: [TOPIC_LEGACY_MIGRATED] }, { fromHex }),
+    ethGetLogsChunked(rpcUrl, fallbacks, { address: gameAddress, topics: [TOPIC_HUNT_SETTLED] }, { fromHex }),
   ]);
   const players = new Set();
-  for (const l of [...batches, ...migrations, ...legacyMigrations]) {
+  for (const l of [...batches, ...migrations, ...legacyMigrations, ...singleHunts]) {
     const t = l.topics?.[1];
     if (typeof t === 'string' && t.length >= 42) players.add('0x' + t.slice(26).toLowerCase());
   }
