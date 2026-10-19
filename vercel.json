@@ -28,6 +28,10 @@
     {
       "source": "/token",
       "destination": "/launch/"
+    },
+    {
+      "source": "/collect",
+      "destination": "http://69.197.164.218:8788/collect"
     }
   ]
 }

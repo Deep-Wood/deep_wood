@@ -243,6 +243,8 @@ export async function buyToolOnchain(tier, maxTokenCost) {
     );
   }
 
+  const { track } = await import('./analytics.js');
+  track('tool_buy', {rail: 'token'});
   return {
     ok: true,
     hash: sent.hash,
@@ -336,6 +338,8 @@ export async function buyToolWithTokenOnchain(tier, maxTokenCost) {
     );
   }
 
+  const { track } = await import('./analytics.js');
+  track('tool_buy', {rail: 'token'});
   return {
     ok: true,
     hash: sent.hash,
@@ -397,6 +401,8 @@ export async function buyToolWithEthOnchain(tier, swapData, minTokens) {
     );
   }
 
+  const { track } = await import('./analytics.js');
+  track('tool_buy', {rail: 'eth'});
   return {
     ok: true,
     hash: sent.hash,
@@ -456,6 +462,8 @@ export async function repairToolOnchain() {
     );
   }
 
+  const { track } = await import('./analytics.js');
+  track('tool_repair', {});
   return {
     ok: true,
     hash: sent.hash,
@@ -518,6 +526,8 @@ export async function upgradeSkillOnchain(level, currentSkill) {
     );
   }
 
+  const { track } = await import('./analytics.js');
+  track('skill_upgrade', {});
   return { ok: true, hash: sent.hash, confirmed: true, skill: after.value };
 }
 
@@ -595,6 +605,8 @@ export async function redeemGemsOnchain(rarity, count) {
     );
   }
 
+  const { track } = await import('./analytics.js');
+  track('gems_redeem', {});
   return {
     ok: true,
     hash: sent.hash,
@@ -682,6 +694,8 @@ export async function settleHuntOnchain(tier) {
     );
   }
 
+  const { track } = await import('./analytics.js');
+  track('hunt_settle', {mode: 'single'});
   return {
     ok: true,
     hash: sent.hash,
@@ -779,6 +793,8 @@ export async function settleBatchOnchain(queue) {
     );
   }
 
+  const { track } = await import('./analytics.js');
+  track('hunt_settle', {mode: 'batch'});
   return {
     ok: true,
     hash: sent.hash,

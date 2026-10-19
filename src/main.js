@@ -54,6 +54,9 @@ const config = {
 
 const game = new Phaser.Game(config);
 
+// Count boots, not loads: this line runs only when the renderer actually stood up.
+import('./analytics.js').then(({ trackOnce }) => trackOnce('pageview'));
+
 // First-run tutorial. DOM-only, so it can go up before/independent of the
 // scene; a click on the card advances, skip dismisses the whole thing, and
 // localStorage remembers the dismissal. Shown once the canvas exists so the

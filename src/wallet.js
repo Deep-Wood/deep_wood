@@ -647,6 +647,7 @@ export async function connect({ provider, silent = false } = {}) {
         connected: false,
       };
     }
+    import('./analytics.js').then(({ track }) => track('wallet_connect'));
     return { ok: true, ...snap };
   } catch (e) {
     const code = errCode(e);

@@ -1309,6 +1309,7 @@ export class ForestScene extends Phaser.Scene {
   async openLeaderboard(gen) {
     if (this.leaderboardOpen) return;
     this.leaderboardOpen = true;
+    import('./analytics.js').then(({ track }) => track('leaderboard_view'));
     if (gen === undefined) gen = (this.lbGen = (this.lbGen ?? 0) + 1);
     this.releaseTouch();
 
