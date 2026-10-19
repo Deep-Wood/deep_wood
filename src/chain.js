@@ -859,7 +859,7 @@ export async function getAllowance(rpcUrl, fallbackRpcUrls, tokenAddress, owner,
 }
 
 /**
- * Buy tool with $DEEPWOOD token at 10% discount.
+ * Buy tool with $DEEPWOOD token at the on-chain price (V6+: no discount).
  * V6: buyToolWithToken(uint8,uint256) -- 2 args (tier, maxTokenCost).
  * Returns a transaction to be signed by the wallet.
  */

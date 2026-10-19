@@ -1629,8 +1629,8 @@ export class ForestScene extends Phaser.Scene {
         const shortToken = tokenCost > 0
           ? (Number(tokenCost) / 1e18).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
           : '???';
-        optToken.textContent = 'Pay DeepWood (10% off)';
-        optToken.title = `pay ~${shortToken} $DEEPWOOD (10% discount)`;
+        optToken.textContent = 'Pay DeepWood';
+        optToken.title = `pay ~${shortToken} $DEEPWOOD`;
         optToken.onclick = (e) => {
           e.stopPropagation(); closeBuyDropdown();
           const dwBalance = this._deepwoodBalance ?? 0n;
@@ -2077,22 +2077,23 @@ export class ForestScene extends Phaser.Scene {
    * Estimate the token cost for buying a tool tier, using the on-chain price.
    * Returns DEEPWOOD (18 decimals) or 0 if price is unavailable.
    *
-   * V6: toolCost(tier) returns the price directly in DEEPWOOD. The token buy
-   * gets a 10% discount, so the cost is toolCost(tier) * 9000 / 10000.
+   * V6: toolCost(tier) returns the price directly in DEEPWOOD. V6+ charges
+   * the full price for token buys (the V4/V5 10% discount is gone), so the
+   * cost is toolCost(tier) exactly.
    */
   async estimateTokenCost(tier) {
     try {
       const reader = await getReader();
       if (!reader) return 0n;
       const cost = await reader.toolCost(tier);
-      return (cost * 9000n) / 10000n;
+      return cost;
     } catch {
       return 0n;
     }
   }
 
   /**
-   * Buy tool with $DEEPWOOD token at 10% discount.
+   * Buy tool with $DEEPWOOD token at the on-chain price (no discount in V6+).
    * Flow: get quote → user accepts → sign tx → wait for confirmation.
    */
   async doBuyToolWithToken(tier) {
@@ -2125,8 +2126,10 @@ export class ForestScene extends Phaser.Scene {
     const reader = await getReader();
     if (!reader) { this.beltMsg('chain not configured', 'bad'); return; }
     const cost = await reader.toolCost(tier);
-    // V6: toolCost returns DEEPWOOD directly. Token buy has a 10% discount.
-    const tokenCost = (cost * 9000n) / 10000n;
+    // V6: toolCost returns DEEPWOOD directly; V6+ charges it in full.
+    // The old 10% discount is what made tier-2 buys revert AboveMaxCost:
+    // quote 4.5M but contract charges 5M.
+    const tokenCost = cost;
     // Use the live connected account from getState(), NOT this.wallet:
     // this.wallet is a Phaser property set by the wallet-sync and can be
     // stale/undefined mid-flight.
@@ -2346,7 +2349,6 @@ export class ForestScene extends Phaser.Scene {
         <div class="quote-card">
           <h3>Buy ${toolName(tier)} with $DEEPWOOD</h3>
           <p>Token cost: <strong>${tokenCost} $DEEPWOOD</strong></p>
-          <p>Discount: <strong>10% off</strong></p>
           <p>Quote expires in: <strong>${expiresIn}s</strong></p>
           <div class="quote-actions">
             <button class="chip btn act" id="quote-accept">Accept</button>
