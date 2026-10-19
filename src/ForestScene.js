@@ -2785,6 +2785,11 @@ export class ForestScene extends Phaser.Scene {
           if (res.ok) {
             // The chain moved; pull the authoritative balances back so the
             // satchel, the strip and the card all agree with it.
+            // refreshChainBalance only covers the WALLET (the payout side).
+            // The gemstrip paints from econ.gems, which only refreshChainGems
+            // re-reads -- without it the tiles kept showing the
+            // pre-redemption counts until a hard refresh.
+            await this.refreshChainGems();
             await this.refreshChainBalance();
             this.refreshBelt();
             window.renderGems?.(); window.renderHunter?.();
@@ -2812,6 +2817,10 @@ export class ForestScene extends Phaser.Scene {
       const res = await upgradeSkillOnchain(level, currentSkill);
       if (res.ok) {
         this.beltMsg(`You are now a ${skillName(level)} — ${skillSubtitle(level)}`, 'ok');
+        // The upgrade BURNS quartz on chain; without refreshChainGems the
+        // gemstrip kept the pre-upgrade count (same stale-mirror class as the
+        // redemption path).
+        await this.refreshChainGems();
         await this.refreshChainBalance();
         this.refreshBelt();
         window.renderGems?.(); window.renderHunter?.();
