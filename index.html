@@ -240,6 +240,36 @@
       </div>
     </div>
 
+    <!-- CAMP CARD: streak, daily quests, badges -- all derived from
+         on-chain deltas (huntIndex / gemsOf / playerStats) so nothing here
+         can be faked from storage. Opened by the Camp chip in the HUD. -->
+    <div id="camp-card" class="camp-card hidden" role="dialog" aria-modal="true" aria-label="Camp: streak, daily quests, badges">
+      <div class="redeem-head">
+        <span class="redeem-title">Camp</span>
+        <button type="button" class="redeem-x" id="camp-close" aria-label="Close">&#215;</button>
+      </div>
+      <div class="redeem-body">
+        <div class="camp-streak-row">
+          <div class="camp-flame-big" id="camp-streak"><b>0</b><span>days</span></div>
+          <div class="camp-streak-copy">
+            <div class="camp-streak-title" id="camp-streak-title">No streak yet</div>
+            <div class="camp-streak-next" id="camp-streak-next"></div>
+          </div>
+        </div>
+
+        <div class="redeem-label">Daily quests <span class="camp-utc">resets 00:00 UTC</span></div>
+        <div class="camp-quests" id="camp-quests"></div>
+
+        <div class="redeem-label">Trophies <span class="camp-badge-count" id="camp-badge-count">0/0</span></div>
+        <div class="camp-badges" id="camp-badges"></div>
+      </div>
+    </div>
+
+    <!-- CELEBRATION + TOASTS: Lucky Strike fires on a Sapphire-or-better
+         settled find; badge/streak toasts live bottom-right. -->
+    <div id="strike-overlay" class="strike-overlay hidden" aria-hidden="true"></div>
+    <div id="badge-toasts" class="badge-toasts" aria-live="polite"></div>
+
     <!-- REDEMPTION CARD: pick ONE rarity and an amount, redeem it for
          $DEEPWOOD. Opened by the "sell gems" rail action. The contract redeems
          a single rarity per call, so the card is single-rarity by design: a
@@ -304,6 +334,14 @@
   </div>
 
         <div id="hint" class="chip"></div>
+
+        <!-- CAMP: the engagement pack's door. Streak flame + trophy count
+             live in the chip; the card (below) holds quests + badges. All
+             numbers derive from on-chain deltas -- see src/engagement.js. -->
+        <button type="button" class="chip camp-btn" id="camp-btn" aria-label="Open the camp: streak, daily quests, badges" title="Streak, daily quests, badges">
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M12 3 2 20h6l4-8 4 8h6L12 3Z" fill="currentColor"/></svg><span>Camp</span>
+          <span class="camp-flame" id="camp-btn-flame"></span>
+        </button>
 
   <!-- Error reporting installed FIRST, before any other module runs, so it
        captures throws from the game boot as well as from the HUD below.

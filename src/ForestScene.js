@@ -1987,6 +1987,7 @@ export class ForestScene extends Phaser.Scene {
     // balance. Same class of bug as the stale tool: the mirror was written from
     // one side of an action and never from the chain's own state.
     await this.refreshChainGems();
+    void this.engagementSync();
 
     this.refreshBelt();
     this.updateHud();
@@ -2058,6 +2059,102 @@ export class ForestScene extends Phaser.Scene {
   }
 
   /** Refresh the on-chain balance. Safe to call often; failures leave it null. */
+  /**
+   * Engagement pack sync: streaks, daily quests, badges.
+   *
+   * Every number derives from on-chain deltas since the UTC day's first
+   * sample: huntIndex moves only on settles, gemsBurned moves only on
+   * repairs/skills. localStorage (dw-engagement) is a CACHE -- the chain is
+   * the authority, and a wiped cache re-derives everything except the
+   * "already toasted" flags. Never grants anything the chain did not.
+   */
+  async engagementSync() {
+    try {
+      if (!onchainActive()) return;
+      const { getReader } = await import('./onchain.js');
+      const { getState } = await import('./wallet.js');
+      const {
+        loadState, saveState, utcDay, markActive, currentStreak, deriveQuests,
+        evalBadges, streakTier,
+      } = await import('./engagement.js');
+      const { createCamp, badgeToast, streakToast } = await import('./camp.js');
+      if (!this._camp) {
+        this._camp = createCamp({
+          readEngagement: () => this._eng,
+          readBadges: () => this._eng?.badges ?? [],
+          onOpen: () => { import('./analytics.js').then(({ track }) => track('camp_open')); },
+        });
+      }
+      const r = await getReader();
+      const { account } = getState();
+      if (!r || !account) return;
+
+      const today = utcDay();
+      const state = loadState(window.localStorage) ;
+      const [huntIdx, amber, stats, onBoard] = await Promise.all([
+        r.huntIndexOf(account),
+        r.gemsOf(account, 1),
+        r.playerStats(account),
+        r.onRoiBoard(account).catch(() => false),
+      ]);
+      const burned = stats ? stats.burned : 0n;
+
+      // First sample of a UTC day freezes the baseline. If the player dug
+      // earlier today on another device, that progress folds into the
+      // baseline: deltas undercount but never lie. Documented trade.
+      if (!state.baseline || state.baseline.day !== today) {
+        state.baseline = { day: today, huntIndex: String(huntIdx), amber: String(amber), burned: String(burned) };
+      }
+      const b = state.baseline;
+      const digs = Math.max(0, Number(BigInt(huntIdx) - BigInt(b.huntIndex)));
+      const amberToday = Math.max(0, Number(BigInt(amber) - BigInt(b.amber)));
+      const burnedToday = Math.max(0, Number(BigInt(burned) - BigInt(b.burned)));
+
+      // Streak: a settled dig is the day's activity unit.
+      const newDay = digs > 0 ? markActive(state, today) : false;
+      const streak = currentStreak(state, today);
+      if (streak > state.best) state.best = streak;
+
+      // Badges: evaluated from the live snapshot, toasted once.
+      const badges = evalBadges({
+        gems: this.econ.gems ?? [0n, 0n, 0n, 0n, 0n],
+        tier: this.econ.tier ?? 0,
+        skill: this.econ.skill ?? 0,
+        totalEarned: stats ? Number(stats.totalEarned) : 0,
+        onRoiBoard: onBoard === true,
+        streak,
+      });
+      for (const id of badges) {
+        if (!state.badgesSeen.includes(id)) {
+          state.badgesSeen.push(id);
+          const def = (await import('./engagement.js')).BADGES.find((x) => x.id === id);
+          if (def) {
+            badgeToast(def);
+            import('./analytics.js').then(({ track }) => track('badge_unlocked', { badge: id }));
+          }
+        }
+      }
+      const prevTierDay = state.lastStreakTier ?? 0;
+      const tier = streakTier(streak);
+      if (newDay && tier && tier.d > prevTierDay) {
+        streakToast(streak, tier.title);
+        import('./analytics.js').then(({ track }) => track('streak_day', { days: streak }));
+      }
+      if (tier) state.lastStreakTier = tier.d;
+
+      saveState(state, window.localStorage);
+      this._eng = {
+        streak, badges,
+        quests: deriveQuests({ digs, amber: amberToday, burned: burnedToday }),
+        deltas: { digs, amber: amberToday, burned: burnedToday },
+        baselineDay: today,
+      };
+      this._camp?.render?.();
+    } catch {
+      // engagement must never break the game: a failed read = no camp update
+    }
+  }
+
   async refreshChainBalance() {
     if (!onchainActive()) return;
     const b = await walletBalanceWeiOnchain();
@@ -2573,6 +2670,16 @@ export class ForestScene extends Phaser.Scene {
       await this.refreshChainTool();
       return;
     }
+    // Capture the haul for the celebration BEFORE the queue is dropped:
+    // these are the chain-authorized rolls that just became real.
+    const haulCounts = [0n, 0n, 0n, 0n, 0n];
+    let haulBest = -1;
+    for (const e of this.queue.entries) {
+      for (let i = 0; i < 5; i++) {
+        haulCounts[i] += BigInt(e.counts[i] ?? 0n);
+        if (BigInt(e.counts[i] ?? 0n) > 0n && i > haulBest) haulBest = i;
+      }
+    }
     // The contract banked the batch: adopt its balances, record the whole
     // batch on the season board in one entry, drop the queue, and repaint
     // so satchel + "n pending" badge and tool all show the post-settle truth.
@@ -2591,6 +2698,26 @@ export class ForestScene extends Phaser.Scene {
     // belt shows stale values until the next dig/buy/repair happens to trigger it.
     this.refreshBelt();
     this.updateHud();
+
+    // Engagement pack: celebrate rare finds, then re-derive streak/quests
+    // from the moved huntIndex. The tease reads the NEXT dig's pre-roll --
+    // public on-chain data -- and only whispers for Ruby or better.
+    try {
+      const { celebrateLuckyStrike, veinTease } = await import('./camp.js');
+      const struck = celebrateLuckyStrike({ counts: haulCounts, best: haulBest });
+      if (struck != null) {
+        import('./analytics.js').then(({ track }) => track('lucky_strike', { rarity: struck }));
+        import('./audio.js').then(({ playReveal }) => playReveal(struck));
+        this.cameras.main.shake(240, 0.0045);
+      }
+      const next = await (await import('./onchain.js')).previewHuntFor(this.econ.tier);
+      if (next?.counts) {
+        let nr = -1;
+        for (let i = 4; i >= 0; i--) if (BigInt(next.counts[i] ?? 0n) > 0n) { nr = i; break; }
+        veinTease(nr);
+      }
+    } catch { /* celebration is decoration; never fatal */ }
+    await this.engagementSync();
   }
 
   async _doRepair() {
@@ -2616,6 +2743,7 @@ export class ForestScene extends Phaser.Scene {
       this.refreshBelt();
       window.renderGems?.(); window.renderHunter?.();
       this.updateHud();
+      void this.engagementSync();
       return;
     }
 
@@ -2825,6 +2953,7 @@ export class ForestScene extends Phaser.Scene {
         this.refreshBelt();
         window.renderGems?.(); window.renderHunter?.();
         this.updateHud();
+        void this.engagementSync();
       } else {
         this.beltMsg(res.reason || 'Skill upgrade failed', 'bad');
       }
