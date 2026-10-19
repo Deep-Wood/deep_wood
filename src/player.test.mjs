@@ -145,18 +145,18 @@ test('a tool must be broken before it can be repaired', () => {
 test('repair costs gems and restores full durability', () => {
   const p = withTool(1);
   p.left = 0;
-  creditGems(p, [9, 0, 0, 0, 0]);
+  creditGems(p, [5, 0, 0, 0, 0]);
   const res = repairTool(p);
   assert.ok(res.ok);
   assert.equal(p.left, 20);
   assert.deepEqual(p.gems, [0, 0, 0, 0, 0], 'the gems are spent');
-  assert.equal(p.burned, 9);
+  assert.equal(p.burned, 5);
 });
 
 test('repair names the gems you are short of', () => {
   const p = withTool(1);
   p.left = 0;
-  creditGems(p, [4, 0, 0, 0, 0]);
+  creditGems(p, [0, 0, 0, 0, 0]);
   const chk = canRepair(p);
   assert.equal(chk.ok, false);
   assert.match(chk.reason, /Need 5 Q/);
@@ -166,7 +166,7 @@ test('repair names the gems you are short of', () => {
 test('repair refuses a partially-paid cost rather than taking what it can', () => {
   const p = withTool(3);
   p.left = 0;
-  creditGems(p, [6, 5, 2, 0, 0]); // one Sapphire short
+  creditGems(p, [3, 3, 0, 0, 0]); // one Sapphire short of 3Q+3A+1S
   const before = p.gems.slice();
   assert.equal(repairTool(p).ok, false);
   assert.deepEqual(p.gems, before, 'a refused repair must not debit anything');
@@ -264,8 +264,8 @@ test('creditGems adds to the spendable balance only', () => {
 });
 
 test('repairNeeds matches the tier table', () => {
-  assert.deepEqual(repairNeeds(withTool(1)), [9, 0, 0, 0, 0]);
-  assert.deepEqual(repairNeeds(withTool(5)), [12, 10, 8, 4, 0]);
+  assert.deepEqual(repairNeeds(withTool(1)), [5, 0, 0, 0, 0]);
+  assert.deepEqual(repairNeeds(withTool(5)), [5, 5, 4, 2, 0]);
 });
 
 // --- BigInt gem counts (chain sync) -----------------------------------------
@@ -279,20 +279,20 @@ test('repairNeeds matches the tier table', () => {
 test('repair math survives BigInt gem counts', () => {
   const p = withTool(1);
   p.left = 0;
-  p.gems = [9n, 0n, 0n, 0n, 0n];          // exactly enough, as the chain reports
+  p.gems = [5n, 0n, 0n, 0n, 0n];          // exactly enough, as the chain reports
   assert.deepEqual(repairShortfall(p), [0, 0, 0, 0, 0]);
   assert.equal(canRepair(p).ok, true);
   const r = repairTool(p);
   assert.equal(r.ok, true);
   assert.deepEqual(p.gems, [0n, 0n, 0n, 0n, 0n], 'a debit must keep the BigInt type');
-  assert.equal(p.burned, 9);
+  assert.equal(p.burned, 5);
   assert.equal(p.left, p.max);
 });
 
 test('repair shortfall is named when gems are BigInt', () => {
   const p = withTool(1);
   p.left = 0;
-  p.gems = [5n, 0n, 0n, 0n, 0n];          // four Quartz short
+  p.gems = [1n, 0n, 0n, 0n, 0n];          // four Quartz short
   assert.deepEqual(repairShortfall(p), [4, 0, 0, 0, 0]);
   assert.match(canRepair(p).reason, /Need 4 Q/);
 });

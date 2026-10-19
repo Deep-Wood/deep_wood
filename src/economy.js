@@ -181,14 +181,24 @@ export function treasuryFee(wei) {
  * the long-play goal (SPEC section 5).
  */
 export const REPAIR_COST = {
-  1: [9, 0, 0, 0, 0],
-  2: [5, 4, 0, 0, 0],
-  3: [6, 5, 3, 0, 0],
-  4: [6, 5, 3, 0, 0],
-  5: [12, 10, 8, 4, 0],
+  1: [5, 0, 0, 0, 0],
+  2: [3, 2, 0, 0, 0],
+  3: [3, 3, 1, 0, 0],
+  4: [3, 3, 2, 0, 0],
+  5: [5, 5, 4, 2, 0],
 };
 
 export function repairCost(tier) {
+  // Prefer the LIVE owner-settable table -- readLivePrices() populates it from
+  // the contract at boot, so a retuned chain shows up without a client deploy.
+  // The static REPAIR_COST above is only the pre-read fallback, and it is the
+  // CONTRACT'S SHIPPED DEFAULTS, not a design document. Until 2026-10-19 this
+  // function returned the old V4/V5 design ladder (9 / 5+4 / 6+5+3 / ...),
+  // so the repair dialog displayed costs the chain never charged: a Bronze
+  // repair showed "5 Quartz + 4 Amber" while the contract deducted 3Q + 2A
+  // (ToolRepaired event, total gemsBurned = 5, on-chain deltas verified).
+  const live = LIVE_REPAIR_COST_TABLE[tier - 1];
+  if (live) return live.map(Number);
   return REPAIR_COST[tier] ?? [0, 0, 0, 0, 0];
 }
 

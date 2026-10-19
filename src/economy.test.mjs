@@ -110,11 +110,16 @@ test('tool prices rise with tier', () => {
 // --- section 5: repair costs -------------------------------------------------
 
 test('repair costs are the scaled ladder', () => {
-  assert.deepEqual(REPAIR_COST[1], [9, 0, 0, 0, 0]);
-  assert.deepEqual(REPAIR_COST[2], [5, 4, 0, 0, 0]);
-  assert.deepEqual(REPAIR_COST[3], [6, 5, 3, 0, 0]);
-  assert.deepEqual(REPAIR_COST[4], [6, 5, 3, 0, 0]);
-  assert.deepEqual(REPAIR_COST[5], [12, 10, 8, 4, 0]);
+  // Pinned to the CONTRACT'S shipped defaults (V6-lineage constructor), the
+  // same values the chain charges live. The old V4/V5 design ladder (9 / 5+4 /
+  // 6+5+3 / 6+5+3 / 12+10+8+4) lived here through three deploys and made the
+  // repair dialog display costs the chain never charged. Reconciled
+  // 2026-10-19 against V9 (0x8c69...52ac6).
+  assert.deepEqual(REPAIR_COST[1], [5, 0, 0, 0, 0]);
+  assert.deepEqual(REPAIR_COST[2], [3, 2, 0, 0, 0]);
+  assert.deepEqual(REPAIR_COST[3], [3, 3, 1, 0, 0]);
+  assert.deepEqual(REPAIR_COST[4], [3, 3, 2, 0, 0]);
+  assert.deepEqual(REPAIR_COST[5], [5, 5, 4, 2, 0]);
 });
 
 test('repair never requires a rarity the tier cannot find', () => {
@@ -214,8 +219,12 @@ test('fmtEth trims trailing zeros', () => {
 });
 
 test('fmtRepair renders short labels', () => {
-  assert.equal(fmtRepair(1), '9Qtz');
-  assert.equal(fmtRepair(2), '5Qtz + 4Amb');
+  // Pinned to the chain's live table (V9): Wood 5Q, Bronze 3Q+2A. These are
+  // the strings players actually see on the belt chip -- the old values here
+  // ('9Qtz', '5Qtz + 4Amb') are what made the repair UI display costs the
+  // contract never charged.
+  assert.equal(fmtRepair(1), '5Qtz');
+  assert.equal(fmtRepair(2), '3Qtz + 2Amb');
 });
 // --- skill titles (the craft ladder) --------------------------------------
 
