@@ -1611,7 +1611,16 @@ export class ForestScene extends Phaser.Scene {
         optEth.type = 'button';
         optEth.textContent = 'Pay ETH';
         optEth.title = `pay ${fmtEth(cost)}`;
-        optEth.onclick = (e) => { e.stopPropagation(); closeBuyDropdown(); this.doBuyToolWithEth(nt); };
+        optEth.onclick = (e) => {
+          e.stopPropagation(); closeBuyDropdown();
+          const ethBalance = this.simBalance;
+          const ethCost = toolPrice(nt);
+          if (ethBalance < ethCost) {
+            this.beltMsg(`Not enough ETH (need ${(Number(ethCost)/1e18).toFixed(2)}, have ${(Number(ethBalance)/1e18).toFixed(2)})`, 'bad');
+            return;
+          }
+          this.doBuyToolWithEth(nt);
+        };
 
         const optToken = document.createElement('button');
         optToken.className = 'wm-item';
@@ -1622,7 +1631,16 @@ export class ForestScene extends Phaser.Scene {
           : '???';
         optToken.textContent = 'Pay DeepWood (10% off)';
         optToken.title = `pay ~${shortToken} $DEEPWOOD (10% discount)`;
-        optToken.onclick = (e) => { e.stopPropagation(); closeBuyDropdown(); this.doBuyToolWithToken(nt); };
+        optToken.onclick = (e) => {
+          e.stopPropagation(); closeBuyDropdown();
+          const dwBalance = this._deepwoodBalance ?? 0n;
+          const dwCost = this.estimateTokenCost(nt);
+          if (dwBalance < dwCost) {
+            this.beltMsg(`Not enough $DEEPWOOD (need ${(Number(dwCost)/1e18).toFixed(2)}, have ${(Number(dwBalance)/1e18).toFixed(2)})`, 'bad');
+            return;
+          }
+          this.doBuyToolWithToken(nt);
+        };
 
         box.appendChild(mkRow(optEth, 'claim faucet', 'https://faucet.testnet.chain.robinhood.com', 'Get free Robinhood testnet ETH'));
         box.appendChild(mkRow(optToken, 'buy DeepWood', 'https://testnet.vibevibe.fun/token/0xF049d0076c2f25A763551beD760aB55e905ea831', 'Buy $DEEPWOOD on vibevibe.fun'));
@@ -1756,7 +1774,13 @@ export class ForestScene extends Phaser.Scene {
         skill.title = `Upgrade to ${nextName} — ${cost} Quartz, unlocks ${skillSubtitle(nextLevel)}`;
         skill.disabled = false;
       }
-      skill.onclick = () => this.doUpgradeSkill(nextLevel, curSkill);
+      skill.onclick = () => {
+        if (!affordable) {
+          this.beltMsg(`Not enough Quartz (need ${cost}, have ${have})`, 'bad');
+          return;
+        }
+        this.doUpgradeSkill(nextLevel, curSkill);
+      };
       this.decoratePending(skill);
       swrap.appendChild(skill);
       const slbl = document.createElement('span');
