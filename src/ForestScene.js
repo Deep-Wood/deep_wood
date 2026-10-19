@@ -2076,6 +2076,9 @@ export class ForestScene extends Phaser.Scene {
     this.txBusy = true;
     try {
       await this._doBuyToolWithToken(tier);
+    } catch (e) {
+      this.beltMsg(`Tool upgrade error: ${(e?.shortMessage || e?.message || 'unknown').slice(0, 120)}`, 'bad');
+      try { console.error('[deepwood] doBuyToolWithToken failed', e); } catch { /* ignore */ }
     } finally {
       this.txBusy = false;
     }
@@ -2359,6 +2362,9 @@ export class ForestScene extends Phaser.Scene {
     this.txBusy = true;
     try {
       await this._doBuyTool(tier);
+    } catch (e) {
+      this.beltMsg(`Tool upgrade error: ${(e?.shortMessage || e?.message || 'unknown').slice(0, 120)}`, 'bad');
+      try { console.error('[deepwood] doBuyTool failed', e); } catch { /* ignore */ }
     } finally {
       this.txBusy = false;
     }
