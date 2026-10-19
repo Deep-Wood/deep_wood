@@ -41,7 +41,7 @@ const STEPS = [
   },
   {
     title: "Buy / upgrade tool",
-    body: "Double-chevron icon on the left rail: buy your first tool, or upgrade to the next tier. Tap it and choose ETH or $DEEPWOOD. Next to each pay option there's a link for the testnet faucet or for buying $DEEPWOOD if you're short.",
+    body: "Double-chevron icon on the left rail: buy your first tool, or upgrade to the next tier. Tap it and choose ETH or $DEEPWOOD (10% off). Next to each pay option there's a link for the testnet faucet or for buying $DEEPWOOD if you're short.",
     target: "#belt-buy",
     pos: "right",
   },
