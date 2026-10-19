@@ -134,3 +134,29 @@ export function fmtToken(wei) {
   const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   return frac ? `${grouped}.${frac}` : grouped;
 }
+
+
+/**
+ * Bridge the reader's redeemQuote shape to the card's onQuote contract.
+ *
+ * The reader (chain.js) decodes raw ABI words and returns a plain
+ * [payoutBigInt, aboveFloorBool] ARRAY. The redeem card's onQuote contract
+ * is {tokens, aboveFloor} | null -- and that mismatch is exactly why the
+ * "You receive" estimate showed "--" forever: the card read `.tokens` off
+ * an array and got undefined. Accept the array shape, an ethers-Result-like
+ * with named fields, and a pre-shaped object; return null for garbage so
+ * the card keeps its "not loaded yet" behaviour instead of painting NaN.
+ *
+ * @param {[bigint, boolean] | {tokens?: bigint, aboveFloor?: boolean, payout?: bigint} | null} q
+ * @returns {{tokens: bigint, aboveFloor: boolean} | null}
+ */
+export function normalizeRedeemQuote(q) {
+  if (q == null) return null;
+  if (typeof q.tokens === 'bigint') return { tokens: q.tokens, aboveFloor: !!q.aboveFloor };
+  if (Array.isArray(q) || typeof q[0] !== 'undefined') {
+    if (typeof q[0] === 'bigint') return { tokens: q[0], aboveFloor: !!q[1] };
+    return null;
+  }
+  if (typeof q.payout === 'bigint') return { tokens: q.payout, aboveFloor: !!q.aboveFloor };
+  return null;
+}

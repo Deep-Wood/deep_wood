@@ -22,10 +22,16 @@ const RARITY_NAMES = ['Quartz', 'Amber', 'Sapphire', 'Ruby', 'Diamond'];
  * @param {() => boolean}  o.railActive    is token redemption open?
  * @param {(rarity:number, amount:number) => Promise<{ok:boolean, reason?:string, payout?:bigint}>} o.onRedeem
  * @param {(rarity:number, amount:number) => Promise<{tokens:bigint, aboveFloor:boolean}|null>} o.onQuote
+ * @param {() => Promise<{tier:number, name:string, needs:bigint[]}|null>} [o.onRepairNeeds]
+ *        The one-repair gem cost vector for the player's current tool, read
+ *        live from the contract table. Powers the repair-reserve warning:
+ *        redeeming below the repair cost of your own tier is ALLOWED (the
+ *        chain permits it) but warned about, because gems are the only way
+ *        to repair a broken tool.
  * @param {(msg:string, kind?:string) => void} [o.onStatus]
  */
 export function createRedeemCard({
-  getBalances, railActive, onRedeem, onQuote, onStatus,
+  getBalances, railActive, onRedeem, onQuote, onRepairNeeds, onStatus,
 }) {
   const card = document.getElementById('redeem-card');
   if (!card) return null;
@@ -60,6 +66,7 @@ export function createRedeemCard({
   let quoteTokens = null;
   let busy = false;
   let quoteSeq = 0; // guards against an out-of-order quote response
+  let repair = null; // {tier, name, needs:bigint[]} once the chain read lands
 
   const held = () => {
     const b = getBalances?.() ?? [];
@@ -135,9 +142,24 @@ export function createRedeemCard({
       held: held(), amount, quoteWei: quoteTokens, floorWei: null, railActive: railActive?.() ?? true,
     });
     elGo.disabled = busy || !st.ok;
-    elMsg.textContent = st.reason || '';
-    elMsg.className = `redeem-msg${st.ok ? '' : ' bad'}`;
     elQuote.textContent = quoteTokens == null ? '--' : fmtToken(quoteTokens);
+
+    // Repair-reserve warning. Not a gate: the chain allows redeeming down to
+    // zero, so the player is TOLD what a broken tool will cost them instead
+    // of being stopped. Only shown when nothing blocking applies, and only
+    // when the redemption would actually dip below the repair reserve for
+    // the selected rarity (e.g. Wood keeps 9 Quartz, Bronze keeps 5 Quartz
+    // + 4 Amber -- read live from the owner-settable table, never hardcoded).
+    let warn = null;
+    if (st.ok && repair && amount > 0n) {
+      const reserve = repair.needs?.[selected];
+      const remaining = held() - amount;
+      if (typeof reserve === 'bigint' && remaining < reserve) {
+        warn = `\u26A0 Leaves you ${remaining} ${RARITY_NAMES[selected]} -- a broken ${repair.name} needs ${reserve} to repair. Redeem anyway? You will not be able to repair until you earn more.`;
+      }
+    }
+    elMsg.textContent = warn || st.reason || '';
+    elMsg.className = `redeem-msg${st.ok ? '' : ' bad'}`; // warn shares the base amber colour
   }
 
   /**
@@ -169,6 +191,15 @@ export function createRedeemCard({
     busy = false;
     amount = 0;
     quoteTokens = null;
+    repair = null;
+    if (onRepairNeeds) {
+      // Fire-and-forget: a slow/failed read shows no warning, never a
+      // false one, and never blocks the card from opening.
+      onRepairNeeds().then((v) => {
+        repair = v;
+        render();
+      }).catch(() => { repair = null; });
+    }
     elInput.value = '';
     // Preselect the first rarity the player actually holds.
     const rows = rarityRows(getBalances?.() ?? []);

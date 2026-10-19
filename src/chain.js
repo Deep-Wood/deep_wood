@@ -53,6 +53,7 @@ export const SIGS = {
   'dropTableTiers(uint256,uint256)': '0x86acef0d',
   'skillCostTable(uint256)': '0x43bef434',
   'rarityWeightTable(uint256)': '0xc65bb3ba',
+  'repairNeedsOf(address)': '0x3230c11b',
   'maxBatch()': '0x67765b87',
   'redeemPayoutBpsStorage()': '0xfe250fa0',
   'endRun()': '0xa0bb62c5',
@@ -648,6 +649,12 @@ export async function connect({ rpcUrl, address, player, fallbackRpcUrls = [] })
     // The settlement confirmation signal: settleHunt increments this, so
     // poll-until-changed on it proves the chain applied the write.
     huntIndexOf: async (p = player) => dUint(await rpc.call(to, sel('huntIndexOf(address)') + argAddr(p))),
+    // The one-repair gem cost vector for the player's CURRENT tool tier
+    // (raw counts per rarity). Reverts for players with no tool, so callers
+    // must check toolOf().tier first -- the card uses it for the
+    // "keep enough to repair" warning.
+    repairNeedsOf: async (p = player) =>
+      wordsOf(await rpc.call(to, sel('repairNeedsOf(address)') + argAddr(p))),
     roi: async (p = player) => dUint(await rpc.call(to, sel('roi(address)') + argAddr(p))),
     onRoiBoard: async (p = player) => dBool(await rpc.call(to, sel('onRoiBoard(address)') + argAddr(p))),
     toolCount: async (p = player) => dUint(await rpc.call(to, sel('toolCount(address)') + argAddr(p))),

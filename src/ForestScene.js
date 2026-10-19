@@ -2749,9 +2749,35 @@ export class ForestScene extends Phaser.Scene {
         railActive: () => this._tokenRailActive === true,
         onQuote: async (rarity, amount) => {
           const { getReader } = await import('./onchain.js');
+          const { normalizeRedeemQuote } = await import('./redeem.js');
           const r = await getReader();
           if (!r?.redeemQuote) return null;
-          return r.redeemQuote(rarity, typeof amount === 'bigint' ? amount : BigInt(amount));
+          // The reader returns a raw [payout, aboveFloor] array -- normalize
+          // it to the {tokens, aboveFloor} the card expects, or the estimate
+          // reads undefined and the "You receive" line stays '--'.
+          return normalizeRedeemQuote(
+            await r.redeemQuote(rarity, typeof amount === 'bigint' ? amount : BigInt(amount))
+          );
+        },
+        // The one-repair gem cost vector for the player's current tool, for
+        // the "you will not be able to repair" warning. Null when the player
+        // holds no tool or the chain read fails -- the card then shows no
+        // warning, never a false one.
+        onRepairNeeds: async () => {
+          try {
+            const { getReader } = await import('./onchain.js');
+            const { getState } = await import('./wallet.js');
+            const r = await getReader();
+            const { account } = getState();
+            if (!r || !account) return null;
+            const t = await r.toolOf(account);
+            if (!t || !t.tier) return null;
+            const needs = await r.repairNeedsOf(account);
+            if (!Array.isArray(needs) && !needs?.length) return null;
+            return { tier: t.tier, name: toolName(t.tier), needs: Array.from(needs, (x) => BigInt(x)) };
+          } catch {
+            return null;
+          }
         },
         onRedeem: async (rarity, amount) => {
           const { redeemGemsOnchain } = await import('./onchain.js');

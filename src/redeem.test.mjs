@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import {
-  PERCENT_STEPS, percentAmount, clampAmount, rarityRows, redeemState, fmtToken,
+  PERCENT_STEPS, percentAmount, clampAmount, rarityRows, redeemState, fmtToken, normalizeRedeemQuote,
 } from './redeem.js';
 
 // The card's rules, pinned. Each of these guards a specific way the card can
@@ -157,4 +157,28 @@ test('every control that sets the amount also refreshes the quote', async () => 
     src.slice(inputIdx, inputIdx + 400).includes('refreshQuote()'),
     'the manual input must call refreshQuote()',
   );
+});
+
+
+// --- normalizeRedeemQuote: the estimate-shape bridge -----------------------
+// Regression: the reader returns a raw [payout, aboveFloor] array; the card
+// read `.tokens` off it and the "You receive" line showed '--' forever.
+test('normalizeRedeemQuote accepts the reader array shape', () => {
+  const q = normalizeRedeemQuote([450000000000000000000n, true]);
+  assert.equal(q.tokens, 450000000000000000000n);
+  assert.equal(q.aboveFloor, true);
+  assert.equal(normalizeRedeemQuote([0n, false]).aboveFloor, false);
+});
+
+test('normalizeRedeemQuote accepts named/object shapes and rejects garbage', () => {
+  assert.equal(normalizeRedeemQuote(null), null);
+  assert.equal(normalizeRedeemQuote(undefined), null);
+  assert.equal(normalizeRedeemQuote({}), null);
+  assert.equal(normalizeRedeemQuote(['not-a-bigint', true]), null);
+  const named = normalizeRedeemQuote({ tokens: 5n, aboveFloor: false });
+  assert.equal(named.tokens, 5n);
+  assert.equal(named.aboveFloor, false);
+  const payout = normalizeRedeemQuote({ payout: 7n, aboveFloor: true });
+  assert.equal(payout.tokens, 7n);
+  assert.equal(payout.aboveFloor, true);
 });
