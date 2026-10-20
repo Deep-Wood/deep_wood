@@ -32,19 +32,18 @@ _Primed by: production V9 deploy-day (discount restore, sweeps, UI fixes) + the 
 - Files: `src/engagement.js` (pure logic, 10 tests), `src/camp.js` (DOM),
   ForestScene wiring (`engagementSync()` + settle-path celebration/tease), DOM+CSS in
   `index.html` / `src/hud.css`.
-- **Cleanup PENDING**: `deepwood-preview.service` (:8789) is still up, serving the
-  OLD pre-merge preview build against the real V9 contract. Disable it and delete
-  `~/.hermes/profiles/hunter/preview/deepwood-engagement` once confirmed
-  (see post-merge cleanup below).
+- **Cleanup DONE (2026-10-20)**: `deepwood-preview.service` disabled and
+  stopped, port 8789 free; the stale build dir
+  (`~/.hermes/profiles/hunter/preview/deepwood-engagement`) and its 18MB
+  `build.tar.gz` deleted. The server code and certs stay in
+  `~/.hermes/profiles/hunter/preview/` in case a shareable preview is ever
+  wanted again.
 
-### Post-merge cleanup (the only remaining step)
-1. `systemctl --user disable --now deepwood-preview.service` and delete
-   `~/.hermes/profiles/hunter/preview/deepwood-engagement` — the preview is
-   obsolete now that production carries the pack. (Server code, if a preview is
-   ever wanted again: `~/.hermes/profiles/hunter/preview/preview_server.py`,
-   port 8789.)
+### Post-merge cleanup
+1. ~~Disable `deepwood-preview.service` and delete the preview build~~ —
+   done 2026-10-20 (above).
 2. Vercel previews stay login-walled (Deployment Protection); production is the
-   shareable link now, and the analytics 404 note below no longer applies to it.
+   shareable link now.
 
 ---
 
