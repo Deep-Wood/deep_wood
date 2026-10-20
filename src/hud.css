@@ -831,7 +831,10 @@ button.chip { position: relative; }
   justify-content: center;
   /* Two stacked rows: the five gem tallies on top, the current tool and
      skill below. Doubling the height of the original one-row card. */
-  gap: var(--s2);
+  /* The extra 10px in the gap balances the 10px the gem row was lifted toward
+     the brand (padding-top below), so row 2 -- and the divider the bar
+     buttons straddle -- stay exactly where they were. */
+  gap: calc(var(--s2) + 10px);
   /* Solid 3D lemon box. Lemon face + darker lemon base (the extruded lip) via
      a vertical gradient, rounded pill, warm outer glow, crisp 1px rim. */
   background: linear-gradient(180deg, #f2f56b 0%, #e3e33f 55%, #c9c62e 100%);
@@ -840,9 +843,11 @@ button.chip { position: relative; }
      bottom corners keep the pill's 12px radius. */
   border-radius: 0 0 12px 12px;
   /* Top padding = old HUD inset (12) + old drop below the brand row (64) +
-     old pill padding (7): the satchel rows paint at the exact screen y they
-     occupied when the pill floated, so only the bar behind them grew. */
-  padding: 83px 14px 7px;
+     old pill padding (7), minus the 10px the gem row was lifted toward the
+     PRESEASON wordmark: 84 -> 74 on wide screens. Row 2 does not move (see
+     the gap above), so the band's height and the bar buttons' flush fit
+     are unchanged. */
+  padding: 73px 14px 7px;
   box-shadow:
     0 3px 0 #a89f24,                 /* extruded 3D lip below the face */
     0 6px 14px rgba(0, 0, 0, .55),   /* drop shadow floating off the scene */
@@ -984,8 +989,10 @@ button.chip { position: relative; }
   #hud { grid-template-rows: minmax(120px, auto) auto; }
   #season { grid-column: 1; grid-row: 1; width: var(--rail); }
   /* The band's contents sit higher on phones: the old mobile drop was 48px,
-     so the same keep-rows-where-they-were padding is 12 + 48 + 7 = 67px. */
-  #gemstrip { padding-top: 67px; }
+     so the keep-rows-where-they-were padding was 12 + 48 + 7 = 67px. The gem
+     row is lifted the same 10px toward the wordmark as on wide screens:
+     68 -> 58, clearing the PRESEASON text (bottom 49) by 9px. */
+  #gemstrip { padding-top: 57px; }
   /* Bar buttons sit lower on phones: top 64 keeps the label flush with the
      band bottom (64+68=132). */
   #belt-actions .rail-action-item.order-buy,
