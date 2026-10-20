@@ -1,48 +1,50 @@
 # DeepWood — Engagement Roadmap & State
 
-_Last updated: 2026-10-19 (late UTC). Owner picks this up when ready._
+_Last updated: 2026-10-20. Engagement pack MERGED to main and live on production._
 _Primed by: production V9 deploy-day (discount restore, sweeps, UI fixes) + the engagement-pack preview._
 
 ---
 
 ## 1. Current state
 
-### Production (main @ `5825e95`, auto-deploying on merge)
+### Production (main @ `525990c`, auto-deploying on merge)
 | Thing | State |
 |---|---|
 | Contract | **V9** `0x8c6915aA8F3eE2958E29013ef043CbDeDFB52ac6` (block 138807361), 10% token-buy discount on both rails, `drainAll`, `migrateLegacyStats`. **EIP-170 FULL: 24,563/24,576 bytes — any contract change requires a V10.** |
 | Owner wallet | `0xd940…` holds ~57.5M DEEPWOOD (sweeps recovered +10.87M) + ETH. V8/V6/V7 retired & swept; residues ~57.4k DEEP stranded on `0x4b4b`+`0xc4E4`, V2 ETH permanently locked. |
-| Client | Estimate bug fixed (`normalizeRedeemQuote`), repair-reserve warning, repair mirror reconciled to the chain table (live-preferred), redeem/skill satchel-refresh fix, first-party analytics live (`/collect` → VPS collector :8788, dashboard `http://69.197.164.218:8788/stats`). |
+| Client | Engagement pack live (Camp card, streak/quests/trophies, Lucky Strike, vein tease). Redeem card shows the contract's 20,000 $DEEPWOOD minimum (no raw wei). Satchel strip is a full-bleed top band (brand/wallet overlay it in place; upgrade-tool + settle buttons ride the band at every screen size; gem row lifted toward the wordmark). Wallet menu opens with no session and its bottom item flips Connect/Disconnect. Tutorial texts updated. Estimate bug fixed (`normalizeRedeemQuote`), repair-reserve warning, repair mirror reconciled live-preferred, redeem/skill satchel-refresh fix, first-party analytics live (`/collect` → VPS collector :8788, dashboard `http://69.197.164.218:8788/stats`). |
 | Legacy rot | 30 test failures in `src/economy.test.mjs` + `src/player.test.mjs` (ETH-era price ladders, "Iron/Steel" tier names, rotted tier-climb fixtures). Pre-existing, identical set before/after every change this day. Not yet modernized — offered, deferred. |
 
-### Awaiting user sign-off: the engagement pack (branch `engagement-pack` @ `58cd2f3`)
-- **NOT merged.** Production does not have it. Vercel preview exists but sits behind
-  Vercel's Deployment Protection login wall — the shareable test link is the VPS-hosted
-  build: **http://69.197.164.218:8789/** (`deepwood-preview.service`, serves
-  `~/.hermes/profiles/hunter/preview/deepwood-engagement`).
+### Engagement pack: SHIPPED (2026-10-20)
+- **Merged to main and live on production** (deepwood-two.vercel.app). Merged at
+  `7f762ec`; everything after it shipped straight to main through `525990c`:
+  camp launcher in the wallet menu, redeem-card contract minimum, full-bleed
+  satchel band, upgrade-tool/settle buttons on the band (all screen sizes),
+  PRESEASON wordmark ink, wallet menu without a session (Connect wallet /
+  Disconnect flip), gem row lifted toward the wordmark.
 - Contains: **Camp card** (streak / daily quests / trophies), **Lucky Strike**
   celebration, **vein tease**, badge/streak toasts, analytics events
-  (`camp_open`, `badge_unlocked`, `streak_day`, `lucky_strike` — whitelisted in the
-  collector already).
+  (`camp_open`, `badge_unlocked`, `streak_day`, `lucky_strike` — whitelisted in
+  the collector already).
 - Honesty rules (do not weaken when touching this): every number derives from
   on-chain deltas (`huntIndex` / `gemsOf` / `playerStats.burned`) since UTC midnight;
   localStorage is only a cache; streaks/quests pay in honors, never fake balances.
 - Files: `src/engagement.js` (pure logic, 10 tests), `src/camp.js` (DOM),
   ForestScene wiring (`engagementSync()` + settle-path celebration/tease), DOM+CSS in
   `index.html` / `src/hud.css`.
-- The preview talks to the REAL V9 contract — test actions are real transactions.
-- Analytics 404s harmlessly on the preview (same-origin `/collect` has no rewrite off
-  Vercel), so test traffic never pollutes the production funnel.
+- **Cleanup PENDING**: `deepwood-preview.service` (:8789) is still up, serving the
+  OLD pre-merge preview build against the real V9 contract. Disable it and delete
+  `~/.hermes/profiles/hunter/preview/deepwood-engagement` once confirmed
+  (see post-merge cleanup below).
 
-### Pickup procedure
-1. After user approval: `git checkout main && git merge engagement-pack && git push` →
-   Vercel auto-deploys; then `systemctl --user disable --now deepwood-preview.service`
-   and delete `~/.hermes/profiles/hunter/preview/deepwood-engagement`.
-2. To re-serve a newer preview build: `npm run build`, copy `dist/` over the preview dir,
-   `systemctl --user restart deepwood-preview.service` (server code:
-   `~/.hermes/profiles/hunter/preview/preview_server.py`, port 8789).
-3. If a Vercel preview is wanted shareable instead, the owner must disable Deployment
-   Protection in the Vercel dashboard (no CLI access from this box; token dead).
+### Post-merge cleanup (the only remaining step)
+1. `systemctl --user disable --now deepwood-preview.service` and delete
+   `~/.hermes/profiles/hunter/preview/deepwood-engagement` — the preview is
+   obsolete now that production carries the pack. (Server code, if a preview is
+   ever wanted again: `~/.hermes/profiles/hunter/preview/preview_server.py`,
+   port 8789.)
+2. Vercel previews stay login-walled (Deployment Protection); production is the
+   shareable link now, and the analytics 404 note below no longer applies to it.
 
 ---
 
@@ -59,7 +61,7 @@ the on-chain set is below.
 
 ---
 
-## 3. Shipped in the pack (recap for design review)
+## 3. Shipped in the pack — LIVE on production (recap for design review)
 
 - **Streak** — UTC day counts when ≥1 dig settled. Honors 3/7/14/30 (Warming Up,
   Hot Streak, Deep Habit, Woodborn). Miss a day → reset, best kept.
