@@ -78,15 +78,25 @@ the on-chain set is below.
 
 1. **Tool skins** — earned cosmetics on the existing SVG avatar system (streak
    honors, event badges, rebirth skins later). Endowment effect; pure display.
-2. **Night dig / offline shift** — queue a 20-hunt shift on exit, settle on return
-   with the full reveal. `settleBatch` + `previewHuntAt` already support it; the
+2. **Night dig / offline shift** — queue a 20-hunt shift on exit, settle on
+   return with the full reveal. `settleBatch` + `previewHuntAt` already support it; the
    work is UX choreography + the unload warning interplay.
-3. **Weekly quest rotation** — rotate 2 of 3 quests daily, add a weekend "big dig".
-4. **More badges** — lifetime burned thresholds, redemption milestones,
-  "settled 1,000 hunts" (playerStats.hunts).
+3. ~~**Weekly quest rotation**~~ — **DONE (2026-10-20)**: 2 of 3 dailies rotate
+   per UTC day (same pair for every player, day-number keyed), weekends add the
+   Big Dig (100 digs, Sat 00:00 → Mon 00:00 UTC, weekend-frozen baseline).
+4. ~~**More badges**~~ — **DONE (2026-10-20)**: shelf is 15. Kindling (burn 10) /
+   Furnace (burn 250) / Century Digger (100 hunts) / Grand Excavation (1,000
+   hunts) / Patron (100k $DEEPWOOD spent). NOTE: the "redemption milestone"
+   idea was replaced by Patron — the contract keeps no lifetime redemption
+   counter, and the honesty rule forbids inventing one; tokenSpent is the
+   on-chain mirror image.
 5. **Analytics-driven tuning** — the funnel (pageview → wallet_connect →
    tool_buy → hunt_settle → gems_redeem + camp events) can now show which
    features move retention; check `/stats` before/after shipping anything above.
+   **Baseline at ship time (2026-10-20, all-time):** 200 events · pageview 77
+   (12 visitors) · wallet_connect 33 (9) · hunt_settle 14 (5) · badge_unlocked
+   60 (6) · camp_open 6 (4) · gems_redeem 3. Day of ship: 57 pageviews, 11
+   visitors, 155 events. Re-check after the first full weekend with the Big Dig.
 6. **Gem Rush events — ZERO CODE, do this first**: retune
    `dropTableTiers`/`rarityWeightTable` (already owner-settable) for a weekend,
    announce on t.me/deepwoodann, revert Monday. This validates the event loop
