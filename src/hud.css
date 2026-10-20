@@ -97,6 +97,10 @@ html, body {
   inset: var(--s3) var(--s3) auto var(--s3);
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
+  /* The gemstrip band is position:fixed, so it no longer sizes this grid. Row 1
+     is pinned to the height the floating pill used to occupy (64px drop + 72px
+     pill = 136px), which keeps the row-2 rail buttons at their original y. */
+  grid-template-rows: minmax(136px, auto) auto;
   align-items: start;
   column-gap: var(--s3);
   z-index: 9;
@@ -111,7 +115,12 @@ html, body {
    content sizes itself and the right rail matches, which is what stops the two
    sides drifting into different widths. */
 #season { grid-column: 1; grid-row: 1; width: var(--rail); }
-#gemstrip { grid-column: 2; grid-row: 1; justify-self: center; align-self: start; margin-top: 64px; }
+/* The satchel strip is a full-bleed top band: it reaches the left and right
+   screen edges and the top of the viewport, and its bottom edge stays exactly
+   where the old floating pill ended (no downward growth). The rows inside
+   keep their original screen geometry via the padding-top on the pill rule
+   further down. */
+#gemstrip { position: fixed; left: 0; right: 0; top: 0; z-index: 1; }
 #belt-actions { grid-column: 1; grid-row: 2; width: var(--rail); }
 /* SETTLE sits on the SAME row as SELL but pushed to the FAR RIGHT of the HUD,
    matching the leaderboard button's column. It is appended to the HUD and
@@ -156,7 +165,11 @@ html, body {
  * right rail now (see .rail-actions above). The wallet (connect) button rides
  * the outer top-right corner. Circular, like the reference art's round
  * back/confirm controls, rather than a pill chip. */
-#hud > .icon-btn { position: absolute; top: 0; }
+/* The brand block (logo + PRESEASON), the wallet button and the rail panels
+   ride ABOVE the gemstrip band at their original screen spots -- nothing
+   moves, they simply paint over the band instead of around it. */
+#season, #belt, #belt-actions, .rail-actions { position: relative; z-index: 2; }
+#hud > .icon-btn { position: absolute; top: 0; z-index: 2; }
 #hud > #connect { right: 0; }
 /* The panels start below the icon row so nothing overlaps. The action block
  * sits under #season in the same left rail, so it inherits the same offset
@@ -789,8 +802,13 @@ button.chip { position: relative; }
      a vertical gradient, rounded pill, warm outer glow, crisp 1px rim. */
   background: linear-gradient(180deg, #f2f56b 0%, #e3e33f 55%, #c9c62e 100%);
   border: 1px solid #b7b326;
-  border-radius: 12px;
-  padding: 7px 14px;
+  /* Square top corners: the band truly touches the top and side edges. The
+     bottom corners keep the pill's 12px radius. */
+  border-radius: 0 0 12px 12px;
+  /* Top padding = old HUD inset (12) + old drop below the brand row (64) +
+     old pill padding (7): the satchel rows paint at the exact screen y they
+     occupied when the pill floated, so only the bar behind them grew. */
+  padding: 83px 14px 7px;
   box-shadow:
     0 3px 0 #a89f24,                 /* extruded 3D lip below the face */
     0 6px 14px rgba(0, 0, 0, .55),   /* drop shadow floating off the scene */
@@ -928,8 +946,12 @@ button.chip { position: relative; }
   /* Both rails stay on the top row, just narrower. The middle column keeps the
      forest open between them. */
   #hud { grid-template-columns: var(--rail) minmax(0, 1fr) var(--rail); }
+  /* Phones: the pill floated at 48px, so row 1 was 48px + ~72px pill ≈ 120px. */
+  #hud { grid-template-rows: minmax(120px, auto) auto; }
   #season { grid-column: 1; grid-row: 1; width: var(--rail); }
-  #gemstrip { grid-column: 2; grid-row: 1; justify-self: center; align-self: start; margin-top: 48px; }
+  /* The band's contents sit higher on phones: the old mobile drop was 48px,
+     so the same keep-rows-where-they-were padding is 12 + 48 + 7 = 67px. */
+  #gemstrip { padding-top: 67px; }
   #belt-actions { grid-column: 1; grid-row: 2; width: var(--rail); }
   .rail-actions { grid-column: 3; grid-row: 2; width: var(--rail); justify-self: end; }
   #belt   { grid-column: 3; grid-row: 1; width: var(--rail); }
