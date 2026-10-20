@@ -2870,6 +2870,23 @@ export class ForestScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * Open the Camp card — streak, daily quests and trophies (engagement pack).
+   * The card is normally built by engagementSync(); build it here too so the
+   * wallet-menu entry works even before the first on-chain sync completes.
+   */
+  async openCampCard() {
+    if (!this._camp) {
+      const { createCamp } = await import('./camp.js');
+      this._camp = createCamp({
+        readEngagement: () => this._eng,
+        readBadges: () => this._eng?.badges ?? [],
+        onOpen: () => { import('./analytics.js').then(({ track }) => track('camp_open')); },
+      });
+    }
+    this._camp?.open();
+  }
+
   openRedeemCard() {
     if (!this._redeemCard) {
       this._redeemCard = createRedeemCard({

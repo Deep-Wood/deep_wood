@@ -41,7 +41,7 @@
        begin only when the parser reached the splash, by which point the 1.5MB
        game bundle had already taken the connection. -->
   <link rel="preload" as="image" href="/launch/hero.jpg" fetchpriority="high" />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d1a10'/%3E%3Cpath d='M16 6l6 10-6 10-6-10z' fill='%234a7c59'/%3E%3C/svg%3E" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='https://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d1a10'/%3E%3Cpath d='M16 6l6 10-6 10-6-10z' fill='%234a7c59'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="/src/hud.css" />
   <link rel="stylesheet" href="/src/belt.css" />
   <!-- Identity last: it redefines the tokens hud.css and belt.css were built on. -->
@@ -334,14 +334,6 @@
   </div>
 
         <div id="hint" class="chip"></div>
-
-        <!-- CAMP: the engagement pack's door. Streak flame + trophy count
-             live in the chip; the card (below) holds quests + badges. All
-             numbers derive from on-chain deltas -- see src/engagement.js. -->
-        <button type="button" class="chip camp-btn" id="camp-btn" aria-label="Open the camp: streak, daily quests, badges" title="Streak, daily quests, badges">
-          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M12 3 2 20h6l4-8 4 8h6L12 3Z" fill="currentColor"/></svg><span>Camp</span>
-          <span class="camp-flame" id="camp-btn-flame"></span>
-        </button>
 
   <!-- Error reporting installed FIRST, before any other module runs, so it
        captures throws from the game boot as well as from the HUD below.
@@ -842,6 +834,7 @@
         '<div class="wm-account">' + short(getState().account || '') + '</div>' +
         '<div class="wm-box">' +
           '<button class="wm-item" type="button" id="wm-leaderboard">Leaderboard</button>' +
+          '<button class="wm-item" type="button" id="wm-camp">Camp</button>' +
           '<button class="wm-item" type="button" id="wm-redeem">Redeem gems</button>' +
           '<button class="wm-item" type="button" id="wm-about">About Game</button>' +
         '</div>' +
@@ -870,6 +863,19 @@
           scene.toggleLeaderboard();
         } else {
           setPending('Leaderboard is not ready yet — try again in a moment.');
+        }
+      });
+
+      // Camp — streak, daily quests and trophies. Opened from the wallet menu
+      // (the camp needs a connected wallet; its numbers are on-chain deltas).
+      walletMenu.querySelector('#wm-camp').addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeWalletMenu();
+        const scene = window.__scene || window.__game?.scene;
+        if (scene && typeof scene.openCampCard === 'function') {
+          scene.openCampCard();
+        } else {
+          setPending('Camp is not ready yet — try again in a moment.');
         }
       });
 

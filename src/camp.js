@@ -12,7 +12,6 @@ const GEM_COLORS = ['#cfd6dd', '#d9a441', '#3a6fd8', '#d83a5a', '#8a3ad8'];
 const GEM_NAMES = ['Quartz', 'Amber', 'Sapphire', 'Ruby', 'Diamond'];
 
 const FLAME_SVG = `<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M12 2c1 4-3 5-3 9a3 3 0 0 0 6 0c0-1.5-1-2-1-3.5C16.5 9 18 11 18 14a6 6 0 0 1-12 0c0-5 4-7 6-12Z" fill="currentColor"/></svg>`;
-const TENT_SVG = `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 3 2 20h6l4-8 4 8h6L12 3Z" fill="currentColor"/></svg>`;
 const TROPHY_SVG = `<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M7 4h10v2h3v3a4 4 0 0 1-4 4h-.3A5 5 0 0 1 13 15.9V18h3v2H8v-2h3v-2.1A5 5 0 0 1 8.3 13H8a4 4 0 0 1-4-4V6h3V4Zm0 4H6v1a2 2 0 0 0 2 2V8Zm10 0v3a2 2 0 0 0 2-2V8h-2Z" fill="currentColor"/></svg>`;
 
 const q = (id) => document.getElementById(id);
@@ -28,8 +27,8 @@ const q = (id) => document.getElementById(id);
  */
 export function createCamp({ readEngagement, readBadges, onOpen }) {
   const card = q('camp-card');
-  const btn = q('camp-btn');
-  if (!card || !btn) return null;
+  if (!card) return null;
+  // The camp is opened from the wallet menu now; there is no launcher chip.
   document.body.appendChild(card); // same stacking-context rule as the redeem card
   const backdrop = document.createElement('div');
   backdrop.className = 'redeem-backdrop hidden';
@@ -76,9 +75,6 @@ export function createCamp({ readEngagement, readBadges, onOpen }) {
       </div>`;
     }).join('');
     elBadgeCount.textContent = `${unlocked.length}/${BADGES.length}`;
-
-    btn.innerHTML = `${TENT_SVG}<span id="camp-btn-label">Camp</span>
-      <span class="camp-flame${streak >= 3 ? ' lit' : ''}" title="Dig streak: ${streak} day${streak === 1 ? '' : 's'}">${FLAME_SVG}${streak > 0 ? streak : ''}</span>`;
     void deltas;
   }
 
@@ -94,7 +90,6 @@ export function createCamp({ readEngagement, readBadges, onOpen }) {
   }
   const isOpen = () => !card.classList.contains('hidden');
 
-  btn.addEventListener('click', open);
   elClose.addEventListener('click', close);
   backdrop.addEventListener('click', close);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && isOpen()) close(); });

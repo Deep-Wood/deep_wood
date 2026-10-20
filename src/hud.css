@@ -1672,18 +1672,10 @@ button.chip { position: relative; }
 
 
 /* ===========================================================================
-   CAMP (engagement pack): launcher chip, streak card, quests, badges,
-   Lucky Strike overlay, toasts. Same panel/accent language as the redeem
-   card -- dark forest glass, gold honors, per-rarity gem colors.
+   CAMP (engagement pack): streak card, quests, badges, Lucky Strike overlay,
+   toasts. Same panel/accent language as the redeem card -- dark forest glass,
+   gold honors, per-rarity gem colors. Opened from the wallet menu.
    =========================================================================== */
-.camp-btn { cursor: pointer; gap: 6px; }
-.camp-btn svg { color: var(--gold); }
-.camp-flame { display: inline-flex; align-items: center; gap: 2px; color: var(--dim);
-  font-size: 10px; font-weight: 600; margin-left: 2px; }
-.camp-flame svg { width: 10px; height: 10px; opacity: .55; }
-.camp-flame.lit { color: #e8842c; }
-.camp-flame.lit svg { opacity: 1; }
-
 .camp-card {
   position: fixed; z-index: 71; pointer-events: auto;
   left: 50%; top: 50%; transform: translate(-50%, -50%);
