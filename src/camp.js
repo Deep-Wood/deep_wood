@@ -5,8 +5,9 @@
 // the lucky-strike overlay, badge unlock toasts, and the next-vein tease.
 
 import {
-  STREAK_TIERS, streakTier, nextTierAt, BADGES,
+  STREAK_TIERS, streakTier, nextTierAt, BADGES, SKINS, chooseSkin,
 } from './engagement.js';
+import { toolAvatarSkinned } from './economy.js';
 
 const GEM_COLORS = ['#cfd6dd', '#d9a441', '#3a6fd8', '#d83a5a', '#8a3ad8'];
 const GEM_NAMES = ['Quartz', 'Amber', 'Sapphire', 'Ruby', 'Diamond'];
@@ -40,6 +41,7 @@ export function createCamp({ readEngagement, readBadges, onOpen }) {
   const elQuests = q('camp-quests');
   const elBadges = q('camp-badges');
   const elBadgeCount = q('camp-badge-count');
+  const elSkins = q('camp-skins');
   const elClose = q('camp-close');
 
   function render() {
@@ -65,6 +67,8 @@ export function createCamp({ readEngagement, readBadges, onOpen }) {
       </div>`;
     }).join('');
 
+    renderSkins();
+
     const unlocked = readBadges() ?? [];
     elBadges.innerHTML = BADGES.map((b) => {
       const has = unlocked.includes(b.id);
@@ -89,6 +93,38 @@ export function createCamp({ readEngagement, readBadges, onOpen }) {
     backdrop.classList.add('hidden');
   }
   const isOpen = () => !card.classList.contains('hidden');
+
+  /**
+   * The tool-skin shelf: the base wood plus one chip per skin. Earned chips
+   * are selectable; locked ones show the honor they need and stay disabled.
+   * The preview pickaxe uses the held tier's metal (tier 1 shape when no
+   * tool is held) so the skin always reads in context.
+   */
+  function renderSkins() {
+    if (!elSkins) return;
+    const eng = readEngagement() ?? {};
+    const skinIds = eng.skins ?? [];
+    const tier = Math.max(1, eng.skinFacts?.tier ?? 0);
+    let picked = null;
+    try { picked = localStorage.getItem('dw-skin'); } catch { picked = null; }
+    const chip = (k) => {
+      const earned = k ? skinIds.includes(k.id) : true;
+      const sel = k ? picked === k.id : !picked;
+      return `<button type="button" class="cs-chip${earned ? '' : ' locked'}${sel ? ' picked' : ''}"
+          data-skin="${k ? k.id : ''}" title="${k ? k.how : 'Standard wood'}"${earned ? '' : ' disabled'}>`
+        + `<span class="cs-mini">${toolAvatarSkinned(tier, k)}</span>`
+        + `<span class="cs-name">${k ? k.name : 'Standard'}</span></button>`;
+    };
+    elSkins.innerHTML = [chip(null), ...SKINS.map(chip)].join('');
+    elSkins.querySelectorAll('.cs-chip').forEach((b) => {
+      b.addEventListener('click', () => {
+        chooseSkin(b.dataset.skin || null, localStorage);
+        import('./analytics.js').then(({ track }) => track('camp_skin_pick', { skin: b.dataset.skin || 'standard' })).catch(() => {});
+        window.renderHunter?.();
+        render();
+      });
+    });
+  }
 
   elClose.addEventListener('click', close);
   backdrop.addEventListener('click', close);

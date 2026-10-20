@@ -506,15 +506,36 @@ export function fmtRepair(tier, short = true) {
 // cut to that rank's shape. `current` is lit by CSS, so the glyph itself is
 // always the same -- only the frame changes.
 
-/** A pickaxe head in the tier's metal. 16x16 viewBox. */
-function toolAvatar(tier) {
+/**
+ * The pickaxe, optionally wearing an earned skin. The tier's head metal is
+ * EARNED progress and never changes -- a skin only recolors the haft and
+ * ties a wrap band near the grip, so it reads as an accent, never a disguise.
+ * `skin` is `{ id, haft, wrap }` or null for the base wood.
+ */
+function pickaxeSvg(tier, skin) {
   const metal = ['#8a6b4a', '#c98f4e', '#9aa5b1', '#6d8fa8', '#e8c25a'][tier - 1] || '#8a6b4a';
   const dark = metal === '#e8c25a' ? '#a87c22' : '#00000055';
-  const id = `tg${tier}`;
+  const haft = skin?.haft ?? '#6b4f2f';
+  const id = `tg${tier}${skin ? 'k' + skin.id : ''}`;
+  // Wrap band: a short strip crossing the lower haft, only in a skin.
+  const wrap = skin?.wrap
+    ? `<path d="M6.4 9.9 L8.1 9.5 L9.1 12.7 L7.4 13.2 Z" fill="${skin.wrap}" stroke="#000" stroke-width=".25"/>`
+    : '';
   return `<svg viewBox="0 0 16 16" aria-hidden="true"><defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${metal}"/><stop offset="1" stop-color="${dark}"/></linearGradient></defs>`
     + `<path d="M2 4 Q8 0 14 4 L13 6 Q8 3 3 6 Z" fill="url(#${id})" stroke="#000" stroke-width=".4"/>`
-    + `<path d="M6 5 L9 14 L7.5 14.8 L5 6 Z" fill="#6b4f2f" stroke="#000" stroke-width=".35"/>`
+    + `<path d="M6 5 L9 14 L7.5 14.8 L5 6 Z" fill="${haft}" stroke="#000" stroke-width=".35"/>`
+    + wrap
     + `</svg>`;
+}
+
+/** A pickaxe head in the tier's metal. 16x16 viewBox. */
+function toolAvatar(tier) {
+  return pickaxeSvg(tier, null);
+}
+
+/** The pickaxe in an earned skin (`{ id, haft, wrap }`), or the base wood. */
+export function toolAvatarSkinned(tier, skin) {
+  return pickaxeSvg(tier, skin ?? null);
 }
 
 /** A gem cut to the skill rank's facet count. 16x16 viewBox. */

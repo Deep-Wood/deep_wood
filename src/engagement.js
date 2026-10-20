@@ -226,3 +226,46 @@ export function evalBadges(snapshot) {
     try { return !!b.test(snapshot); } catch { return false; }
   }).map((b) => b.id);
 }
+
+// ---------------------------------------------------------------------------
+// Tool skins: earned cosmetics on the pickaxe avatar. Display-only. The
+// UNLOCK reads the same on-chain facts as badges (streak honors, tier,
+// skill), so a skin cannot be granted locally; the CHOSEN skin is a
+// preference, lives in localStorage, and only ever paints when still earned.
+// ---------------------------------------------------------------------------
+
+export const SKINS = [
+  { id: 'ember-grip', name: 'Ember Grip', how: 'Burn 10 gems lifetime (Kindling)', haft: '#7a4a2a', wrap: '#e8794a', test: (s) => (s.burned ?? 0) >= 10 },
+  { id: 'ember-trim', name: 'Ember Trim', how: 'Reach a 7-day streak (Hot Streak)', haft: '#8a5b3a', wrap: '#ff7a3d', test: (s) => (s.streak ?? 0) >= 7 },
+  { id: 'wolfsbane-wrap', name: 'Wolfsbane Wrap', how: 'Reach a 30-day streak (Woodborn)', haft: '#4a5b8a', wrap: '#9b7fe8', test: (s) => (s.streak ?? 0) >= 30 },
+  { id: 'golden-haft', name: 'Golden Haft', how: 'Wield the Mithril pick', haft: '#e8c25a', wrap: '#a87c22', test: (s) => (s.tier ?? 0) >= 5 },
+  { id: 'etched-haft', name: 'Etched Haft', how: 'Reach skill 5 (Lapidary)', haft: '#3b4048', wrap: '#c9d2dc', test: (s) => (s.skill ?? 0) >= 5 },
+];
+
+/** IDs of skins earned on this snapshot. */
+export function earnedSkins(snapshot) {
+  return SKINS.filter((k) => {
+    try { return !!k.test(snapshot); } catch { return false; }
+  }).map((k) => k.id);
+}
+
+/**
+ * The skin the player wears: their stored choice, but only while it is still
+ * EARNED on the given facts. An expired streak silently reverts to base --
+ * a cosmetic must never claim an honor the chain no longer supports.
+ */
+export function chosenSkin(facts, store) {
+  const earned = earnedSkins(facts);
+  let id = null;
+  try { id = store?.getItem?.('dw-skin') || null; } catch { id = null; }
+  if (!id || !earned.includes(id)) return null;
+  return SKINS.find((k) => k.id === id) ?? null;
+}
+
+/** Persist the choice (or clear it, for the base wood). Never throws. */
+export function chooseSkin(id, store) {
+  try {
+    if (id) store?.setItem?.('dw-skin', id);
+    else store?.removeItem?.('dw-skin');
+  } catch { /* cosmetic: degrade silently */ }
+}

@@ -16,6 +16,7 @@ import {
   toolPrice, durabilityOf, repairCost, payoutWei, dropTable,
   huntValueWei, netHuntWei, paybackHunts, fmtEth, fmtRepair,
   SKILL_NAME, SKILL_NAME_UC, SKILL_UNLOCKS, RARITY_NAME, TOOL_AVATARS, SKILL_AVATARS,
+  toolAvatarSkinned,
   skillName, skillSubtitle,
 } from './economy.js';
 
@@ -288,6 +289,18 @@ test('each tool tier wears its own metal', () => {
   // five copies of one icon.
   const metals = TOOL_AVATARS.slice(1).map((svg) => /stop-color="([^"]+)"/.exec(svg)?.[1]);
   assert.equal(new Set(metals).size, 5, 'five distinct tool metals');
+});
+
+test('tool skins recolor the haft and add the wrap band, never the head', () => {
+  const skin = { id: 'ember-trim', haft: '#8a5b3a', wrap: '#ff7a3d' };
+  const svg = toolAvatarSkinned(3, skin);
+  assert.ok(svg.includes('#8a5b3a'), 'haft takes the skin color');
+  assert.ok(svg.includes('#ff7a3d'), 'the wrap band paints');
+  assert.equal(toolAvatarSkinned(3, null), TOOL_AVATARS[3], 'null skin is the base avatar');
+  // The head metal is EARNED progress: a skin must not touch it.
+  const metal = /stop-color="([^"]+)"/.exec(TOOL_AVATARS[3])?.[1];
+  assert.ok(svg.includes(`stop-color="${metal}"`), 'the tier metal is unchanged');
+  assert.ok(!TOOL_AVATARS[3].includes('#8a5b3a'), 'base avatars stay untouched');
 });
 
 test('higher skill ranks get more facets', () => {

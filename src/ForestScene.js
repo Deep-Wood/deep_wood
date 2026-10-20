@@ -2075,7 +2075,7 @@ export class ForestScene extends Phaser.Scene {
       const { getState } = await import('./wallet.js');
       const {
         loadState, saveState, utcDay, markActive, currentStreak, deriveQuests,
-        evalBadges, streakTier, saturdayOf,
+        evalBadges, streakTier, saturdayOf, earnedSkins,
       } = await import('./engagement.js');
       const { createCamp, badgeToast, streakToast } = await import('./camp.js');
       if (!this._camp) {
@@ -2127,8 +2127,9 @@ export class ForestScene extends Phaser.Scene {
       const streak = currentStreak(state, today);
       if (streak > state.best) state.best = streak;
 
-      // Badges: evaluated from the live snapshot, toasted once.
-      const badges = evalBadges({
+      // Badges and tool skins: evaluated from the live snapshot, badges
+      // toasted once. Skins are the same facts' cosmetic layer.
+      const snap = {
         gems: this.econ.gems ?? [0n, 0n, 0n, 0n, 0n],
         tier: this.econ.tier ?? 0,
         skill: this.econ.skill ?? 0,
@@ -2142,7 +2143,9 @@ export class ForestScene extends Phaser.Scene {
         burned: Number(burned),
         hunts: stats ? stats.hunts : 0,
         tokenSpentWhole: stats ? Number(stats.tokenSpent / 10n ** 18n) : 0,
-      });
+      };
+      const badges = evalBadges(snap);
+      const skins = earnedSkins(snap);
       for (const id of badges) {
         if (!state.badgesSeen.includes(id)) {
           state.badgesSeen.push(id);
@@ -2163,12 +2166,22 @@ export class ForestScene extends Phaser.Scene {
 
       saveState(state, window.localStorage);
       this._eng = {
-        streak, badges,
+        streak, badges, skins,
+        // The facts skins unlock on, kept in one place so the strip's
+        // chosenSkin() evaluates against exactly what this sync observed.
+        skinFacts: {
+          tier: this.econ.tier ?? 0,
+          skill: this.econ.skill ?? 0,
+          streak,
+          burned: Number(burned),
+        },
         quests: deriveQuests(today, { digs, amber: amberToday, burned: burnedToday, weekendDigs }),
         deltas: { digs, amber: amberToday, burned: burnedToday, weekendDigs },
         baselineDay: today,
       };
       this._camp?.render?.();
+      // Skins may have been (un)earned by this sync: repaint the strip avatar.
+      window.renderHunter?.();
     } catch {
       // engagement must never break the game: a failed read = no camp update
     }

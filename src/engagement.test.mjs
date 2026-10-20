@@ -5,7 +5,7 @@ import {
   markActive, currentStreak, streakTier, nextTierAt,
   QUESTS, deriveQuests, allQuestsDone, activeQuests, WEEKEND_QUEST,
   isWeekend, saturdayOf,
-  BADGES, evalBadges,
+  BADGES, evalBadges, SKINS, earnedSkins, chosenSkin, chooseSkin,
 } from './engagement.js';
 
 const mem = () => {
@@ -191,6 +191,38 @@ test('milestone badges derive from playerStats lifetime facts', () => {
 test('badge tests cannot throw on sparse snapshots', () => {
   assert.doesNotThrow(() => evalBadges({}));
   assert.doesNotThrow(() => evalBadges({ gems: ['x', undefined, null] }));
+});
+
+// --- tool skins ------------------------------------------------------------
+
+test('skins unlock from the same on-chain facts as badges', () => {
+  assert.deepEqual(earnedSkins(snap()), [], 'default snapshot earns no skin');
+  assert.deepEqual(earnedSkins(snap({ burned: 10 })), ['ember-grip']);
+  assert.deepEqual(earnedSkins(snap({ streak: 7 })), ['ember-trim']);
+  assert.deepEqual(earnedSkins(snap({ streak: 30 })), ['ember-trim', 'wolfsbane-wrap']);
+  assert.deepEqual(earnedSkins(snap({ tier: 5 })), ['golden-haft']);
+  assert.deepEqual(earnedSkins(snap({ skill: 5 })), ['etched-haft']);
+  assert.deepEqual(
+    earnedSkins(snap({ burned: 10, streak: 30, tier: 5, skill: 5 })),
+    ['ember-grip', 'ember-trim', 'wolfsbane-wrap', 'golden-haft', 'etched-haft'],
+  );
+});
+
+test('the chosen skin only paints while still earned; expiry reverts to base', () => {
+  const store = mem();
+  chooseSkin('ember-trim', store);
+  // streak 4: not earned -> base, despite the stored choice
+  assert.equal(chosenSkin({ streak: 4 }, store), null);
+  // streak 7: earned -> paints
+  const k = chosenSkin({ streak: 7 }, store);
+  assert.equal(k?.id, 'ember-trim');
+  // the honor lapses: back to base without touching storage
+  assert.equal(chosenSkin({ streak: 3 }, store), null);
+  chooseSkin(null, store);
+  assert.equal(chosenSkin({ streak: 7 }, store), null, 'cleared choice stays base');
+  // chooseSkin never throws on a hostile store
+  assert.doesNotThrow(() => chooseSkin('x', null));
+  assert.doesNotThrow(() => chosenSkin({ streak: 7 }, null));
 });
 
 test('badge ids are unique and every badge is reachable', () => {

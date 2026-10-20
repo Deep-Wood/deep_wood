@@ -260,6 +260,9 @@
         <div class="redeem-label">Daily quests <span class="camp-utc">resets 00:00 UTC</span></div>
         <div class="camp-quests" id="camp-quests"></div>
 
+        <div class="redeem-label">Tool skin</div>
+        <div class="camp-skins" id="camp-skins"></div>
+
         <div class="redeem-label">Trophies <span class="camp-badge-count" id="camp-badge-count">0/0</span></div>
         <div class="camp-badges" id="camp-badges"></div>
       </div>
@@ -561,13 +564,38 @@
         setTimeout(renderHunterStrip, 200);
         return;
       }
-      const { TIER_NAME, SKILL_NAME } = await import('/src/economy.js');
+      const { TIER_NAME, SKILL_NAME, toolAvatarSkinned } = await import('/src/economy.js');
+      const { chosenSkin } = await import('/src/engagement.js');
       const skillName = document.getElementById('gs-skill-name');
       const toolIc = document.getElementById('gs-tool');
       const skillIc = document.getElementById('gs-skill');
       // Tool: tier 0 means no pick yet.
       toolName.textContent = p.tier >= 1 ? TIER_NAME[p.tier] : 'None';
       toolIc.title = `Tool: ${p.tier >= 1 ? TIER_NAME[p.tier] : 'None'}`;
+      // The pickaxe avatar beside the tool name, wearing the player's chosen
+      // EARNED skin (chosenSkin reverts to base when the honor lapses). The
+      // avatar + name share one inline line so the row's height never grows.
+      let line = toolIc.querySelector('.gs-toolline');
+      if (p.tier >= 1) {
+        const skin = chosenSkin(window.__scene?._eng?.skinFacts ?? {}, window.localStorage);
+        const svg = toolAvatarSkinned(p.tier, skin);
+        if (!line) {
+          line = document.createElement('span');
+          line.className = 'gs-toolline';
+          // Avatar first; the ORIGINAL id-bearing name node moves in after,
+          // so no duplicate id is ever created.
+          line.innerHTML = '<span class="gs-avatar"></span>';
+          toolIc.appendChild(line);
+          line.appendChild(toolName);
+        }
+        const avatarEl = line.querySelector('.gs-avatar');
+        if (avatarEl.innerHTML !== svg) avatarEl.innerHTML = svg;
+        line.title = skin ? `Skin: ${skin.name}` : 'Skin: standard wood';
+      } else if (line) {
+        // No tool held: put the name back as a direct child and drop the avatar.
+        toolIc.appendChild(toolName);
+        line.remove();
+      }
       // Skill: 0 means a brand-new player who has not trained a skill yet;
       // 1..4 map to Greenhorn through Lapidary. A fresh wallet (0) reads
       // "None" instead of Greenhorn.
