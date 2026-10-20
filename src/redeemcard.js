@@ -31,7 +31,7 @@ const RARITY_NAMES = ['Quartz', 'Amber', 'Sapphire', 'Ruby', 'Diamond'];
  * @param {(msg:string, kind?:string) => void} [o.onStatus]
  */
 export function createRedeemCard({
-  getBalances, railActive, onRedeem, onQuote, onRepairNeeds, onStatus,
+  getBalances, railActive, onRedeem, onQuote, onRepairNeeds, onStatus, getFloor,
 }) {
   const card = document.getElementById('redeem-card');
   if (!card) return null;
@@ -67,6 +67,7 @@ export function createRedeemCard({
   let busy = false;
   let quoteSeq = 0; // guards against an out-of-order quote response
   let repair = null; // {tier, name, needs:bigint[]} once the chain read lands
+  let floorWei = null; // the contract's minRedeemWei, once its read lands
 
   const held = () => {
     const b = getBalances?.() ?? [];
@@ -136,10 +137,12 @@ export function createRedeemCard({
     elRarities.querySelectorAll('.redeem-rarity').forEach((btn) => {
       btn.setAttribute('aria-checked', Number(btn.dataset.rarity) === selected ? 'true' : 'false');
     });
-    elOf.textContent = `of ${held()}`;
+    elOf.textContent = floorWei == null
+      ? `of ${held()}`
+      : `of ${held()} · min ${fmtToken(floorWei)} $DEEPWOOD`;
 
     const st = redeemState({
-      held: held(), amount, quoteWei: quoteTokens, floorWei: null, railActive: railActive?.() ?? true,
+      held: held(), amount, quoteWei: quoteTokens, floorWei, railActive: railActive?.() ?? true,
     });
     elGo.disabled = busy || !st.ok;
     elQuote.textContent = quoteTokens == null ? '--' : fmtToken(quoteTokens);
@@ -192,6 +195,7 @@ export function createRedeemCard({
     amount = 0;
     quoteTokens = null;
     repair = null;
+    floorWei = null;
     if (onRepairNeeds) {
       // Fire-and-forget: a slow/failed read shows no warning, never a
       // false one, and never blocks the card from opening.
@@ -199,6 +203,15 @@ export function createRedeemCard({
         repair = v;
         render();
       }).catch(() => { repair = null; });
+    }
+    if (getFloor) {
+      // Same fire-and-forget rule: the minimum is a hint and a gate, so a
+      // lagging read must not stop the card opening. It paints as soon as it
+      // lands, and until then the card simply shows no minimum.
+      Promise.resolve(getFloor()).then((v) => {
+        floorWei = typeof v === 'bigint' ? v : null;
+        render();
+      }).catch(() => { floorWei = null; });
     }
     elInput.value = '';
     // Preselect the first rarity the player actually holds.
@@ -241,7 +254,7 @@ export function createRedeemCard({
   elGo.addEventListener('click', async () => {
     if (busy) return;
     const st = redeemState({
-      held: held(), amount, quoteWei: quoteTokens, floorWei: null, railActive: railActive?.() ?? true,
+      held: held(), amount, quoteWei: quoteTokens, floorWei, railActive: railActive?.() ?? true,
     });
     if (!st.ok) return;
     busy = true;

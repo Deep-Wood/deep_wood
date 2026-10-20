@@ -108,11 +108,13 @@ export function redeemState({ held, amount, quoteWei, floorWei, railActive }) {
   // here to keep the player from signing a transaction that is guaranteed to
   // revert. A null quote means the read has not landed yet: allow the button
   // and let the chain be the authority, rather than blocking on a slow RPC.
+  // The reason carries the contract's own number, formatted, so the player
+  // learns the threshold instead of just being told "too small".
   if (quoteWei != null && floorWei != null && quoteWei < floorWei) {
     return {
       ok: false,
       kind: 'floor',
-      reason: 'Too small to redeem - add more gems.',
+      reason: `Too small to redeem - the minimum is ${fmtToken(floorWei)} $DEEPWOOD.`,
     };
   }
   return { ok: true, kind: 'ready', reason: '' };

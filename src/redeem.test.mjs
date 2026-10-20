@@ -94,6 +94,20 @@ test('a redemption at or above the floor is allowed', () => {
   assert.equal(st.ok, true);
 });
 
+test('the floor message carries the contract minimum, formatted', () => {
+  // The raw 18-decimal integer (20000000000000000000000) is unreadable in a
+  // status line. The player needs the human number (20,000) so they can see
+  // the threshold and stop typing amounts that are guaranteed to revert.
+  const floor = 20_000n * 10n ** 18n; // the live contract's minRedeemWei
+  const st = redeemState({
+    held: 19n, amount: 4n, quoteWei: 1_440n * 10n ** 18n, floorWei: floor, railActive: true,
+  });
+  assert.equal(st.ok, false);
+  assert.equal(st.kind, 'floor');
+  assert.match(st.reason, /20,000/);
+  assert.doesNotMatch(st.reason, /20000000000000000000000/);
+});
+
 test('a locked rail blocks even a valid amount', () => {
   const st = redeemState({
     held: 1600n, amount: 1600n, quoteWei: 10n ** 21n, floorWei: 1n, railActive: false,

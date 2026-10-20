@@ -32,6 +32,9 @@ import {
 import { rpcCall } from "./rpc.js";
 import { connect as readConnect } from "./chain.js";
 import { config } from "./config.js";
+// Formats an 18-decimal $DEEPWOOD amount for humans. Without it the
+// below-floor message printed the raw integer (1440000000000000000000).
+import { fmtToken } from "./redeem.js";
 
 /** Rarities the contract sells. Rare+ are hunt-only and revert. */
 // V1 sold gems for Common/Uncommon only. V2 has no gem SHOP at all: gems are
@@ -578,7 +581,7 @@ export async function redeemGemsOnchain(rarity, count) {
     if (!aboveFloor) {
       return fail(
         "below-floor",
-        `that redeems for ${payout} $DEEPWOOD, below the contract's minimum`,
+        `that redeems for ${fmtToken(payout)} $DEEPWOOD, below the contract's minimum`,
       );
     }
   } catch {

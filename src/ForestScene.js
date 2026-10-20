@@ -2904,6 +2904,20 @@ export class ForestScene extends Phaser.Scene {
             await r.redeemQuote(rarity, typeof amount === 'bigint' ? amount : BigInt(amount))
           );
         },
+        // The contract's minimum redemption (minRedeemWei), in 18-decimal
+        // $DEEPWOOD. The card shows it beside the amount box and gates the
+        // button on it, so the player learns the threshold instead of typing
+        // an amount that is guaranteed to revert. Null until the read lands.
+        getFloor: async () => {
+          try {
+            const { getReader } = await import('./onchain.js');
+            const r = await getReader();
+            if (!r?.minRedeemWei) return null;
+            return await r.minRedeemWei();
+          } catch {
+            return null;
+          }
+        },
         // The one-repair gem cost vector for the player's current tool, for
         // the "you will not be able to repair" warning. Null when the player
         // holds no tool or the chain read fails -- the card then shows no
