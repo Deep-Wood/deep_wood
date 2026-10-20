@@ -158,12 +158,12 @@ html, body {
  * the top rail slots, so the remaining buttons shift up into them exactly:
  * skill takes buy's old slot, repair takes skill's, sound takes settle's.
  * The vertical offset differs per breakpoint because the band's rows sit
- * higher on phones (padding-top 67px vs 83px): 76px centres the 68px
- * wrapper on the desktop y=110 line, the <=700px block lowers it onto the
- * phone line. */
+ * higher on phones (padding-top 67px vs 83px). 80px / 64px are the nudged-down
+ * values: 4px below the divider-centred position, so each label ends flush
+ * with the band bottom (148 desktop / 132 phone) instead of 4px above it. */
 #belt-actions .rail-action-item.order-buy {
   position: fixed;
-  top: 76px;
+  top: 80px;
   left: var(--s3);
   margin-top: 0;
   /* Out of flow the rail's width:100% would resolve against the viewport
@@ -172,7 +172,7 @@ html, body {
 }
 .rail-actions .rail-action-item.settle-right {
   position: fixed;
-  top: 76px;
+  top: 80px;
   right: var(--s3);
   margin-top: 0;
 }
@@ -986,11 +986,10 @@ button.chip { position: relative; }
   /* The band's contents sit higher on phones: the old mobile drop was 48px,
      so the same keep-rows-where-they-were padding is 12 + 48 + 7 = 67px. */
   #gemstrip { padding-top: 67px; }
-  /* Bar buttons ride higher on phones: the divider line is at y=94 (row 1
-     ends 90, row 2 starts 98), so 60px centres the 68px wrapper on it and the
-     label stays inside the band (60+68=128 < 132 band bottom). */
+  /* Bar buttons sit lower on phones: top 64 keeps the label flush with the
+     band bottom (64+68=132). */
   #belt-actions .rail-action-item.order-buy,
-  .rail-actions .rail-action-item.settle-right { top: 60px; }
+  .rail-actions .rail-action-item.settle-right { top: 64px; }
   #belt-actions { grid-column: 1; grid-row: 2; width: var(--rail); }
   .rail-actions { grid-column: 3; grid-row: 2; width: var(--rail); justify-self: end; }
   #belt   { grid-column: 3; grid-row: 1; width: var(--rail); }
