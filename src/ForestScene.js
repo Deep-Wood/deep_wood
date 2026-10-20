@@ -2879,9 +2879,30 @@ export class ForestScene extends Phaser.Scene {
           </div>
           <div class="about-section">
             <h3>Gem Redemption</h3>
-            <p>Redeem gems for $DEEPWOOD at <strong>90%</strong> of face value.
-               Minimum redemption: <strong>20,000 DEEPWOOD</strong>.
-               A 5% burn fee applies on all redemptions.</p>
+            <p>Redeem gems for $DEEPWOOD at <strong>90%</strong> of face value —
+               the 10% keeps redemption from being exactly value-neutral against
+               gem purchases. Minimum redemption: <strong>20,000 DEEPWOOD</strong>.</p>
+          </div>
+          <div class="about-section">
+            <h3>Camp, Quests & Trophies</h3>
+            <p>Open <strong>Camp</strong> from the wallet menu. Your <strong>streak</strong>
+               counts consecutive UTC days with at least one settled dig — miss a day
+               and it resets, the best is kept. Two <strong>daily quests</strong> are on
+               the board each UTC day, rotating through three, and weekends add the
+               <strong>Weekend Big Dig</strong>: settle 100 digs between Saturday 00:00
+               and Monday 00:00 UTC. Fifteen <strong>trophies</strong> unlock from
+               lifetime on-chain facts — rarities held, tiers and skills reached,
+               streaks kept, gems burned, hunts settled, $DEEPWOOD spent. Quests and
+               streaks pay in honors only: no number is ever invented.</p>
+          </div>
+          <div class="about-section">
+            <h3>Tool Skins</h3>
+            <p>Honors dress your pickaxe. Each <strong>skin</strong> recolors the haft
+               and ties a wrap band near the grip — the tool tier's head metal is
+               earned progress and never changes. Skins unlock from the same
+               on-chain facts as trophies (gems burned, streaks, tiers, skills);
+               pick what your pickaxe wears in Camp. If the honor lapses, the skin
+               quietly reverts to standard wood.</p>
           </div>
         </div>
         <div class="about-footer">

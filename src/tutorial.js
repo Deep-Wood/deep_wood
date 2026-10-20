@@ -35,7 +35,7 @@ const STEPS = [
   },
   {
     title: "Your satchel",
-    body: "This lemon bar is your satchel. Top row: one icon per gem rarity with the count you hold. Bottom row: your current tool and skill.",
+    body: "This lemon bar is your satchel. Top row: one icon per gem rarity with the count you hold. Bottom row: your current tool — pickaxe and all — and skill. Earn a skin and the pickaxe wears it here.",
     target: "#gemstrip",
     pos: "below",
   },
@@ -66,7 +66,7 @@ const STEPS = [
   },
   {
     title: "Wallet, Camp & redeem",
-    body: "Wallet chip, top-right corner: tap to open the menu — it works with or without a wallet connected. From here you can view the Leaderboard, open your Camp (streak, daily quests, trophies), Redeem gems for $DEEPWOOD, and Connect or Disconnect your wallet.",
+    body: "Wallet chip, top-right corner: tap to open the menu — it works with or without a wallet connected. From here you can view the Leaderboard, open your Camp (daily streak, two rotating quests a day plus the Weekend Big Dig, 15 trophies, and the shelf where your pickaxe tries on earned skins), Redeem gems for $DEEPWOOD, and Connect or Disconnect your wallet.",
     target: "#connect",
     pos: "below",
   },
