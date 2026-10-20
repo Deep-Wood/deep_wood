@@ -30,7 +30,7 @@ const KEY = "dw-tutorial-v4";
 const STEPS = [
   {
     title: "Welcome to DeepWood",
-    body: "Hunt gems in a procedurally generated forest. Everything you find is real on-chain state once your wallet is connected. Tap the card to continue.",
+    body: "Hunt gems in a procedurally generated forest. Every dig is settled on-chain from a published season seed — your finds are real, verifiable state, not a server's promise. Build a daily streak, clear quests, earn trophies, and redeem your gems for $DEEPWOOD. Tap the card to continue.",
     target: null,
   },
   {
@@ -65,8 +65,8 @@ const STEPS = [
     pos: "left",
   },
   {
-    title: "Wallet & redeem",
-    body: "Wallet chip, top-right corner: tap to open. From here you can Redeem gems for $DEEPWOOD, view the Leaderboard, or disconnect. The button is also how you connect when freshly loaded.",
+    title: "Wallet, Camp & redeem",
+    body: "Wallet chip, top-right corner: tap to open. From here you can view the Leaderboard, open your Camp (streak, daily quests, trophies), Redeem gems for $DEEPWOOD, or disconnect. The button is also how you connect when freshly loaded.",
     target: "#connect",
     pos: "below",
   },
