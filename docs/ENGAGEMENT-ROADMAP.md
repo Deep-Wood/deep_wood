@@ -76,8 +76,12 @@ the on-chain set is below.
 
 ## 4. Client-only backlog (no contract work)
 
-1. **Tool skins** — earned cosmetics on the existing SVG avatar system (streak
-   honors, event badges, rebirth skins later). Endowment effect; pure display.
+1. ~~**Tool skins**~~ — **DONE (2026-10-20)**: five earned skins on the pickaxe
+   avatar (Ember Grip / Ember Trim / Wolfsbane Wrap / Golden Haft / Etched
+   Haft), unlocked by the same on-chain facts as badges. The strip's tool
+   cell shows the pickaxe inline with the name (band geometry unchanged);
+   the Camp card has the picker shelf; the choice reverts to base wood when
+   the honor lapses. `camp_skin_pick` allowlisted in the collector.
 2. **Night dig / offline shift** — queue a 20-hunt shift on exit, settle on
    return with the full reveal. `settleBatch` + `previewHuntAt` already support it; the
    work is UX choreography + the unload warning interplay.
