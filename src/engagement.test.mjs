@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {
   STREAK_TIERS, utcDay, dayBefore, emptyState, loadState, saveState,
   markActive, currentStreak, streakTier, nextTierAt,
-  QUESTS, deriveQuests, allQuestsDone,
+  QUESTS, deriveQuests, allQuestsDone, activeQuests, WEEKEND_QUEST,
+  isWeekend, saturdayOf,
   BADGES, evalBadges,
 } from './engagement.js';
 
@@ -71,25 +72,80 @@ test('storage round-trips and tolerates garbage', () => {
 
 // --- daily quests ----------------------------------------------------------
 
-test('quest progress derives from clamped deltas', () => {
-  const rows = deriveQuests({ digs: 7, amber: 5, burned: 1 });
+// 2026-10-20 is a Tuesday: 23 Fri, 24 Sat, 25 Sun, 26 Mon, 27 Tue.
+// Any 3 consecutive days cycle all three daily pairs, so these fixtures cover
+// the rotation without hardcoding which pair a date maps to.
+const idsOf = (day) => activeQuests(day).map((q) => q.id);
+// Three consecutive UTC days cycle all three pairs; the 25th is a Sunday but
+// its DAILY pair follows the same rotation, so including it completes the
+// modulo coverage the weekend-skipping list was missing.
+const someDayWith = (...wanted) => ['2026-10-23', '2026-10-24', '2026-10-25', '2026-10-26', '2026-10-27']
+  .find((d) => wanted.every((w) => idsOf(d).includes(w)));
+
+test('rotation: 2 of 3 dailies per UTC day; every daily appears within 3 days', () => {
+  for (const d of ['2026-10-23', '2026-10-26', '2026-10-27']) {
+    const rows = activeQuests(d);
+    assert.equal(rows.length, 2, `${d} is a weekday: exactly two dailies`);
+    assert.ok(!rows.some((q) => q.id === 'big-dig'), 'no Big Dig on weekdays');
+  }
+  const seen = new Set([...idsOf('2026-10-23'), ...idsOf('2026-10-26'), ...idsOf('2026-10-27')]);
+  assert.equal(seen.size, 3, 'all three dailies rotate in across three days');
+  // Deterministic: the same date always maps to the same pair.
+  assert.deepEqual(idsOf('2026-10-26'), idsOf('2026-10-26'));
+});
+
+test('weekends add the Big Dig on top of the rotated pair', () => {
+  for (const d of ['2026-10-24', '2026-10-25']) { // Sat, Sun
+    const rows = activeQuests(d);
+    assert.equal(rows.length, 3, `${d}: two dailies + the Big Dig`);
+    assert.ok(rows.some((q) => q.id === WEEKEND_QUEST.id));
+    assert.equal(rows.filter((q) => q.id === 'big-dig').length, 1);
+  }
+});
+
+test('weekend helpers: isWeekend and saturdayOf', () => {
+  assert.equal(isWeekend('2026-10-24'), true);   // Saturday
+  assert.equal(isWeekend('2026-10-25'), true);   // Sunday
+  assert.equal(isWeekend('2026-10-26'), false);  // Monday
+  assert.equal(saturdayOf('2026-10-24'), '2026-10-24', 'Saturday maps to itself');
+  assert.equal(saturdayOf('2026-10-25'), '2026-10-24', 'Sunday maps back to Saturday');
+  assert.equal(saturdayOf('2026-10-26'), null, 'weekdays have no weekend');
+});
+
+test('quest progress derives from clamped deltas for the day\'s active quests', () => {
+  const day = someDayWith('warm-pick', 'prospectors-eye');
+  assert.ok(day, 'a rotation day carries warm-pick + prospectors-eye');
+  const rows = deriveQuests(day, { digs: 7, amber: 5, burned: 1 });
   const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
   assert.equal(byId['warm-pick'].progress, 7);
   assert.equal(byId['warm-pick'].done, false);
   assert.equal(byId['prospectors-eye'].progress, 3, 'over-goal clamps to the goal');
   assert.equal(byId['prospectors-eye'].done, true);
-  assert.equal(byId['keep-it-sharp'].done, true);
-  assert.equal(allQuestsDone(rows), false, 'warm-pick is still open');
+  assert.ok(!byId['keep-it-sharp'], 'the rotated-out daily is absent from the board');
 
-  const perfect = deriveQuests({ digs: 20, amber: 9, burned: 2 });
+  // weekendDigs is included so the perfect case also completes the Big Dig
+  // when the matched rotation day happens to be a weekend day.
+  const perfect = deriveQuests(day, { digs: 20, amber: 9, burned: 2, weekendDigs: 100 });
   assert.equal(allQuestsDone(perfect), true);
 });
 
 test('negative deltas (a redemption emptied the satchel) never show negative progress', () => {
-  const rows = deriveQuests({ digs: 0, amber: -4, burned: 0 });
+  const day = someDayWith('prospectors-eye');
+  const rows = deriveQuests(day, { digs: 0, amber: -4, burned: 0 });
   const amber = rows.find((r) => r.id === 'prospectors-eye');
   assert.equal(amber.progress, 0);
   assert.equal(amber.done, false);
+});
+
+test('the weekend Big Dig counts weekend-spanning digs and clamps at its goal', () => {
+  const rows = deriveQuests('2026-10-25', { digs: 0, amber: 0, burned: 0, weekendDigs: 120 });
+  const big = rows.find((r) => r.id === 'big-dig');
+  assert.ok(big, 'the Big Dig is on Sunday\'s board');
+  assert.equal(big.progress, 100, 'clamps to the goal');
+  assert.equal(big.done, true);
+  const mid = deriveQuests('2026-10-25', { weekendDigs: 40 });
+  assert.equal(mid.find((r) => r.id === 'big-dig').progress, 40);
+  assert.equal(mid.find((r) => r.id === 'big-dig').done, false);
 });
 
 // --- badges ----------------------------------------------------------------
@@ -114,6 +170,22 @@ test('badges evaluate from on-chain facts only', () => {
   assert.ok(evalBadges(snap({ totalEarned: 100 })).includes('century'));
   assert.ok(evalBadges(snap({ onRoiBoard: true })).includes('on-the-board'));
   assert.ok(evalBadges(snap({ streak: 7 })).includes('hot-streak'));
+});
+
+test('milestone badges derive from playerStats lifetime facts', () => {
+  assert.ok(evalBadges(snap({ burned: 10 })).includes('kindling'));
+  assert.ok(!evalBadges(snap({ burned: 9 })).includes('kindling'));
+  assert.ok(evalBadges(snap({ burned: 250 })).includes('furnace'));
+  assert.ok(!evalBadges(snap({ burned: 249 })).includes('furnace'));
+  assert.ok(evalBadges(snap({ hunts: 100 })).includes('century-digger'));
+  assert.ok(evalBadges(snap({ hunts: 1000 })).includes('grand-digger'));
+  assert.ok(!evalBadges(snap({ hunts: 999 })).includes('grand-digger'));
+  assert.ok(evalBadges(snap({ tokenSpentWhole: 100000 })).includes('patron'));
+  assert.ok(!evalBadges(snap({ tokenSpentWhole: 99999 })).includes('patron'));
+  // Absent facts never award: a sparse snapshot unlocks none of the five.
+  for (const id of ['kindling', 'furnace', 'century-digger', 'grand-digger', 'patron']) {
+    assert.ok(!evalBadges(snap()).includes(id));
+  }
 });
 
 test('badge tests cannot throw on sparse snapshots', () => {

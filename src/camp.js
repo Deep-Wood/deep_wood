@@ -103,6 +103,10 @@ function badgeColor(id) {
   if (id === 'deep-blue') return GEM_COLORS[2];
   if (id === 'amber-rush') return GEM_COLORS[1];
   if (id === 'first-find') return GEM_COLORS[0];
+  if (id === 'kindling') return '#d97a3a';
+  if (id === 'furnace') return '#c9431e';
+  if (id === 'century-digger') return '#8b9dc3';
+  if (id === 'grand-digger') return '#4d6a99';
   return 'var(--gold)';
 }
 
@@ -115,6 +119,11 @@ function badgeGlyph(id) {
   if (id === 'century') return '100';
   if (id === 'on-the-board') return TROPHY_SVG;
   if (id === 'hot-streak') return FLAME_SVG;
+  if (id === 'kindling') return 'B10';
+  if (id === 'furnace') return 'B250';
+  if (id === 'century-digger') return 'H100';
+  if (id === 'grand-digger') return 'H1k';
+  if (id === 'patron') return '$';
   return '?';
 }
 

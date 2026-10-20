@@ -2075,7 +2075,7 @@ export class ForestScene extends Phaser.Scene {
       const { getState } = await import('./wallet.js');
       const {
         loadState, saveState, utcDay, markActive, currentStreak, deriveQuests,
-        evalBadges, streakTier,
+        evalBadges, streakTier, saturdayOf,
       } = await import('./engagement.js');
       const { createCamp, badgeToast, streakToast } = await import('./camp.js');
       if (!this._camp) {
@@ -2110,6 +2110,18 @@ export class ForestScene extends Phaser.Scene {
       const amberToday = Math.max(0, Number(BigInt(amber) - BigInt(b.amber)));
       const burnedToday = Math.max(0, Number(BigInt(burned) - BigInt(b.burned)));
 
+      // Weekend Big Dig: the baseline freezes at the first sync of the
+      // weekend, so the quest spans Sat 00:00 -> Mon 00:00 UTC. Same
+      // multi-device trade as the daily baseline: undercount, never lie.
+      let weekendDigs = 0;
+      const sat = saturdayOf(today);
+      if (sat) {
+        if (!state.weekendBase || state.weekendBase.saturday !== sat) {
+          state.weekendBase = { saturday: sat, huntIndex: String(huntIdx) };
+        }
+        weekendDigs = Math.max(0, Number(BigInt(huntIdx) - BigInt(state.weekendBase.huntIndex)));
+      }
+
       // Streak: a settled dig is the day's activity unit.
       const newDay = digs > 0 ? markActive(state, today) : false;
       const streak = currentStreak(state, today);
@@ -2123,6 +2135,13 @@ export class ForestScene extends Phaser.Scene {
         totalEarned: stats ? Number(stats.totalEarned) : 0,
         onRoiBoard: onBoard === true,
         streak,
+        // Lifetime playerStats facts for the milestone badges. burned counts
+        // gems (small units), hunts is already a uint64 number, and
+        // tokenSpent is 18-dec $DEEPWOOD wei -- whole units only, so the
+        // Number() conversion cannot lose precision.
+        burned: Number(burned),
+        hunts: stats ? stats.hunts : 0,
+        tokenSpentWhole: stats ? Number(stats.tokenSpent / 10n ** 18n) : 0,
       });
       for (const id of badges) {
         if (!state.badgesSeen.includes(id)) {
@@ -2145,8 +2164,8 @@ export class ForestScene extends Phaser.Scene {
       saveState(state, window.localStorage);
       this._eng = {
         streak, badges,
-        quests: deriveQuests({ digs, amber: amberToday, burned: burnedToday }),
-        deltas: { digs, amber: amberToday, burned: burnedToday },
+        quests: deriveQuests(today, { digs, amber: amberToday, burned: burnedToday, weekendDigs }),
+        deltas: { digs, amber: amberToday, burned: burnedToday, weekendDigs },
         baselineDay: today,
       };
       this._camp?.render?.();

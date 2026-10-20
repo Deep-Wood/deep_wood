@@ -47,7 +47,7 @@ export function dayBefore(day) {
 }
 
 export function emptyState() {
-  return { days: {}, best: 0, badgesSeen: [], baseline: null };
+  return { days: {}, best: 0, badgesSeen: [], baseline: null, weekendBase: null };
 }
 
 /** Load from localStorage; corrupt/absent data = fresh state, never a crash. */
@@ -62,6 +62,7 @@ export function loadState(store) {
       best: Number(s.best) || 0,
       badgesSeen: Array.isArray(s.badgesSeen) ? s.badgesSeen : [],
       baseline: (s.baseline && typeof s.baseline === 'object') ? s.baseline : null,
+      weekendBase: (s.weekendBase && typeof s.weekendBase === 'object') ? s.weekendBase : null,
     };
   } catch {
     return emptyState();
@@ -128,9 +129,48 @@ export const QUESTS = [
   { id: 'keep-it-sharp', title: 'Keep It Sharp', desc: 'Burn gems on a repair or skill today', goal: 1, unit: 'repair', key: 'burned' },
 ];
 
-/** Quest progress rows for the card. `deltas` values are clamped >= 0 here. */
-export function deriveQuests(deltas = {}) {
-  return QUESTS.map((q) => {
+/** The weekend event quest, added on top of the dailies on Sat/Sun UTC. */
+export const WEEKEND_QUEST = {
+  id: 'big-dig', title: 'Weekend Big Dig', desc: 'Settle 100 digs this weekend',
+  goal: 100, unit: 'digs', key: 'weekendDigs',
+};
+
+/** Days since the Unix epoch for a 'YYYY-MM-DD' -- the rotation's clock. */
+export function dayNumber(day) {
+  return Math.floor(Date.parse(`${day}T00:00:00Z`) / 86400000);
+}
+
+/** Saturday or Sunday, UTC. */
+export function isWeekend(day) {
+  const dow = new Date(`${day}T00:00:00Z`).getUTCDay();
+  return dow === 6 || dow === 0;
+}
+
+/**
+ * The quests live on a given UTC day: 2 of the 3 dailies rotate in -- the
+ * same pair for every player, picked by the day number, so the board has
+ * variety without inventing new on-chain deltas -- and weekends add the Big
+ * Dig on top, spanning Sat 00:00 UTC to Mon 00:00 UTC.
+ */
+export function activeQuests(day = utcDay()) {
+  const pairs = [[0, 1], [1, 2], [2, 0]];
+  const n = ((dayNumber(day) % 3) + 3) % 3;
+  const base = pairs[n].map((i) => QUESTS[i]);
+  return isWeekend(day) ? [...base, WEEKEND_QUEST] : base;
+}
+
+/** The Saturday of the weekend `day` belongs to (null on weekdays). */
+export function saturdayOf(day) {
+  const d = new Date(`${day}T00:00:00Z`);
+  const dow = d.getUTCDay();
+  if (dow === 6) return day;
+  if (dow === 0) { d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); }
+  return null;
+}
+
+/** Quest progress rows for the card, for the quests active on `day`. `deltas` values are clamped >= 0 here. */
+export function deriveQuests(day, deltas = {}) {
+  return activeQuests(day).map((q) => {
     const raw = Number(deltas[q.key] ?? 0);
     const progress = Math.max(0, Math.min(raw, q.goal));
     return { ...q, progress, done: progress >= q.goal };
@@ -167,6 +207,17 @@ export const BADGES = [
   { id: 'century', name: 'Century Club', how: 'Earn 100 gems lifetime', test: (s) => (s.totalEarned ?? 0) >= 100 },
   { id: 'on-the-board', name: 'On The Board', how: 'Enter the ROI leaderboard', test: (s) => s.onRoiBoard === true },
   { id: 'hot-streak', name: 'Hot Streak', how: 'A 7-day dig streak', test: (s) => (s.streak ?? 0) >= 7 },
+  // Milestone badges read playerStats' lifetime counters -- burned / hunts /
+  // tokenSpent. NOTE: the roadmap asked for "redemption milestones", but the
+  // contract keeps NO lifetime redemption counter (playerStats is totalEarned,
+  // tokenSpent, burned, best, leq, hunts), and the honesty rule forbids
+  // inventing one. tokenSpent -- $DEEPWOOD spent on tools or gems -- is the
+  // mirror-image fact that IS on-chain, so Patron stands in for it.
+  { id: 'kindling', name: 'Kindling', how: 'Burn 10 gems lifetime', test: (s) => (s.burned ?? 0) >= 10 },
+  { id: 'furnace', name: 'Furnace', how: 'Burn 250 gems lifetime', test: (s) => (s.burned ?? 0) >= 250 },
+  { id: 'century-digger', name: 'Century Digger', how: 'Settle 100 hunts lifetime', test: (s) => (s.hunts ?? 0) >= 100 },
+  { id: 'grand-digger', name: 'Grand Excavation', how: 'Settle 1,000 hunts lifetime', test: (s) => (s.hunts ?? 0) >= 1000 },
+  { id: 'patron', name: 'Patron', how: 'Spend 100,000 $DEEPWOOD on tools or gems', test: (s) => (s.tokenSpentWhole ?? 0) >= 100000 },
 ];
 
 /** IDs of every badge whose test passes on this snapshot. */
