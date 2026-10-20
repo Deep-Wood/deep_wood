@@ -150,6 +150,39 @@ html, body {
   align-items: flex-end;
   align-self: end;
 }
+/* --- bar actions (desktop only) ------------------------------------------
+ * On wide screens (>=701px) the upgrade-tool and settle-hunt buttons ride ON
+ * the satchel band, centred on the divider line between the gem row and the
+ * current-tool/current-skill row: buy on the left edge (under the brand
+ * block), settle on the right edge (under the wallet button). Both leave the
+ * rails' flow, which vacates the top rail slots, so the remaining buttons
+ * shift up into them exactly: skill takes buy's old slot, sound takes
+ * settle's. Phones (<=700px) keep the rails below the band untouched. */
+@media (min-width: 701px) {
+  /* 76px = divider line (y=110, centre of the 106..114 gap) minus half the
+     68px icon+label wrapper: the whole button straddles the line and its
+     label stays inside the band (76+68=144 < 148 band bottom). */
+  #belt-actions .rail-action-item.order-buy {
+    position: fixed;
+    top: 76px;
+    left: var(--s3);
+    margin-top: 0;
+    /* Out of flow the rail's width:100% would resolve against the viewport
+       (a full-width invisible click-catcher across the bar). Hug content. */
+    width: fit-content;
+  }
+  .rail-actions .rail-action-item.settle-right {
+    position: fixed;
+    top: 76px;
+    right: var(--s3);
+    margin-top: 0;
+  }
+  /* With buy on the band, skill is the rail's first item and must not carry
+     the 18px top margin that only spaces SUBSEQUENT rows. */
+  #belt-actions .rail-action-item.order-skill { margin-top: 0; }
+  /* Same on the right: sound rises into settle's old slot. */
+  .rail-actions .sound-toggle-wrap { margin-top: 0; }
+}
 /* BUY is the FIRST action in the rail, so it must not carry the 18px top margin
    that spaces the subsequent rows -- otherwise it sits 18px below the rail's top
    and never lines up with the leaderboard button (same rail row, no margin). */
