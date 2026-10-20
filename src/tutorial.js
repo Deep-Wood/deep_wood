@@ -66,7 +66,7 @@ const STEPS = [
   },
   {
     title: "Wallet, Camp & redeem",
-    body: "Wallet chip, top-right corner: tap to open. From here you can view the Leaderboard, open your Camp (streak, daily quests, trophies), Redeem gems for $DEEPWOOD, or disconnect. The button is also how you connect when freshly loaded.",
+    body: "Wallet chip, top-right corner: tap to open the menu — it works with or without a wallet connected. From here you can view the Leaderboard, open your Camp (streak, daily quests, trophies), Redeem gems for $DEEPWOOD, and Connect or Disconnect your wallet.",
     target: "#connect",
     pos: "below",
   },

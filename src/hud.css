@@ -1177,7 +1177,8 @@ button.chip { position: relative; }
   border-color: var(--gold, #d9a441);
 }
 /* Disconnect: plain text row outside the 3D box. */
-.wallet-menu .wm-disconnect {
+.wallet-menu .wm-disconnect,
+.wallet-menu .wm-connect {
   display: block;
   width: 100%;
   text-align: left;
@@ -1190,7 +1191,8 @@ button.chip { position: relative; }
   color: rgba(232, 240, 224, .7);
   cursor: pointer;
 }
-.wallet-menu .wm-disconnect:hover {
+.wallet-menu .wm-disconnect:hover,
+.wallet-menu .wm-connect:hover {
   background: rgba(180, 134, 58, .2);
   border-color: var(--warn, #b4863a);
   color: var(--ink, #e8f0e0);

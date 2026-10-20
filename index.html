@@ -742,7 +742,7 @@
         noteWallet(pendingMsg || `Wrong network: wallet on chain ${s.chainId}, game on ${GAME_CHAIN_ID}.`);
         return;
       }
-      setIconState('', 'Connect wallet');
+      setIconState('', 'Wallet menu');
       noteWallet(pendingMsg || 'Off-chain preview. Connect a wallet to buy a tool and sell gems.');
     }
 
@@ -792,23 +792,19 @@
     }
 
     btn.addEventListener('click', () => {
-      const s = getState();
-      if (s.connected) {
-        // Already connected. A click should not silently re-connect; it should
-        // toggle the account menu. Toggle (not open-only): clicking the button
-        // again while the menu is open closes it, rather than falling through
-        // to a pointless reconnect.
-        if (btn.dataset.open === '1') closeWalletMenu();
-        else openWalletMenu();
-        return;
-      }
-      doConnect();
+      // The menu opens whether or not a wallet is connected: Leaderboard,
+      // Camp, About and Redeem are all reachable in preview, and the bottom
+      // item is "Connect wallet" when there is no session. (Was: a click
+      // while disconnected went straight to the wallet prompt, so the menu
+      // never appeared until after the first connect.)
+      if (btn.dataset.open === '1') closeWalletMenu();
+      else openWalletMenu();
     });
 
-    // The disconnect menu: a single-item dropup rendered beside the connect
-    // button. One item only because the ONLY sensible action from here is
-    // "disconnect". It clears our local state and asks the wallet to drop the
-    // eth_accounts permission so the next eth_requestAccounts prompts again.
+    // The wallet menu: a dropup rendered beside the connect button. It opens
+    // with OR without a session (preview players need Leaderboard/About/Camp
+    // too); the bottom item is the session action -- "Disconnect" when
+    // attached, "Connect wallet" when not.
     let walletMenu = null;
     function closeWalletMenu() {
       walletMenu?.remove();
@@ -828,17 +824,22 @@
 
     function openWalletMenu() {
       closeWalletMenu();
+      const s = getState();
       walletMenu = document.createElement('div');
       walletMenu.className = 'wallet-menu';
       walletMenu.innerHTML =
-        '<div class="wm-account">' + short(getState().account || '') + '</div>' +
+        '<div class="wm-account">' + (s.connected ? short(s.account) : 'No wallet connected') + '</div>' +
         '<div class="wm-box">' +
           '<button class="wm-item" type="button" id="wm-leaderboard">Leaderboard</button>' +
           '<button class="wm-item" type="button" id="wm-camp">Camp</button>' +
           '<button class="wm-item" type="button" id="wm-redeem">Redeem gems</button>' +
           '<button class="wm-item" type="button" id="wm-about">About Game</button>' +
         '</div>' +
-        '<button class="wm-item wm-disconnect" type="button">Disconnect</button>';
+        // The bottom item flips with the session: "Disconnect" when attached,
+        // "Connect wallet" when not. Same slot, same styling, opposite action.
+        (s.connected
+          ? '<button class="wm-item wm-disconnect" type="button">Disconnect</button>'
+          : '<button class="wm-item wm-connect" type="button">Connect wallet</button>');
       // Append the menu to the button and DO NOT touch its position.
       //
       // The button is already `position: absolute` (top-right corner, from
@@ -905,6 +906,16 @@
         } else {
           setPending('Redemption is not ready yet — try again in a moment.');
         }
+      });
+
+      // Connect wallet — the bottom item when there is no session. Runs the
+      // same connect-and-switch flow the button itself used to fire directly.
+      walletMenu.querySelectorAll('.wm-connect').forEach((item) => {
+        item.addEventListener('click', (e) => {
+          e.stopPropagation();
+          closeWalletMenu();
+          doConnect();
+        });
       });
 
       walletMenu.querySelectorAll('.wm-disconnect').forEach((item) => {
