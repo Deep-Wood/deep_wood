@@ -82,9 +82,14 @@ the on-chain set is below.
    cell shows the pickaxe inline with the name (band geometry unchanged);
    the Camp card has the picker shelf; the choice reverts to base wood when
    the honor lapses. `camp_skin_pick` allowlisted in the collector.
-2. **Night dig / offline shift** — queue a 20-hunt shift on exit, settle on
-   return with the full reveal. `settleBatch` + `previewHuntAt` already support it; the
-   work is UX choreography + the unload warning interplay.
+2. ~~**Night dig / offline shift**~~ — **DONE (2026-10-20)**: the settle queue
+   persists to localStorage (mirrored per dig), survives reload/tab close, and
+   re-attaches only when the chain's hunt index still equals its base (and the
+   held tier matches). On return a "shift returns" card shows the haul + the
+   required hard-refresh/cache warning, and offers settle-now or keep-digging.
+   The unload dialog now fires only when persistence failed. Honest limits:
+   nothing accrues while away; nothing exists on-chain until settle; another
+   device settling drops the shift. `shift_return` allowlisted in the collector.
 3. ~~**Weekly quest rotation**~~ — **DONE (2026-10-20)**: 2 of 3 dailies rotate
    per UTC day (same pair for every player, day-number keyed), weekends add the
    Big Dig (100 digs, Sat 00:00 → Mon 00:00 UTC, weekend-frozen baseline).
