@@ -33,7 +33,7 @@ const SAFE = (() => {
 const DECORATE = SAFE !== 1 && SAFE !== 3;
 import { rollHunt, RARITY_NAME } from './engine.js';
 import { createRedeemCard } from './redeemcard.js';
-import { HuntQueue, MAX_BATCH } from './queue.js';
+import { HuntQueue, MAX_BATCH, saveQueue, loadQueue, dropStoredQueue } from './queue.js';
 import {
   CHUNK, chunkOf, describeChunk, nodeKey,
   residentChunks, staleChunks, LOAD_RADIUS,
@@ -1855,7 +1855,7 @@ export class ForestScene extends Phaser.Scene {
       st.title = offline
         ? 'settle is on-chain only -- connect a wallet'
         : queued > 0
-          ? `bank ${queued} queued hunt${queued === 1 ? '' : 's'} on-chain (one signature)`
+          ? `bank ${queued} queued hunt${queued === 1 ? '' : 's'} on-chain (one signature). They wait in this browser across reloads, but a hard refresh or clearing cache wipes them.`
           : 'nothing queued -- dig first';
       st.disabled = queued === 0 || offline;
       st.onclick = () => this.doSettle();
@@ -1969,9 +1969,35 @@ export class ForestScene extends Phaser.Scene {
         if (account) {
           const idx = Number(await r.huntIndexOf(account));
           this._huntIndex = idx;
+          // NIGHT DIGS: a queue that was persisted before the tab closed is
+          // restored here -- but only the chain can say whether its digs are
+          // still upcoming. rebase() drops the whole batch when the index
+          // moved (settled on another device), and a tier change kills it
+          // too: rolls are tier-bound and the contract recomputes with the
+          // held tier, so a mismatched queue is a guaranteed ResultMismatch.
+          let restored = false;
+          if (!this.queue) {
+            const stored = loadQueue(window.localStorage);
+            if (stored) {
+              if (stored.tier !== tier) {
+                dropStoredQueue(window.localStorage);
+              } else {
+                this.queue = stored;
+                restored = true;
+              }
+            }
+          }
           if (this.queue) {
+            const before = this.queue.size;
             this.queue.rebase(idx, tier);
             window.renderQueue?.(this.queue.size);
+            // Keep storage an exact mirror of the live queue: dropped by
+            // the rebase -> gone from disk; survived -> unchanged on disk.
+            if (this.queue.empty) dropStoredQueue(window.localStorage);
+            else this._queuePersisted = saveQueue(this.queue, window.localStorage);
+            if (restored && this.queue.size > 0 && before === this.queue.size) {
+              this.showShiftReturn(this.queue.size);
+            }
           }
         }
       }
@@ -2673,6 +2699,57 @@ export class ForestScene extends Phaser.Scene {
     if (this.txBusy) return;
     await this._doSettle();
   }
+  /**
+   * NIGHT DIGS: the "shift returns" reveal. Shown once, when a queue that
+   * persisted through a reload or tab close re-attaches to the chain with
+   * its digs still upcoming. The CHAIN decided survival (the rebase); this
+   * card only reports what is queued and offers the one signature that
+   * banks it. The cache warning is required content (user, 2026-10-20):
+   * players must know the shift lives in the browser, not on the chain.
+   */
+  showShiftReturn(n) {
+    if (this._shiftCardEl) return;
+    const haul = [0n, 0n, 0n, 0n, 0n];
+    for (const e of (this.queue?.entries ?? [])) {
+      for (let i = 0; i < 5; i++) haul[i] += BigInt(e.counts[i] ?? 0n);
+    }
+    const rows = [0, 1, 2, 3, 4]
+      .filter((i) => haul[i] > 0n)
+      .map((i) => `<div class="shift-row"><span class="shift-gem g${i}">${RARITY_NAME[i]}</span><span>×${haul[i]}</span></div>`)
+      .join('') || '<div class="shift-row"><span>plain rock — no gems in the shift</span></div>';
+    // The tool mirror reads fresh from the chain (durability is only charged
+    // at settle), so say plainly what settling will do to it.
+    const leftAfter = Math.max(0, (this.econ.left ?? 0) - n);
+    const el = document.createElement('div');
+    el.className = 'shift-backdrop';
+    el.innerHTML = `
+      <div class="shift-card" role="dialog" aria-label="Your shift returns">
+        <div class="shift-eyebrow">while you were away</div>
+        <div class="shift-title">Your shift returns</div>
+        <div class="shift-sub">${n} hunt${n === 1 ? '' : 's'} dug before you left — still unbanked</div>
+        <div class="shift-haul">${rows}</div>
+        <div class="shift-note">Settle writes them on-chain in one signature and takes the tool to ${leftAfter} durability.</div>
+        <div class="shift-warn">Night digs live in this browser — a hard refresh or clearing cache wipes them.</div>
+        <div class="shift-btns">
+          <button type="button" class="shift-btn primary" id="shift-settle">Settle ${n} now</button>
+          <button type="button" class="shift-btn" id="shift-later">Keep digging</button>
+        </div>
+      </div>`;
+    document.body.appendChild(el);
+    this._shiftCardEl = el;
+    el.querySelector('#shift-later').addEventListener('click', () => this.closeShiftReturn());
+    el.querySelector('#shift-settle').addEventListener('click', () => {
+      this.closeShiftReturn();
+      this.doSettle();
+    });
+    import('./analytics.js').then(({ track }) => track('shift_return', { hunts: n })).catch(() => {});
+  }
+
+  closeShiftReturn() {
+    this._shiftCardEl?.remove();
+    this._shiftCardEl = null;
+  }
+
   async _doSettle() {
     if (!onchainActive()) {
       // Preview mode settles nothing: there is no contract holding the digs,
@@ -2717,6 +2794,10 @@ export class ForestScene extends Phaser.Scene {
     // so satchel + "n pending" badge and tool all show the post-settle truth.
     window.renderQueue?.(0);
     this.queue = new HuntQueue(this.queue.nextIndex, this.queue.tier);
+    // Night digs: the banked batch is dead storage now -- remove it so a
+    // reload cannot resurrect settled hunts.
+    dropStoredQueue(window.localStorage);
+    this._queuePersisted = true;
     await this.refreshChainTool();
     this.beltMsg(`Banked ${n} hunt${n === 1 ? '' : 's'} \u2014 haul is on-chain.`, 'good');
     this.flash(`Settled ${n} hunt${n === 1 ? '' : 's'} \u2014 the haul is banked.`);
@@ -2894,6 +2975,18 @@ export class ForestScene extends Phaser.Scene {
                lifetime on-chain facts — rarities held, tiers and skills reached,
                streaks kept, gems burned, hunts settled, $DEEPWOOD spent. Quests and
                streaks pay in honors only: no number is ever invented.</p>
+          </div>
+          <div class="about-section">
+            <h3>Night Digs</h3>
+            <p>Hunts you dig but haven't settled wait for you: close the tab,
+               reload, come back later — a <strong>shift returns</strong> card
+               shows the haul and one signature banks it. Limits are by design:
+               the shift lives in <strong>this browser's storage</strong>, so a
+               hard refresh or clearing cache wipes it; digs never accrue while
+               you're away (every roll is a dig you actually made); and if
+               another device settles the same hunts first, the chain's own
+               re-check drops the shift. Nothing exists on-chain until you
+               settle — that is what keeps every gem honest.</p>
           </div>
           <div class="about-section">
             <h3>Tool Skins</h3>
@@ -4132,6 +4225,10 @@ export class ForestScene extends Phaser.Scene {
         return false;
       }
       this.queue.push(preview.counts, preview.bestSingleWei ?? 0n);
+      // Night digs: mirror every queued hunt to storage the moment it is dug.
+      // False = storage unavailable (private mode): the unload warning then
+      // keeps its old "they are lost" teeth.
+      this._queuePersisted = saveQueue(this.queue, window.localStorage);
       result = {
         counts: preview.counts.map((n) => Number(n)),
         total: preview.counts.reduce((a, b) => a + Number(b), 0),

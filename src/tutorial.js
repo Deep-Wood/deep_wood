@@ -60,7 +60,7 @@ const STEPS = [
   },
   {
     title: "Settle hunt",
-    body: "Checkmark icon on the right rail: digs are queued, not settled one by one. Tap Settle to write up to 20 queued hunts in ONE transaction. Reload or leave with hunts queued and they are lost.",
+    body: "Checkmark icon on the right rail: digs are queued, not settled one by one. Tap Settle to write up to 20 queued hunts in ONE transaction. Your digs now wait for you across reloads — but they live in this browser, and a hard refresh or clearing cache wipes them. Settle to bank them for good.",
     target: "#belt-settle",
     pos: "left",
   },

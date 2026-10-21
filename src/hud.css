@@ -1773,6 +1773,104 @@ button.chip { position: relative; }
 .redeem-msg { min-height: 13px; font-size: 10px; color: var(--warn); }
 .redeem-msg.bad { color: var(--bad); }
 
+/* ---- night digs: the "shift returns" card ----
+   A returning shift is a MOMENT, not a form: dark backdrop, one warm card,
+   the haul as gem-colored rows, the required cache warning, and two doors --
+   settle now (gold, the intended action) or keep digging (quiet). */
+.shift-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6, 10, 5, .6);
+  backdrop-filter: blur(2px);
+}
+.shift-card {
+  width: min(92vw, 380px);
+  padding: 20px 22px 18px;
+  border-radius: 16px;
+  border: 2px solid rgba(217, 164, 65, .55);
+  background: linear-gradient(180deg, #17240f 0%, #101a0b 100%);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, .7), inset 0 1px 0 rgba(255, 255, 255, .08);
+  font-family: var(--mono);
+  color: var(--ink, #e8f0e0);
+  text-align: center;
+}
+.shift-eyebrow {
+  font-size: 9px;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  color: rgba(232, 240, 224, .5);
+}
+.shift-title {
+  margin-top: 4px;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--gold, #d9a441);
+}
+.shift-sub {
+  margin-top: 3px;
+  font-size: 11px;
+  color: rgba(232, 240, 224, .75);
+}
+.shift-haul {
+  margin: 12px auto 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 220px;
+}
+.shift-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, .25);
+}
+.shift-gem { font-weight: 700; }
+.shift-gem.g0 { color: #cfd6dd; }
+.shift-gem.g1 { color: #d9a441; }
+.shift-gem.g2 { color: #3a6fd8; }
+.shift-gem.g3 { color: #d83a5a; }
+.shift-gem.g4 { color: #8a3ad8; }
+.shift-note {
+  font-size: 10px;
+  color: rgba(232, 240, 224, .6);
+}
+.shift-warn {
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--warn, #b4863a);
+}
+.shift-btns {
+  margin-top: 14px;
+  display: flex;
+  gap: 8px;
+}
+.shift-btn {
+  flex: 1;
+  padding: 10px 0;
+  border-radius: 10px;
+  border: 1px solid rgba(158, 196, 158, .25);
+  background: rgba(18, 28, 14, .6);
+  color: var(--ink, #e8f0e0);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.shift-btn.primary {
+  border-color: rgba(217, 164, 65, .8);
+  background: linear-gradient(180deg, #d9a441, #b4863a);
+  color: #1a1206;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, .4), inset 0 1px 0 rgba(255, 255, 255, .3);
+}
+
 .redeem-btn {
   margin-top: var(--s2);
   width: 100%;

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { HuntQueue, MAX_BATCH } from './queue.js';
+import { HuntQueue, MAX_BATCH, saveQueue, loadQueue, dropStoredQueue } from './queue.js';
 
 test('queue starts empty with base 0', () => {
   const q = new HuntQueue();
@@ -85,4 +85,61 @@ test('clear empties without moving the base', () => {
   q.clear();
   assert.equal(q.size, 0);
   assert.equal(q.base, 3n, 'base survives a clear so the next dig re-rolls at the right index');
+});
+
+// --- night digs: persistence round-trips -------------------------------------
+
+const mem = () => {
+  const m = new Map();
+  return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k) };
+};
+
+test('a queue save/load round-trip is lossless (BigInts included)', () => {
+  const store = mem();
+  const q = new HuntQueue(42n, 2);
+  q.push([1n, 2n, 0n, 0n, 0n], 500000000000000n);
+  q.push([0n, 0n, 3n, 0n, 1n], 0n);
+  assert.equal(saveQueue(q, store), true);
+  const back = loadQueue(store);
+  assert.ok(back, 'restored');
+  assert.equal(back.base, 42n);
+  assert.equal(back.tier, 2);
+  assert.equal(back.size, 2);
+  assert.deepEqual(back.entries[0].counts, [1n, 2n, 0n, 0n, 0n]);
+  assert.equal(back.entries[0].bestSingleWei, 500000000000000n);
+  assert.deepEqual(back.entries[1].counts, [0n, 0n, 3n, 0n, 1n]);
+  // The restored queue is settle-compatible: same base, so not stale.
+  assert.equal(back.stale(42n), false);
+  assert.equal(back.stale(43n), true);
+});
+
+test('an empty queue removes the store; nothing to resurrect', () => {
+  const store = mem();
+  const q = new HuntQueue(7n, 1);
+  q.push([1n, 0n, 0n, 0n, 0n]);
+  saveQueue(q, store);
+  assert.ok(store.getItem('dw-queue-v1'));
+  q.clear();
+  saveQueue(q, store);
+  assert.equal(store.getItem('dw-queue-v1'), null);
+  dropStoredQueue(store); // idempotent
+  assert.equal(loadQueue(store), null);
+});
+
+test('corrupt, absent, and oversize stores load as null, never throw', () => {
+  const store = mem();
+  assert.equal(loadQueue(store), null, 'absent');
+  store.setItem('dw-queue-v1', '{not json');
+  assert.equal(loadQueue(store), null, 'corrupt json');
+  store.setItem('dw-queue-v1', JSON.stringify({ base: '1', tier: 1, entries: [{ c: ['1', '1', '1'], b: '0' }] }));
+  assert.equal(loadQueue(store), null, 'wrong arity is rejected');
+  const many = { base: '1', tier: 1, entries: [] };
+  for (let i = 0; i <= MAX_BATCH; i++) many.entries.push({ c: ['1', '0', '0', '0', '0'], b: '0' });
+  store.setItem('dw-queue-v1', JSON.stringify(many));
+  assert.equal(loadQueue(store), null, 'oversize batch is rejected -- the contract cap is the load cap');
+  const hostile = { getItem: () => { throw new Error('denied'); }, setItem: () => { throw new Error('denied'); }, removeItem: () => {} };
+  assert.doesNotThrow(() => saveQueue(new HuntQueue(), hostile));
+  const full = new HuntQueue(1n, 1);
+  full.push([1n, 0n, 0n, 0n, 0n]);
+  assert.equal(saveQueue(full, hostile), false, 'a non-empty save reports failure so the caller keeps the leave-warning honest');
 });

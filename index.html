@@ -620,9 +620,11 @@
     window.renderQueue = (queued) => {
       if (queued > 0) {
         badge.textContent = `${queued} pending - settle to bank`;
+        badge.title = 'Night digs: they wait in this browser across reloads — a hard refresh or clearing cache wipes them.';
         badge.classList.remove('hidden');
       } else {
         badge.classList.add('hidden');
+        badge.removeAttribute('title');
       }
     };
     // Phaser's TouchManager attaches a WINDOW-level listener (default config)
@@ -1023,15 +1025,17 @@
       // No chain module in this build: the offline preview keeps working.
     });
 
-    // UNSAVED-QUEUE GUARD: the settle queue lives in memory. Closing or
-    // reloading with hunts queued drops them permanently -- the gems were never
-    // on-chain. The browser's own leave-confirmation is the last line of
-    // defence; the badge and the settle button are the first.
+    // UNSAVED-QUEUE GUARD: since night digs, a reload or tab close is SAFE --
+    // the queue is mirrored to localStorage on every dig and re-validated
+    // against the chain on return. The browser's leave-confirmation now only
+    // fires when persistence FAILED (private mode / full storage), the one
+    // remaining way a leave actually drops the digs.
     window.addEventListener('beforeunload', (e) => {
-      const q = window.__scene?.queue;
-      if (q && q.size > 0) {
+      const s = window.__scene;
+      const q = s?.queue;
+      if (q && q.size > 0 && !s?._queuePersisted) {
         e.preventDefault();
-        e.returnValue = `You have ${q.size} unsettled hunt${q.size === 1 ? '' : 's'}. Leave now and they are lost.`;
+        e.returnValue = `You have ${q.size} unsettled hunt${q.size === 1 ? '' : 's'} and this browser cannot keep them. Leave now and they are lost.`;
         return e.returnValue;
       }
       return undefined;

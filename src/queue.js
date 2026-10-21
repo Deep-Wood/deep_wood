@@ -112,8 +112,7 @@ export class HuntQueue {
     this.entries = [];
   }
 
-  /**
-   * Would settleBatch accept this queue right now? True when the chain's
+  /** Would settleBatch accept this queue right now? True when the chain's
    * hunt index still equals the base -- i.e. nothing settled underneath us.
    * Cheap enough to check before prompting the wallet; the contract re-checks
    * authoritatively on settle.
@@ -121,4 +120,74 @@ export class HuntQueue {
   stale(chainHuntIndex) {
     return this.entries.length > 0 && BigInt(chainHuntIndex) !== this.base;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Night digs: the queue persisted to localStorage, so a reload or tab close
+// no longer drops dug-but-unsettled hunts. LIMITS (honest by design):
+//   - Browser storage only. Clearing site data (or a storage-unavailable
+//     private mode) still wipes the queue; the game keeps warning then.
+//   - The rebase check still decides survival: the chain's hunt index must
+//     equal the queue's base. Another device settling kills the queue
+//     exactly like an in-memory one -- those results can never match the
+//     chain's recompute.
+//   - Un-settled hunts never existed on-chain, so nothing here can mint
+//     value: a tampered store is still validated by the contract at settle.
+// ---------------------------------------------------------------------------
+
+const STORE_KEY = 'dw-queue-v1';
+
+/**
+ * Mirror the queue into localStorage. Returns false when storage is
+ * unavailable (private mode / full) so the caller can keep the LOADED-
+ * warning path honest instead of silently believing the digs are safe.
+ */
+export function saveQueue(q, store) {
+  try {
+    if (!q || q.empty) {
+      store?.removeItem?.(STORE_KEY);
+      return true;
+    }
+    store?.setItem?.(STORE_KEY, JSON.stringify({
+      base: q.base.toString(),
+      tier: q.tier,
+      entries: q.entries.map((e) => ({
+        c: e.counts.map((c) => BigInt(c).toString()),
+        b: BigInt(e.bestSingleWei).toString(),
+      })),
+    }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Restore a persisted night-dig queue, or null when absent/corrupt/oversize.
+ * The queue is NOT yet validated: the caller must rebase() it against the
+ * chain's hunt index (which drops it when the base moved) and drop it when
+ * the held tier differs -- rolls are tier-bound, and the contract recomputes
+ * with the tier at settle time.
+ */
+export function loadQueue(store) {
+  try {
+    const raw = store?.getItem?.(STORE_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw);
+    if (!s || !Array.isArray(s.entries) || s.entries.length === 0
+      || s.entries.length > MAX_BATCH) return null;
+    const q = new HuntQueue(BigInt(s.base), Number(s.tier) || 0);
+    for (const e of s.entries) {
+      if (!Array.isArray(e.c) || e.c.length !== 5) return null;
+      q.entries.push({ counts: e.c.map((c) => BigInt(c)), bestSingleWei: BigInt(e.b) });
+    }
+    return q;
+  } catch {
+    return null;
+  }
+}
+
+/** Remove the persisted queue (after a settle, or when it is provably dead). */
+export function dropStoredQueue(store) {
+  try { store?.removeItem?.(STORE_KEY); } catch { /* nothing to clean */ }
 }
