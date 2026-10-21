@@ -2101,7 +2101,7 @@ export class ForestScene extends Phaser.Scene {
       const { getState } = await import('./wallet.js');
       const {
         loadState, saveState, utcDay, markActive, currentStreak, deriveQuests,
-        evalBadges, streakTier, saturdayOf, earnedSkins,
+        evalBadges, streakTier, saturdayOf, earnedSkins, mergeSettleDays,
       } = await import('./engagement.js');
       const { createCamp, badgeToast, streakToast } = await import('./camp.js');
       if (!this._camp) {
@@ -2117,6 +2117,22 @@ export class ForestScene extends Phaser.Scene {
 
       const today = utcDay();
       const state = loadState(window.localStorage) ;
+      // STREAK REBUILD (2026-10-21): day marks are the one engagement fact
+      // huntIndex alone cannot re-create -- the chain keeps no per-day
+      // history. But every settle emitted BatchSettled(player,..) and block
+      // timestamps turn those logs back into UTC days. One successful
+      // backfill per device (state.backfillDone); a FAILED scan (the RPC's
+      // rate limiter is the likeliest cause) stays unflagged and retries on
+      // the next sync, so a hot limiter delays the rebuild instead of
+      // losing it forever. mergeSettleDays only ADDS marks, so running it
+      // for an existing player recovers days their cache clear dropped.
+      if (!state.backfillDone) {
+        try {
+          const settleDays = await r.settledDaysFor(account);
+          mergeSettleDays(state, settleDays);
+          state.backfillDone = true;
+        } catch { /* retry on the next sync */ }
+      }
       const [huntIdx, amber, stats, onBoard] = await Promise.all([
         r.huntIndexOf(account),
         r.gemsOf(account, 1),

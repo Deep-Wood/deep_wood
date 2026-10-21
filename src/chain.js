@@ -164,6 +164,14 @@ const MAX_LOG_SPAN = 10_000_000;
 const DEFAULT_LOOKBACK = 2_000_000;
 
 /**
+ * The live game contract's deploy block. Settled-day rebuilds scan from here:
+ * one chunk covers deploy..latest, and no log can predate the contract.
+ * V9 went live at 138,807,361 (2026-10-19). MUST be updated on a V10
+ * migration or the rebuild scans the dead contract's range for nothing.
+ */
+const GAME_DEPLOY_BLOCK = 138_807_361;
+
+/**
  * Chunks per wave. Sequential is what made this slow: the requests are
  * independent, so batching them collapses the wall time to roughly one
  * round trip per wave instead of one per chunk.
@@ -662,6 +670,85 @@ export async function connect({ rpcUrl, address, player, fallbackRpcUrls = [] })
       dUint(await rpc.call(to, sel('gemsOf(address,uint8)') + argAddr(p) + arg8(r))),
 
     playerStats: async (p = player) => dStats(await rpc.call(to, sel('playerStats(address)') + argAddr(p))),
+
+    /**
+     * The UTC days ('YYYY-MM-DD') this player settled at least one batch in,
+     * derived from BatchSettled logs -- the chain's own record of activity.
+     * This is what lets a cleared cache REBUILD the streak honestly: day
+     * marks are the one engagement fact localStorage cannot re-derive from
+     * calls alone (the chain stores no per-day history), but every settle
+     * emitted an event, and block timestamps turn those back into days.
+     *
+     * Endpoint discipline, learned the hard way (2026-10-21):
+     *   - drpc's free plan caps log ranges at 10k blocks, so it CANNOT serve
+     *     this scan; it is excluded from the logs call on purpose.
+     *   - the primary rate-limits CONCURRENT eth_getLogs hard (a burst of 8
+     *     saw 5x HTTP 429 with a CORS-mangled response the browser reports
+     *     as a transport error), so the scan is ONE sequential request with
+     *     real backoff -- the shared 120ms rawRpc backoff is far too short.
+     *   - no shared log cache: a 429-degraded EMPTY answer cached as
+     *     "scanned to latest" would poison every later rebuild for that
+     *     player. This scan is stateless.
+     *
+     * Bounded work: deploy block -> latest is one request (the span cap is
+     * 10M blocks); at most the latest 120 logs are mapped (a month of heavy
+     * play); block headers go out in tiny waves of 3 and a failed header is
+     * tolerated (that day simply stays unmarked: honest undercount).
+     */
+    async settledDaysFor(p = player) {
+      const BATCH_SETTLED = '0x5735baff3f785fc8554746c9013c2e165bed5e7560855368b59929ac31966512';
+      // BatchSettled(address indexed player, uint16 count, uint256 totalGems)
+      const topicPlayer = '0x' + BigInt(p).toString(16).padStart(64, '0');
+      const latestHex = await rpcFirst(rpc.url, rpc.urls.slice(1), 'eth_blockNumber', [],
+        (r) => typeof r === 'string' && r.length > 2);
+      const filter = {
+        address: to,
+        topics: [BATCH_SETTLED, topicPlayer],
+        fromBlock: '0x' + GAME_DEPLOY_BLOCK.toString(16),
+        toBlock: latestHex,
+      };
+      let logs = null;
+      let lastErr = null;
+      for (let attempt = 0; attempt < 3 && logs === null; attempt++) {
+        if (attempt > 0) await new Promise((ok2) => setTimeout(ok2, 1400 * attempt));
+        try {
+          // drpc excluded: it cannot answer this query, and burning a hop
+          // on it after every primary 429 just doubles the failure latency.
+          logs = await ethGetLogs(rpc.url, [], filter);
+        } catch (e) {
+          lastErr = e;
+          logs = null;
+        }
+      }
+      if (logs === null) throw lastErr ?? new Error('settle-day scan failed');
+      if (logs.length === 0) return [];
+      // Newest first, capped: the streak only ever walks back ~30 days.
+      logs.sort((a, b) => Number(BigInt(b.blockNumber)) - Number(BigInt(a.blockNumber)));
+      const capped = logs.slice(0, 120);
+      const stamps = {};
+      const blocks = [...new Set(capped.map((l) => l.blockNumber))];
+      for (let i = 0; i < blocks.length; i += 3) {
+        const wave = await Promise.all(blocks.slice(i, i + 3).map(async (bn) => {
+          try {
+            const blk = await rpcFirst(rpc.url, rpc.urls.slice(1), 'eth_getBlockByNumber', [bn, false],
+              (r2) => !!r2 && typeof r2.timestamp === 'string');
+            return [bn, blk];
+          } catch {
+            return [bn, null]; // one lost header = one unmarked day, never a crash
+          }
+        }));
+        for (const [bn, blk] of wave) {
+          if (blk) stamps[bn] = Number(BigInt(blk.timestamp)) * 1000;
+        }
+      }
+      const days = new Set();
+      for (const l of capped) {
+        const ms = stamps[l.blockNumber];
+        if (Number.isFinite(ms) && ms > 0) days.add(new Date(ms).toISOString().slice(0, 10));
+      }
+      return [...days].sort();
+    },
+
     // V2 holds EXACTLY ONE tool per player, so this takes no slot index.
     // V1's toolAt(address,uint8) indexed four slots; leaving it here meant a
     // read against a contract with no such function, which fails silently as

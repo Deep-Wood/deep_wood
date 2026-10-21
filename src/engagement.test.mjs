@@ -6,6 +6,7 @@ import {
   QUESTS, deriveQuests, allQuestsDone, activeQuests, WEEKEND_QUEST,
   isWeekend, saturdayOf,
   BADGES, evalBadges, SKINS, earnedSkins, chosenSkin, chooseSkin,
+  mergeSettleDays,
 } from './engagement.js';
 
 const mem = () => {
@@ -53,6 +54,38 @@ test('streak tiers and the next honor', () => {
   assert.equal(nextTierAt(0), 3);
   assert.equal(nextTierAt(7), 14);
   assert.equal(nextTierAt(30), null);
+});
+
+test('mergeSettleDays rebuilds a streak from chain-derived days', () => {
+  const s = emptyState();
+  // A cleared cache: empty days, and the chain proves Oct 19/20/21 settles.
+  const added = mergeSettleDays(s, ['2026-10-19', '2026-10-20', '2026-10-21']);
+  assert.equal(added, 3);
+  assert.equal(currentStreak(s, '2026-10-21'), 3, 'three consecutive settle days = 3-day streak');
+  assert.equal(s.best, 3, 'best recomputed over the rebuilt map');
+  assert.equal(streakTier(3)?.title, 'Warming Up', 'the rebuilt streak earns its honor');
+});
+
+test('mergeSettleDays only adds: existing marks are the player\'s own history', () => {
+  const s = emptyState();
+  markActive(s, '2026-10-18');
+  markActive(s, '2026-10-19');
+  s.best = 2;
+  const added = mergeSettleDays(s, ['2026-10-19', '2026-10-21']);
+  assert.equal(added, 1, 'already-marked days do not re-add');
+  assert.equal(currentStreak(s, '2026-10-21'), 1, 'Oct 20 gap resets the run');
+  assert.equal(s.best, 2, 'best is never lowered by a rebuild');
+});
+
+test('mergeSettleDays rejects malformed input and tolerates empties', () => {
+  const s = emptyState();
+  assert.equal(mergeSettleDays(s, null), 0);
+  assert.equal(mergeSettleDays(s, []), 0);
+  const added = mergeSettleDays(s, ['2026-10-21', 'not-a-day', 42, '2026-13-99', { x: 1 }]);
+  assert.equal(added, 1, 'only the well-formed day counts');
+  assert.equal(s.days['not-a-day'], undefined);
+  assert.equal(s.days['2026-13-99'], undefined);
+  assert.doesNotThrow(() => mergeSettleDays(s, undefined));
 });
 
 test('storage round-trips and tolerates garbage', () => {

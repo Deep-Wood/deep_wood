@@ -51,7 +51,10 @@ export function createCamp({ readEngagement, readBadges, onOpen }) {
     const tier = streakTier(streak);
     elStreak.innerHTML = `${FLAME_SVG}<b>${streak}</b><span>day${streak === 1 ? '' : 's'}</span>`;
     elStreak.classList.toggle('lit', streak >= 3);
-    elStreakTitle.textContent = tier ? `${tier.title}` : 'No streak yet';
+    // Below the first honor (3 days) the streak is LIVE but unranked: "1 day
+    // + No streak yet" read as a contradiction (user, 2026-10-21), so the
+    // title says it is building instead of denying it exists.
+    elStreakTitle.textContent = tier ? tier.title : (streak > 0 ? 'Streak building' : 'No streak yet');
     const nextAt = nextTierAt(streak);
     elStreakNext.textContent = nextAt
       ? `Next honor at ${nextAt} day${nextAt === 1 ? '' : 's'} — settle at least one dig a day, UTC.`

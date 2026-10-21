@@ -14,9 +14,13 @@
 //    mint gems, so streaks and quests pay out in honors (titles, badges,
 //    celebration), never fake balances. No number is ever invented.
 // 2. UTC days, so the streak means the same thing for every player.
-// 3. Storage is localStorage ONLY as a cache of derived facts: the chain
-//    remains the source of truth, and clearing storage re-derives
-//    everything except the "already toasted" flags.
+// 3. Storage is localStorage ONLY as a cache of derived facts. Quest/badge
+//    deltas re-derive from the chain's current state at the first sync of
+//    a day; the STREAK's day marks rebuild from BatchSettled event logs
+//    when the cache is empty (mergeSettleDays) -- the chain's own record
+//    of which days a player settled, recovered via block timestamps.
+//    A day whose settle logs have aged out of the 120-log window cannot be
+//    rebuilt and stays unmarked: honest undercount, never invention.
 // 4. A missed day resets the streak to 0 but keeps `best`. Honesty over
 //    generosity -- a streak that cannot break is not a streak.
 
@@ -47,7 +51,7 @@ export function dayBefore(day) {
 }
 
 export function emptyState() {
-  return { days: {}, best: 0, badgesSeen: [], baseline: null, weekendBase: null };
+  return { days: {}, best: 0, badgesSeen: [], baseline: null, weekendBase: null, backfillDone: false };
 }
 
 /** Load from localStorage; corrupt/absent data = fresh state, never a crash. */
@@ -63,6 +67,7 @@ export function loadState(store) {
       badgesSeen: Array.isArray(s.badgesSeen) ? s.badgesSeen : [],
       baseline: (s.baseline && typeof s.baseline === 'object') ? s.baseline : null,
       weekendBase: (s.weekendBase && typeof s.weekendBase === 'object') ? s.weekendBase : null,
+      backfillDone: s.backfillDone === true,
     };
   } catch {
     return emptyState();
@@ -105,6 +110,40 @@ export function streakTier(streak) {
   let tier = null;
   for (const t of STREAK_TIERS) if (streak >= t.d) tier = t;
   return tier;
+}
+
+/**
+ * Merge chain-derived settle days ('YYYY-MM-DD', from BatchSettled logs)
+ * into the state. Used when the cache is EMPTY -- a cleared browser or a
+ * new device -- to rebuild the streak's day marks from the chain's own
+ * record instead of restarting at zero. Marks only ADD (existing marks are
+ * the player's own history and never move), and `best` is recomputed over
+ * the rebuilt map, never lowered. Returns how many days were added.
+ */
+export function mergeSettleDays(state, days) {
+  let added = 0;
+  for (const day of days ?? []) {
+    // Structural match AND a real calendar date: '2026-13-99' passes a pure
+    // regex and would then detonate Date math in the best-recompute below.
+    if (typeof day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day) || state.days[day]) continue;
+    const t = Date.parse(`${day}T00:00:00Z`);
+    if (!Number.isFinite(t) || new Date(t).toISOString().slice(0, 10) !== day) continue;
+    state.days[day] = 1;
+    added += 1;
+  }
+  if (added > 0) {
+    // Longest consecutive run in the rebuilt map. The backfill window is
+    // bounded, so `best` stays a lower bound of the truth -- never inflated.
+    const keys = Object.keys(state.days).sort();
+    let bestRun = 0;
+    let run = 0;
+    for (let i = 0; i < keys.length; i++) {
+      run = i > 0 && dayBefore(keys[i]) === keys[i - 1] ? run + 1 : 1;
+      if (run > bestRun) bestRun = run;
+    }
+    if (bestRun > state.best) state.best = bestRun;
+  }
+  return added;
 }
 
 /** Streak length the NEXT honor unlocks at (null when all are held). */
