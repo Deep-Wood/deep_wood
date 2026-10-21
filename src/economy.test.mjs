@@ -14,7 +14,7 @@ import {
   TIER_NAME, DROP_TABLE, DURABILITY, TOOL_PRICE, REPAIR_COST,
   FACE_VALUE, RARITY_WEIGHT, PAYOUT_BPS, REDEEM_FLOOR,
   toolPrice, durabilityOf, repairCost, payoutWei, dropTable,
-  huntValueWei, netHuntWei, paybackHunts, fmtEth, fmtRepair, rarestRollable,
+  huntValueWei, netHuntWei, paybackHunts, fmtEth, fmtRepair, rarestRollable, FLASH_FLOOR_RARITY,
   SKILL_NAME, SKILL_NAME_UC, SKILL_UNLOCKS, RARITY_NAME, TOOL_AVATARS, SKILL_AVATARS,
   toolAvatarSkinned,
   skillName, skillSubtitle,
@@ -336,6 +336,24 @@ test('rarestRollable: the celebrated gem is the per-tier ceiling', () => {
   DROP_TABLE[3] = saved;
   // Unknown tier falls back to the Wood table: safe, never a false flash.
   assert.equal(rarestRollable(99, 5), -1);
+});
+
+test('the flash fires only for a ceiling at Sapphire or above', () => {
+  // The full reveal rule: topRarity === rarestRollable(tier, skill)
+  // AND topRarity >= FLASH_FLOOR_RARITY. Amber is a common find and not a
+  // moment (user, 2026-10-21), so a Bronze pick -- whose ceiling IS Amber --
+  // never flashes at all.
+  const flashes = (top, tier, skill) =>
+    top === rarestRollable(tier, skill) && top >= FLASH_FLOOR_RARITY;
+  assert.equal(FLASH_FLOOR_RARITY, 2, 'the celebration floor is Sapphire');
+  assert.equal(flashes(1, 2, 3), false, 'Bronze ceiling Amber: no flash, Amber is common');
+  assert.equal(flashes(2, 3, 3), true, 'Silver ceiling Sapphire: flash');
+  assert.equal(flashes(3, 4, 4), true, 'Gold ceiling Ruby: flash');
+  assert.equal(flashes(4, 5, 5), true, 'Mithril ceiling Diamond: flash');
+  assert.equal(flashes(1, 3, 3), false, 'below the ceiling: never flashes');
+  assert.equal(flashes(2, 4, 4), false, 'Sapphire on Gold is below the ceiling: quiet');
+  assert.equal(flashes(3, 3, 3), false, 'a Ruby the context cannot roll is never the flash');
+  assert.equal(flashes(2, 2, 3), false, 'a Sapphire Bronze cannot roll is never the flash');
 });
 
 test('higher skill ranks get more facets', () => {

@@ -90,6 +90,15 @@ export function rarestRollable(tier, skill = 0) {
 }
 
 /**
+ * The find flash starts at SAPPHIRE (user, 2026-10-21, amending the same
+ * day's ceiling rule): Amber is a common find and not a moment. The flash
+ * fires for the context's ceiling gem ONLY when that ceiling is Sapphire
+ * or above -- so Bronze (ceiling Amber) never flashes, Silver flashes
+ * Sapphires, Gold Rubies, Mithril Diamonds.
+ */
+export const FLASH_FLOOR_RARITY = 2;
+
+/**
  * dropTable(tier, skill) mirrored in JS: a tier's own table with every rarity
  * above the unlocked ceiling folded DOWN into Quartz.
  *

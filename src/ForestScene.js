@@ -60,7 +60,7 @@ import {
   RARITY_SHORT, TIER_NAME,
   toolPrice, durabilityOf, repairCost, fmtRepair, fmtEth,
   huntValueWei, netHuntWei, paybackHunts, cyclesToPayback, dropTable,
-  rarestRollable,
+  rarestRollable, FLASH_FLOOR_RARITY,
   REDEEM_FLOOR,
   SKILL_NAME_UC, skillSubtitle, skillName,
 } from './economy.js';
@@ -4541,15 +4541,14 @@ export class ForestScene extends Phaser.Scene {
     // twice -- once in the satchel strip and once in a floating label. Remove
     // the duplicate: the satchel is the single source of truth for the count.
 
-    // CELEBRATE THE CEILING (user, 2026-10-21): the flash fires only for the
-    // rarest gem this (tier, skill) context can actually roll -- per-tier
-    // tops: Wood none, Bronze Amber, Silver Sapphire, Gold Ruby, Mithril
-    // Diamond -- with just the name and a bang. No value, and no flash for
-    // finds below the ceiling: the celebrated gem rises with the player.
-    // (Supersedes the earlier same-day fix that relabeled the value as
-    // DEEPWOOD; the value is gone entirely now.)
+    // CELEBRATE THE CEILING, FROM SAPPHIRE UP (user, 2026-10-21, amended the
+    // same day): the flash fires only for the rarest gem this (tier, skill)
+    // context can actually roll -- per-tier tops: Silver Sapphire, Gold
+    // Ruby, Mithril Diamond -- AND only when that ceiling is Sapphire or
+    // above. Amber is a common find (Bronze's ceiling) and not a moment, so
+    // Bronze never flashes. Just the name and a bang; no value.
     const rarest = rarestRollable(rollTier, this.econ.skill ?? 0);
-    if (topRarity === rarest && topRarity >= 1) {
+    if (topRarity === rarest && topRarity >= FLASH_FLOOR_RARITY) {
       this.flash(`${RARITY_NAME[topRarity]}! 💥`);
     }
     playReveal(topRarity);
