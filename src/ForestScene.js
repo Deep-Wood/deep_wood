@@ -2827,6 +2827,32 @@ export class ForestScene extends Phaser.Scene {
       this.flash('Queued digs cleared — they can no longer match the chain. Dig again.');
       return;
     }
+    // CHAIN VERDICT pre-flight: every check above trusts the CLIENT's mirror,
+    // and a long-lived tab can hold a stale one (observed live 2026-10-21: a
+    // session rolled and settled 8 hunts as Bronze 95s after buying Silver).
+    // Ask the chain directly -- two reads, no gas -- so a context the mirror
+    // cannot see becomes a refusal instead of a guaranteed revert.
+    try {
+      const { getReader } = await import('./onchain.js');
+      const rc = await getReader();
+      const { getState } = await import('./wallet.js');
+      const { account } = getState();
+      if (rc && account) {
+        const [chainTool, chainSkill] = await Promise.all([rc.toolOf(account), rc.skillOf(account)]);
+        const chainTier = Number(chainTool?.tier) || 0;
+        const chainSkillLvl = Number(chainSkill) || 0;
+        if (this.queue.tier !== chainTier
+          || (this.queue.skill !== undefined && Number(this.queue.skill) !== chainSkillLvl)) {
+          this.queue.clear();
+          dropStoredQueue(window.localStorage);
+          window.renderQueue?.(0);
+          await this.refreshChainTool();
+          this.beltMsg('Queued digs were rolled with a different pick or skill than you hold on-chain — cleared. Dig fresh, then settle.', 'bad');
+          this.flash('Queued digs cleared — they can no longer match the chain. Dig again.');
+          return;
+        }
+      }
+    } catch { /* reads failed: the mirror checks above ran; the contract is the last guard */ }
     const n = this.queue.size;
     this.beltMsg(`Confirm the settlement of ${n} hunt${n === 1 ? '' : 's'} in your wallet\u2026`, 'busy');
     this.setTxPending('belt-settle', 'settling');
@@ -4162,6 +4188,7 @@ export class ForestScene extends Phaser.Scene {
     // against tier 1 -- a Steel pick hunting on Wood's table, and Gold
     // throwing outright.
     const tier = this.econ.tier || 1;
+    let rollTier = tier;
 
     let result;
     if (onchainActive()) {
@@ -4203,6 +4230,42 @@ export class ForestScene extends Phaser.Scene {
         }
         this.queue = new HuntQueue(BigInt(this._huntIndex), tier, this.econ.skill);
       }
+      // CHAIN-VERIFY THE ROLL CONTEXT at the start of every batch
+      // (2026-10-21). The mirror can lie in a long-lived tab that missed a
+      // purchase made elsewhere: observed live, a session rolled 8 hunts as
+      // BRONZE -- sapphires included -- 95 seconds after the Silver pick was
+      // bought, because nothing between the buy and the settle re-read
+      // toolOf. Skill was already chain-read per batch (_chainSkill below);
+      // tier now gets the same treatment: two free reads, and the dig rolls
+      // under the truth instead of under the mirror.
+      if (this.queue.size === 0) {
+        try {
+          const { getReader } = await import('./onchain.js');
+          const r3 = await getReader();
+          const { getState } = await import('./wallet.js');
+          const { account } = getState();
+          if (r3 && account) {
+            const [chainTool, chainSkill] = await Promise.all([
+              r3.toolOf(account), r3.skillOf(account),
+            ]);
+            const chainTier = Number(chainTool?.tier) || 0;
+            const chainSkillLvl = Number(chainSkill) || 0;
+            if (chainTier !== this.econ.tier || chainSkillLvl !== (this.econ.skill ?? 0)) {
+              this.econ.tier = chainTier;
+              this.econ.skill = chainSkillLvl;
+              this.econ.left = Number(chainTool?.durability ?? 0);
+              this.econ.max = chainTier > 0 ? durabilityOf(chainTier) : 0;
+              // The queue is EMPTY at this point, so its roll context can be
+              // corrected safely -- nothing has rolled under the stale tier.
+              this.queue.tier = chainTier;
+              this.queue.skill = chainSkillLvl;
+              rollTier = chainTier || 1;
+              this.refreshBelt();
+              this.flash('Your pick changed on-chain — re-synced. This batch rolls fresh.');
+            }
+          }
+        } catch { /* the settle pre-flight and the contract are the backstops */ }
+      }
       // V6 roll discipline. The contract's previewHunt(player, tier) rolls at
       // the chain's CURRENT hunt index -- it has no offset variant (V5's
       // previewHuntAt was dropped). The dig about to queue is hunt
@@ -4220,7 +4283,7 @@ export class ForestScene extends Phaser.Scene {
       const { previewHuntFor, getReader } = await import('./onchain.js');
       let preview = null;
       if (this.queue.size === 0) {
-        preview = await previewHuntFor(tier);
+        preview = await previewHuntFor(rollTier);
         // Capture the seed + skill NOW so subsequent digs can roll locally
         // at the right future index (V6 previewHunt has no offset variant).
         try {
@@ -4234,6 +4297,10 @@ export class ForestScene extends Phaser.Scene {
             ]);
             this._chainSeed = seedHex;
             this._chainSkill = Number(s);
+            // The rolls use the CHAIN's skill, so the queue's record must
+            // match it -- a stale mirror skill here would false-refuse a
+            // perfectly good settle at the pre-flight.
+            if (this.queue && this.queue.size === 0) this.queue.skill = Number(s);
           }
         } catch { /* non-fatal: later digs re-read */ }
       } else {
@@ -4264,7 +4331,7 @@ export class ForestScene extends Phaser.Scene {
         }
         const { rollHunt } = await import('./engine.js');
         const localRoll = rollHunt(
-          this._chainSeed, acct, this.queue.nextIndex, tier,
+          this._chainSeed, acct, this.queue.nextIndex, rollTier,
           this._chainSkill ?? 0,
         );
         // Price the best from the CONTRACT, not the local FACE_VALUE table:
