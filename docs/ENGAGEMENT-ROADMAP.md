@@ -157,8 +157,15 @@ The migration machinery (V9's `migrateLegacyGems`/`migrateLegacyStats`) is prove
 5. **Season prizes / weekly bounties** — treasury-funded (owner wallet holds the
    swept 57.5M DEEP). Weekly leaderboard snapshot posted to Telegram; prizes
    via owner airdrop against a published winner list.
-6. **Skill 6+ / new rarity band** — only if the economy math survives it; the
-   current 5×5×5 space is well-balanced, this is the most invasive idea.
+6. **Skill 6+ / new rarity band** — **DEFERRED (user, 2026-10-21): NOT in the
+   V10 bundle.** Tier 5 already costs a lot — Mithril is 150,000,000
+   $DEEPWOOD live, Lapidary costs 80 Quartz, and a Diamond's face value is
+   4,000,000 $DEEPWOOD — so the top of the current ladder has plenty of
+   headroom; no new tier is needed now. Revisit in a future upgrade round.
+   If revived, the original bar stands: only if the economy math survives
+   it (the 5×5×5 space is well-balanced) and it is budgeted from day one as
+   the most invasive item in whatever bundle carries it (roll math, every
+   tier's drop table, pricing, UI, value ladder).
 
 ## 6. Constraints & gotchas for whoever picks this up
 
