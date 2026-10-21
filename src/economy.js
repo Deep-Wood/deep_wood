@@ -70,6 +70,26 @@ export const DROP_TABLE = {
 };
 
 /**
+ * The rarest rarity a (tier, skill) context can actually roll -- the find
+ * flash celebrates THIS, not "anything ≥ Sapphire" (user, 2026-10-21).
+ * Per-tier tops with the live tables: Wood none, Bronze Amber, Silver
+ * Sapphire, Gold Ruby, Mithril Diamond; the skill fold (a rarity rolls
+ * only when its index sits under the trained skill) caps further, so the
+ * celebrated gem RISES with the player instead of firing on every lucky
+ * find that used to clear a lower bar. -1 when nothing above Quartz is
+ * rollable. Uses the same DROP_TABLE the roll math uses, so the flash can
+ * never celebrate a gem the context cannot produce.
+ */
+export function rarestRollable(tier, skill = 0) {
+  const table = DROP_TABLE[tier] ?? DROP_TABLE[1];
+  const ceil = Math.min(Number(skill) || 0, 5) - 1;
+  for (let r = Math.min(ceil, 4); r >= 1; r--) {
+    if (Number(table[r] ?? 0) > 0) return r;
+  }
+  return -1;
+}
+
+/**
  * dropTable(tier, skill) mirrored in JS: a tier's own table with every rarity
  * above the unlocked ceiling folded DOWN into Quartz.
  *

@@ -14,7 +14,7 @@ import {
   TIER_NAME, DROP_TABLE, DURABILITY, TOOL_PRICE, REPAIR_COST,
   FACE_VALUE, RARITY_WEIGHT, PAYOUT_BPS, REDEEM_FLOOR,
   toolPrice, durabilityOf, repairCost, payoutWei, dropTable,
-  huntValueWei, netHuntWei, paybackHunts, fmtEth, fmtRepair,
+  huntValueWei, netHuntWei, paybackHunts, fmtEth, fmtRepair, rarestRollable,
   SKILL_NAME, SKILL_NAME_UC, SKILL_UNLOCKS, RARITY_NAME, TOOL_AVATARS, SKILL_AVATARS,
   toolAvatarSkinned,
   skillName, skillSubtitle,
@@ -311,6 +311,31 @@ test('V6 formatter speaks DEEPWOOD with whole units, never ETH', () => {
   assert.equal(fmtEth(400_000_000_000_000_000_000n), '400 DEEPWOOD');
   assert.equal(fmtEth(0n), '0 DEEPWOOD');
   assert.ok(!fmtEth(86_000_000_000_000_000_000_000n).includes('ETH'), 'no ETH label on DEEPWOOD amounts');
+});
+
+test('rarestRollable: the celebrated gem is the per-tier ceiling', () => {
+  // Live chain tables (verified on-chain 2026-10-21): per-tier tops are
+  // Wood none, Bronze Amber, Silver Sapphire, Gold Ruby, Mithril Diamond.
+  // The flash fires ONLY at the ceiling, so it rises with the player
+  // (user, 2026-10-21): a Sapphire that thrilled a Silver pick is routine
+  // on Gold and must go quiet there.
+  assert.equal(rarestRollable(1, 5), -1, 'Wood rolls Quartz only: nothing to celebrate');
+  assert.equal(rarestRollable(2, 3), 1, 'Bronze ceiling is Amber, even for a Delver');
+  assert.equal(rarestRollable(3, 3), 2, 'Silver + Delver: Sapphire is the ceiling');
+  assert.equal(rarestRollable(4, 4), 3, 'Gold ceiling is Ruby');
+  assert.equal(rarestRollable(5, 5), 4, 'Mithril ceiling is Diamond');
+  // The skill fold caps below the tier ceiling: rollable iff rarity < skill.
+  assert.equal(rarestRollable(3, 2), 1, 'Silver + Prospector: Amber is as high as skill allows');
+  assert.equal(rarestRollable(5, 3), 2, 'Mithril + Delver: Sapphire, not Diamond');
+  assert.equal(rarestRollable(3, 0), -1, 'no skill trained: Quartz only');
+  assert.equal(rarestRollable(3, 1), -1, 'Greenhorn: Quartz only at every tier');
+  // A table with zero weight at the nominal top skips down to the truth.
+  const saved = DROP_TABLE[3];
+  DROP_TABLE[3] = [10000, 0, 0, 0, 0];
+  assert.equal(rarestRollable(3, 3), -1, 'a weightless top is not a ceiling');
+  DROP_TABLE[3] = saved;
+  // Unknown tier falls back to the Wood table: safe, never a false flash.
+  assert.equal(rarestRollable(99, 5), -1);
 });
 
 test('higher skill ranks get more facets', () => {

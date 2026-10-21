@@ -60,6 +60,7 @@ import {
   RARITY_SHORT, TIER_NAME,
   toolPrice, durabilityOf, repairCost, fmtRepair, fmtEth,
   huntValueWei, netHuntWei, paybackHunts, cyclesToPayback, dropTable,
+  rarestRollable,
   REDEEM_FLOOR,
   SKILL_NAME_UC, skillSubtitle, skillName,
 } from './economy.js';
@@ -4250,18 +4251,29 @@ export class ForestScene extends Phaser.Scene {
             ]);
             const chainTier = Number(chainTool?.tier) || 0;
             const chainSkillLvl = Number(chainSkill) || 0;
-            if (chainTier !== this.econ.tier || chainSkillLvl !== (this.econ.skill ?? 0)) {
-              this.econ.tier = chainTier;
-              this.econ.skill = chainSkillLvl;
-              this.econ.left = Number(chainTool?.durability ?? 0);
-              this.econ.max = chainTier > 0 ? durabilityOf(chainTier) : 0;
-              // The queue is EMPTY at this point, so its roll context can be
-              // corrected safely -- nothing has rolled under the stale tier.
+            const mirrorDrift = chainTier !== this.econ.tier
+              || chainSkillLvl !== (this.econ.skill ?? 0);
+            // AN EMPTY QUEUE CAN CARRY A STALE CONTEXT LABEL. The queue
+            // object survives a settle (empty) and keeps the tier of the
+            // batch BEFORE a tool purchase -- while the dig path re-reads
+            // the mirror per dig. Observed live (0x4e41...8dbef): rolls
+            // correctly made at Silver pushed into a queue still labelled
+            // Bronze, the settle carried tier 2, and the chain reverted.
+            // The queue is empty here: relabel it, never drop it.
+            const labelDrift = this.queue.tier !== chainTier
+              || (this.queue.skill !== undefined && Number(this.queue.skill) !== chainSkillLvl);
+            if (mirrorDrift || labelDrift) {
+              if (mirrorDrift) {
+                this.econ.tier = chainTier;
+                this.econ.skill = chainSkillLvl;
+                this.econ.left = Number(chainTool?.durability ?? 0);
+                this.econ.max = chainTier > 0 ? durabilityOf(chainTier) : 0;
+                this.refreshBelt();
+                this.flash('Your pick changed on-chain — re-synced. This batch rolls fresh.');
+              }
               this.queue.tier = chainTier;
               this.queue.skill = chainSkillLvl;
               rollTier = chainTier || 1;
-              this.refreshBelt();
-              this.flash('Your pick changed on-chain — re-synced. This batch rolls fresh.');
             }
           }
         } catch { /* the settle pre-flight and the contract are the backstops */ }
@@ -4529,12 +4541,16 @@ export class ForestScene extends Phaser.Scene {
     // twice -- once in the satchel strip and once in a floating label. Remove
     // the duplicate: the satchel is the single source of truth for the count.
 
-    if (topRarity >= 2) {
-      // V6: the gem's value is $DEEPWOOD, never ETH. This line predates the
-      // V6 price migration and told players a Sapphire was '86,000 ETH' --
-      // the number was the sapphire's DEEPWOOD face value (fmtEth), the
-      // unit was a leftover from the ETH era (user report, 2026-10-21).
-      this.flash(`${RARITY_NAME[topRarity]}!  ${fmtEth(result.valueWei)}`);
+    // CELEBRATE THE CEILING (user, 2026-10-21): the flash fires only for the
+    // rarest gem this (tier, skill) context can actually roll -- per-tier
+    // tops: Wood none, Bronze Amber, Silver Sapphire, Gold Ruby, Mithril
+    // Diamond -- with just the name and a bang. No value, and no flash for
+    // finds below the ceiling: the celebrated gem rises with the player.
+    // (Supersedes the earlier same-day fix that relabeled the value as
+    // DEEPWOOD; the value is gone entirely now.)
+    const rarest = rarestRollable(rollTier, this.econ.skill ?? 0);
+    if (topRarity === rarest && topRarity >= 1) {
+      this.flash(`${RARITY_NAME[topRarity]}! 💥`);
     }
     playReveal(topRarity);
 
