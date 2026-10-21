@@ -48,10 +48,15 @@ export const MAX_BATCH = 20;
  * it still validates it against its own recompute.
  */
 export class HuntQueue {
-  constructor(huntIndex = 0n, tier = 0) {
+  constructor(huntIndex = 0n, tier = 0, skill = undefined) {
     this.entries = [];
     this.base = BigInt(huntIndex);
     this.tier = tier;
+    // The roll is _rollHunt(seed, player, index, TIER, SKILL) -- skill folds
+    // rarities below the trained level into Quartz, so a skill upgrade
+    // invalidates queued rolls exactly like a tool change does. Undefined
+    // means "not known at this moment" and is never tested.
+    this.skill = skill;
   }
 
   /** Chain hunt index the next queued hunt will settle at. */
@@ -77,12 +82,28 @@ export class HuntQueue {
    * of them were settled elsewhere -- the whole queue is dead, so it drops.
    * This matches stale(), which also compares against base.
    */
-  rebase(huntIndex, tier) {
-    if (this.entries.length > 0 && BigInt(huntIndex) !== this.base) {
+  rebase(huntIndex, tier, skill = undefined) {
+    // A tier change is just as fatal as a moved base: rolls are computed per
+    // tool tier (previewHunt(player, tier)) and the contract recomputes with
+    // the tool HELD at settle time. A queue that survives a tool buy (dug
+    // with the old pick) is a guaranteed ResultMismatch that burns the gas --
+    // observed live 2026-10-21: 8 Bronze-roll hunts settled 95 seconds after
+    // a Silver purchase, reverted at the validation gate with no logs.
+    // A SKILL change kills the queue the same way: the roll folds rarities
+    // below the trained skill into Quartz, so upgraded players re-roll
+    // different gems at the same hunt index. `skill` may be undefined when
+    // the caller does not know the current level yet (boot order) -- then
+    // the skill is left untested and the settle pre-flight catches it.
+    const tierDead = this.entries.length > 0 && tier !== this.tier;
+    const baseDead = this.entries.length > 0 && BigInt(huntIndex) !== this.base;
+    const skillDead = this.entries.length > 0
+      && skill !== undefined && this.skill !== undefined && skill !== this.skill;
+    if (tierDead || baseDead || skillDead) {
       this.entries = [];
     }
     this.base = BigInt(huntIndex);
     this.tier = tier;
+    if (skill !== undefined) this.skill = skill;
   }
 
   /**
@@ -151,6 +172,7 @@ export function saveQueue(q, store) {
     store?.setItem?.(STORE_KEY, JSON.stringify({
       base: q.base.toString(),
       tier: q.tier,
+      ...(q.skill !== undefined ? { skill: q.skill } : {}),
       entries: q.entries.map((e) => ({
         c: e.counts.map((c) => BigInt(c).toString()),
         b: BigInt(e.bestSingleWei).toString(),
@@ -176,7 +198,8 @@ export function loadQueue(store) {
     const s = JSON.parse(raw);
     if (!s || !Array.isArray(s.entries) || s.entries.length === 0
       || s.entries.length > MAX_BATCH) return null;
-    const q = new HuntQueue(BigInt(s.base), Number(s.tier) || 0);
+    const q = new HuntQueue(BigInt(s.base), Number(s.tier) || 0,
+      s.skill === undefined ? undefined : (Number(s.skill) || 0));
     for (const e of s.entries) {
       if (!Array.isArray(e.c) || e.c.length !== 5) return null;
       q.entries.push({ counts: e.c.map((c) => BigInt(c)), bestSingleWei: BigInt(e.b) });

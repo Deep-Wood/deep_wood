@@ -87,6 +87,62 @@ test('clear empties without moving the base', () => {
   assert.equal(q.base, 3n, 'base survives a clear so the next dig re-rolls at the right index');
 });
 
+test('rebase drops a queue whose tier changed, exactly like a moved base', () => {
+  // Rolls are computed per tool tier; the contract recomputes with the tool
+  // HELD at settle time. A queue that outlives a tool upgrade is a guaranteed
+  // ResultMismatch that burns gas (observed live 2026-10-21: 8 Bronze rolls
+  // settled 95s after a Silver purchase).
+  const q = new HuntQueue(5n, 2);
+  q.push([1n, 0n, 0n, 0n, 0n]);
+  q.rebase(5n, 3);
+  assert.equal(q.size, 0, 'tier-bound rolls die with the old pick');
+  assert.equal(q.base, 5n, 'base adopts the chain index either way');
+  assert.equal(q.tier, 3, 'tier adopts the held tool');
+  // Same tier, same base: the queue survives untouched.
+  q.push([1n, 0n, 0n, 0n, 0n]);
+  q.rebase(5n, 3);
+  assert.equal(q.size, 1, 'matching tier and base keep the queue');
+  // A moved base still drops (unchanged behaviour).
+  q.rebase(7n, 3);
+  assert.equal(q.size, 0);
+});
+
+test('rebase drops a queue whose skill changed, but never on an unknown skill', () => {
+  // _rollHunt(seed, player, index, TIER, SKILL): skill folds sub-level
+  // rarities into Quartz, so a skill upgrade re-rolls different gems at
+  // the same index. Undefined skill = not known yet (boot order: the
+  // rebase runs before the skill sync) and must NOT be tested as zero.
+  const q = new HuntQueue(5n, 3, 2);
+  q.push([1n, 0n, 0n, 0n, 0n]);
+  q.rebase(5n, 3, undefined);
+  assert.equal(q.size, 1, 'unknown skill never drops the queue');
+  assert.equal(q.skill, 2, 'unknown skill does not overwrite the known one');
+  q.rebase(5n, 3, 2);
+  assert.equal(q.size, 1, 'same skill keeps the queue');
+  q.rebase(5n, 3, 3);
+  assert.equal(q.size, 0, 'a skill upgrade kills the queued rolls');
+  // A queue whose skill was never recorded (old persistence) SURVIVES a
+  // known-skill rebase: its rolls were made under the chain's real skill,
+  // and dropping them on a guess would throw away valid digs. The
+  // contract's own recompute stays the backstop for truly stale rolls.
+  const legacy = new HuntQueue(5n, 3);
+  legacy.push([1n, 0n, 0n, 0n, 0n]);
+  legacy.rebase(5n, 3, 2);
+  assert.equal(legacy.size, 1, 'unknown skill is never tested, so no false drop');
+  assert.equal(legacy.skill, 2, 'the known skill is adopted for future tests');
+});
+
+test('night-dig persistence round-trips the skill', () => {
+  const store = mem();
+  const q = new HuntQueue(9n, 3, 2);
+  q.push([1n, 0n, 0n, 0n, 0n]);
+  assert.equal(saveQueue(q, store), true);
+  const back = loadQueue(store);
+  assert.equal(back.skill, 2, 'skill survives the round-trip');
+  back.rebase(9n, 3, 3);
+  assert.equal(back.size, 0, 'restored queue still dies on a skill change');
+});
+
 // --- night digs: persistence round-trips -------------------------------------
 
 const mem = () => {

@@ -1979,7 +1979,8 @@ export class ForestScene extends Phaser.Scene {
           if (!this.queue) {
             const stored = loadQueue(window.localStorage);
             if (stored) {
-              if (stored.tier !== tier) {
+              const skillKnown = stored.skill !== undefined && this.econ.skill !== undefined;
+              if (stored.tier !== tier || (skillKnown && stored.skill !== this.econ.skill)) {
                 dropStoredQueue(window.localStorage);
               } else {
                 this.queue = stored;
@@ -1988,14 +1989,22 @@ export class ForestScene extends Phaser.Scene {
             }
           }
           if (this.queue) {
-            const before = this.queue.size;
-            this.queue.rebase(idx, tier);
+            const wasQueued = this.queue.size;
+            const wasTier = this.queue.tier;
+            const wasSkill = this.queue.skill;
+            this.queue.rebase(idx, tier, this.econ.skill);
             window.renderQueue?.(this.queue.size);
             // Keep storage an exact mirror of the live queue: dropped by
             // the rebase -> gone from disk; survived -> unchanged on disk.
             if (this.queue.empty) dropStoredQueue(window.localStorage);
             else this._queuePersisted = saveQueue(this.queue, window.localStorage);
-            if (restored && this.queue.size > 0 && before === this.queue.size) {
+            // A tool upgrade that just killed a live queue deserves words,
+            // not silence: those digs died with the pick that rolled them.
+            if (wasQueued > 0 && this.queue.empty && (wasTier !== tier
+              || (wasSkill !== undefined && this.queue.skill !== undefined && wasSkill !== this.queue.skill))) {
+              this.flash(`Queued digs cleared — ${wasQueued} unsettled roll${wasQueued === 1 ? '' : 's'} from the old pick can't settle. Dig fresh with the new one.`);
+            }
+            if (restored && this.queue.size > 0 && wasQueued === this.queue.size) {
               this.showShiftReturn(this.queue.size);
             }
           }
@@ -2394,6 +2403,8 @@ export class ForestScene extends Phaser.Scene {
     p.max = durabilityOf(tier);
     recordToolSpend(this.board, this.wallet ?? '0xplayer', cost);
     this.beltMsg(`Bought ${toolName(tier)} with $DEEPWOOD — ${p.left}/${p.max} uses`, 'ok');
+    // The new pick invalidates any queued digs (rolls are tier-bound).
+    this.clearDeadQueue();
     this.refreshBelt();
     window.renderGems?.(); window.renderHunter?.();
     this.updateHud();
@@ -2501,6 +2512,8 @@ export class ForestScene extends Phaser.Scene {
     p.max = durabilityOf(tier);
     recordToolSpend(this.board, this.wallet ?? '0xplayer', cost);
     this.beltMsg(`Bought ${toolName(tier)} with ETH — ${p.left}/${p.max} uses`, 'ok');
+    // The new pick invalidates any queued digs (rolls are tier-bound).
+    this.clearDeadQueue();
     this.refreshBelt();
     window.renderGems?.(); window.renderHunter?.();
     this.updateHud();
@@ -2766,6 +2779,24 @@ export class ForestScene extends Phaser.Scene {
     this._shiftCardEl = null;
   }
 
+  /**
+   * Drop queued digs after any purchase that changes the roll context.
+   * Rolls are computed per (tool tier, skill) and settleBatch recomputes
+   * with what the player HOLDS, so digs queued under the old setup can
+   * never bank -- keeping them mixes dead rolls into the next batch and
+   * ends in a guaranteed revert (observed live 2026-10-21: 8 Bronze
+   * rolls settled 95s after a Silver purchase). Called on tool buys and
+   * skill upgrades, the two actions that invalidate a live queue.
+   */
+  clearDeadQueue() {
+    if (!this.queue || this.queue.empty) return;
+    const n = this.queue.size;
+    this.queue.clear();
+    dropStoredQueue(window.localStorage);
+    window.renderQueue?.(0);
+    this.flash(`Queued digs cleared — ${n} roll${n === 1 ? ' was' : 's were'} bound to your old setup.`);
+  }
+
   async _doSettle() {
     if (!onchainActive()) {
       // Preview mode settles nothing: there is no contract holding the digs,
@@ -2774,7 +2805,26 @@ export class ForestScene extends Phaser.Scene {
       return;
     }
     if (!this.queue || this.queue.empty) {
-      this.flash('Nothing queued to settle yet \u2014 dig first.');
+      this.flash('Nothing queued to settle yet — dig first.');
+      return;
+    }
+    // PRE-FLIGHT (2026-10-21): a queue whose base moved (settled elsewhere)
+    // or whose rolls are from a different tool tier or skill level can NEVER
+    // match the chain's recompute -- settleBatch is a guaranteed revert that
+    // burns the gas. Refuse before the wallet prompt, clear the dead queue,
+    // and re-sync so the next dig starts clean. (Observed live: 8 Bronze-roll
+    // hunts settled 95s after a Silver purchase -> revert, no logs.)
+    const skillMismatch = this.econ.skill !== undefined
+      && this.queue.skill !== undefined
+      && Number(this.queue.skill) !== Number(this.econ.skill);
+    if (this._huntIndex !== undefined
+      && (this.queue.stale(this._huntIndex) || this.queue.tier !== this.econ.tier || skillMismatch)) {
+      this.queue.clear();
+      dropStoredQueue(window.localStorage);
+      window.renderQueue?.(0);
+      await this.refreshChainTool();
+      this.beltMsg('Queued digs were rolled under an older tool or state — cleared. Dig fresh, then settle.', 'bad');
+      this.flash('Queued digs cleared — they can no longer match the chain. Dig again.');
       return;
     }
     const n = this.queue.size;
@@ -2809,7 +2859,7 @@ export class ForestScene extends Phaser.Scene {
     // batch on the season board in one entry, drop the queue, and repaint
     // so satchel + "n pending" badge and tool all show the post-settle truth.
     window.renderQueue?.(0);
-    this.queue = new HuntQueue(this.queue.nextIndex, this.queue.tier);
+    this.queue = new HuntQueue(this.queue.nextIndex, this.queue.tier, this.queue.skill);
     // Night digs: the banked batch is dead storage now -- remove it so a
     // reload cannot resurrect settled hunts.
     dropStoredQueue(window.localStorage);
@@ -3138,6 +3188,9 @@ export class ForestScene extends Phaser.Scene {
       const res = await upgradeSkillOnchain(level, currentSkill);
       if (res.ok) {
         this.beltMsg(`You are now a ${skillName(level)} — ${skillSubtitle(level)}`, 'ok');
+        // Skill folds sub-level rarities into Quartz, so queued rolls are
+        // now stale: the same hunt index re-rolls different gems.
+        this.clearDeadQueue();
         // The upgrade BURNS quartz on chain; without refreshChainGems the
         // gemstrip kept the pre-upgrade count (same stale-mirror class as the
         // redemption path).
@@ -3859,7 +3912,7 @@ export class ForestScene extends Phaser.Scene {
         // the chain and build it with the RIGHT base. The gate only rejects
         // when the queue exists and is full.
         if (this._huntIndex !== undefined) {
-          this.queue = new HuntQueue(BigInt(this._huntIndex), this.econ.tier);
+          this.queue = new HuntQueue(BigInt(this._huntIndex), this.econ.tier, this.econ.skill);
         }
         // else: fall through; reveal's path will await huntIndexOf before
         // queueing, and the full-batch check cannot fire for a queue that has
@@ -4148,7 +4201,7 @@ export class ForestScene extends Phaser.Scene {
           this.busy = false;
           return false;
         }
-        this.queue = new HuntQueue(BigInt(this._huntIndex), tier);
+        this.queue = new HuntQueue(BigInt(this._huntIndex), tier, this.econ.skill);
       }
       // V6 roll discipline. The contract's previewHunt(player, tier) rolls at
       // the chain's CURRENT hunt index -- it has no offset variant (V5's
