@@ -1,6 +1,6 @@
 # DeepWood — Engagement Roadmap & State
 
-_Last updated: 2026-10-20. Engagement pack MERGED to main and live on production._
+_Last updated: 2026-10-21. Engagement pack MERGED to main and live on production._
 _Primed by: production V9 deploy-day (discount restore, sweeps, UI fixes) + the engagement-pack preview._
 
 ---
@@ -125,9 +125,30 @@ The migration machinery (V9's `migrateLegacyGems`/`migrateLegacyStats`) is prove
      `prestigeMultiplierOf(player)` view. Roughly 600–900 bytes — needs EIP-170
      budgeting from day one (drop an event or fold views; V9 experience: docs
      are free, events are not).
-2. **Gem fusion** — burn 5 Quartz → 1 Amber etc. (5→1 down the ladder). Sink for
-   the common-gem glut; strategic hold-vs-craft decision against redeeming.
-   `fuse(rarity, times)` + table in the owner-settable config.
+2. **Gem fusion** — burn lower gems → 1 higher gem. Sink for the common-gem
+   glut; strategic hold-vs-craft decision against redeeming.
+   `fuse(rarity, times)` + rate table in the owner-settable config.
+   **REDESIGN DECISION (user, 2026-10-21): the recipe must track face value
+   step by step — fusion must NEVER mint value.** The original 5→1 sketch is
+   rejected: computed against live prices it gifts +290% on Quartz→Amber,
+   +121% on Amber→Sapphire, +133% on Sapphire→Ruby, and destroys −20% on
+   Ruby→Diamond. The true value ratios (live prices 400 / 7,800 / 86,000 /
+   1,000,000 / 4,000,000 $DEEPWOOD) are deliberately non-uniform:
+   **19.5 : 11.03 : 11.63 : 4.0** — so there is no single count ratio.
+   Value-matched integer recipes (rounding UP = sink-side, never down):
+   - **20 Quartz → 1 Amber** (burns 8,000 for 7,800 — sinks 2.5%)
+   - **12 Amber → 1 Sapphire** (93,600 for 86,000 — sinks 8.1%; 11:1 would
+     gift 0.23%, so 12 it is)
+   - **12 Sapphire → 1 Ruby** (1,032,000 for 1,000,000 — sinks 3.1%)
+   - **4 Ruby → 1 Diamond** (4,000,000 for 4,000,000 — exactly neutral;
+     5:1 would be a heavy 20% overcharge)
+   Consequences for the V10 spec: (a) the fusion rates live in an
+   **owner-settable config table** (or are derived from `priceOf` at fusion
+   time) — hardcoding counts would let any price retune silently reopen the
+   gift, and `priceOf` is already owner-tunable; (b) rounding is always up;
+   (c) every fusion at these recipes slightly SHRINKS redemption exposure,
+   which is the point of a sink. Numbers are as of 2026-10-21 prices —
+   re-derive if the price ladder is ever retuned.
 3. **Research/talent tree** — Quartz-bought branching perks (+durability,
    cheaper repairs, +luck band). Pairs with prestige; both consume the same
    "meta-progression" UI space, so design them together.
