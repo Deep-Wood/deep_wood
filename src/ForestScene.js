@@ -4410,7 +4410,11 @@ export class ForestScene extends Phaser.Scene {
     // the duplicate: the satchel is the single source of truth for the count.
 
     if (topRarity >= 2) {
-      this.flash(`${RARITY_NAME[topRarity]}!  ${(Number(result.valueWei) / 1e18).toFixed(5)} ETH`);
+      // V6: the gem's value is $DEEPWOOD, never ETH. This line predates the
+      // V6 price migration and told players a Sapphire was '86,000 ETH' --
+      // the number was the sapphire's DEEPWOOD face value (fmtEth), the
+      // unit was a leftover from the ETH era (user report, 2026-10-21).
+      this.flash(`${RARITY_NAME[topRarity]}!  ${fmtEth(result.valueWei)}`);
     }
     playReveal(topRarity);
 

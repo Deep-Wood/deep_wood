@@ -303,6 +303,16 @@ test('tool skins recolor the haft and add the wrap band, never the head', () => 
   assert.ok(!TOOL_AVATARS[3].includes('#8a5b3a'), 'base avatars stay untouched');
 });
 
+test('V6 formatter speaks DEEPWOOD with whole units, never ETH', () => {
+  // The find flash used to divide gem value by 1e18 and append 'ETH'; since
+  // V6 that wei figure is $DEEPWOOD. Pin the CURRENT contract of fmtEth so
+  // a future find-flash regression has a failing test, not a user report.
+  assert.equal(fmtEth(86_000_000_000_000_000_000_000n), '86000 DEEPWOOD');
+  assert.equal(fmtEth(400_000_000_000_000_000_000n), '400 DEEPWOOD');
+  assert.equal(fmtEth(0n), '0 DEEPWOOD');
+  assert.ok(!fmtEth(86_000_000_000_000_000_000_000n).includes('ETH'), 'no ETH label on DEEPWOOD amounts');
+});
+
 test('higher skill ranks get more facets', () => {
   // The skill ladder is a cut gem that gains facets as it climbs, so the
   // polygon point count must rise with the rank -- otherwise the avatar row
