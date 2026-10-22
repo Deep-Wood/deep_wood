@@ -266,11 +266,19 @@ redeploy. Bytecode constraint (EIP-170) forced a bundled shape:
    sacrificial order. The client re-reads state after the tx (`prestigeCount`,
    satchel, and config are public); dw-analytics gets no new event stream from
    V10 actions — use tx receipts instead.
-2. Deployed size: **24,507 / 24,576** (69 B headroom).
+2. Deployed size: **24,194 / 24,576** (382 B headroom after the perk strip).
 
-**Known gap (pre-existing, disclosed):** the durability and frugality perk
-*effect hooks* are not wired into the buy/repair paths (the helpers exist but
-no call sites — luck IS wired into `_rollHunt`). Levels are purchasable and
-tracked today; the effect hooks need ~300–500 B and are first in line for a
-V11 (or for cutting the perks entirely). Buying dur/frug levels before the
-hooks land buys a promise, not an effect.
+**Known gap → RESOLVED 2026-10-22 (owner decision): perks stripped entirely.**
+The durability and frugality perk *effect hooks* were never wired (helpers
+existed, zero call sites — only luck fed `_rollHunt`), and the ~300–500 B
+the hooks need does not fit EIP-170. Rather than sell promise-without-effect,
+both perks were **removed from the contract**:
+- `study()` is now parameterless and **luck-only** (default base 50 Quartz,
+  doubling per level; bytes 0–1 of the packed map stay reserved for a V11
+  re-add WITH hooks).
+- `setResearchBase` is gone; the luck base is the 6th param of
+  `setV10Config(coeff, cap, minLeq, researchSurvives, luckBps, luckBase)` /
+  `v10Config()`.
+- Research = **one perk, fully functional**. The client Research panel shows
+  luck only. Decision 4's "+1 dur / −5% repair" numbers retire with the perks;
+  decision 5 collapses to the luck base (50 Quartz default).
