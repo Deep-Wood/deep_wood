@@ -242,3 +242,35 @@ Cuts, in order:
 5. **Research base costs:** 20 / 30 / 50 Quartz, doubling per level?
 6. **`settleHunt` cut:** confirm the single-hunt path can die in V10
    (client is batch-only; will verify no caller remains).
+
+---
+
+## 10. Resolution — 2026-10-22 (owner: "make them owner settable, go with the recommendation")
+
+**All decisions are now LIVE OWNER KNOBS, not one-time choices.** Defaults
+are the recommended values; every one can be retuned post-deploy without a
+redeploy. Bytecode constraint (EIP-170) forced a bundled shape:
+
+- `setV10Config(coeff, cap, minLeq, researchSurvives, luckBps, durBonus, frugBps)` —
+  one owner-only tx retunes decisions 1–4. Defaults: **P1** (2500 / 30,000 =
+  3× cap), **leq ≥ 1**, **research survives**, **250 bps / +1 dur / 500 bps**.
+- `v10Config()` — one view call reads all seven (client mirror for the
+  Descend/Research panels and roll parity).
+- Decision 5 (research costs) stays on `setResearchBase` (20/30/50 default);
+  fusion table stays on `setFusionRates` (20/12/12/4 default).
+- Decision 6: `settleHunt` cut from V6 — confirmed dead (client batch-only).
+
+**Trade-offs paid for the bytecode (~350 B the config system costs):**
+
+1. All three V10 events (`Descended`, `Fused`, `Studied`) were cut — spec §4's
+   sacrificial order. The client re-reads state after the tx (`prestigeCount`,
+   satchel, and config are public); dw-analytics gets no new event stream from
+   V10 actions — use tx receipts instead.
+2. Deployed size: **24,507 / 24,576** (69 B headroom).
+
+**Known gap (pre-existing, disclosed):** the durability and frugality perk
+*effect hooks* are not wired into the buy/repair paths (the helpers exist but
+no call sites — luck IS wired into `_rollHunt`). Levels are purchasable and
+tracked today; the effect hooks need ~300–500 B and are first in line for a
+V11 (or for cutting the perks entirely). Buying dur/frug levels before the
+hooks land buys a promise, not an effect.
