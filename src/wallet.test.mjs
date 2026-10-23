@@ -50,7 +50,8 @@ for (const f of ['.env.local', '.env.production', '.env']) {
 const {
   WalletError, GAME_CHAIN_ID, sel, encUint8, encUint256, encAddress,
   toQuantity, fromQuantity, checkTier, checkSkill, checkRedeem,
-  calldataBuyTool, calldataRepairTool, calldataUpgradeSkill, calldataRedeemGems, calldataSettleHunt, decodeHeader,
+  calldataBuyTool, calldataRepairTool, calldataUpgradeSkill, calldataRedeemGems, decodeHeader,
+  calldataMigrateFromV9, calldataDescend, calldataStudy, calldataFuse,
   connect, buyTool, repairTool, upgradeSkill, redeemGems,
   getState, getAccount, getChainId,
   resetWallet, installListeners,
@@ -59,7 +60,7 @@ const { GEM_PRICE } = await import('./season.js');
 const { config } = await import('./config.js');
 
 const require = createRequire(import.meta.url);
-const ART = '/home/administrator/gem-hunter/out/DeepWoodV6.sol/DeepWoodV6.json';
+const ART = '/home/administrator/gem-hunter/out/DeepWoodV10.sol/DeepWoodV10.json';
 
 const skip = (why) => console.log(`  skip  ${why}`);
 
@@ -156,9 +157,17 @@ test('selectors match the compiled artifact', async (t) => {
   await t.test('all writes are nonpayable in V6', () => {
     // V6: buyTool pulls DEEPWOOD via transferFrom, so NO write sends ETH.
     // Sending ETH with any of them would strand funds in the contract.
-    for (const f of ['buyTool', 'repairTool', 'upgradeSkill', 'redeemGems', 'settleHunt']) {
+    for (const f of ['buyTool', 'repairTool', 'upgradeSkill', 'redeemGems', 'settleBatch',
+      'migrateFromV9', 'descend', 'study', 'fuse']) {
       assert.equal(need(f).fn.stateMutability, 'nonpayable', `${f} must not be payable`);
     }
+  });
+
+  await t.test('the V6-era single-hunt settle is gone', () => {
+    // settleHunt was cut from the contract; the queue settles via settleBatch
+    // only. If it ever resolves again the client is aimed at a stale table.
+    assert.equal(want('settleHunt'), null, 'settleHunt must not be in the V10 artifact');
+    assert.throws(() => sel('settleHunt(address,uint8,uint256[5],uint256,bytes)'), /no selector for/);
   });
 });
 
@@ -479,10 +488,17 @@ test('the exact-cost buyTool sends a well-formed transaction', async () => {
   const p = fakeProvider();
   await connect({ provider: p });
   if (!config.gameAddress) return skip('GAME_ADDRESS not set - no contract to send to');
-  // Wood costs 0.005 ETH equivalent in DEEPWOOD. Read from the client mirror
-  // rather than restating the digit.
+  // Tool prices are LIVE reads (V7): the mirror is 0n until bootChain
+  // populates it. Seed it exactly the way readLivePrices does, then send
+  // against it. The era constant (0.005 ETH) died with the V6 token-native
+  // repricing; what this test protects is the TX SHAPE.
+  const { setToolPrices } = await import('./economy.js');
+  setToolPrices([
+    200_000n * 10n ** 18n, 5_000_000n * 10n ** 18n, 20_000_000n * 10n ** 18n,
+    50_000_000n * 10n ** 18n, 150_000_000n * 10n ** 18n,
+  ]);
   const price = TOOL_PRICE[1];
-  assert.equal(price, 5_000_000_000_000_000n, 'Wood costs 0.005 ETH equivalent, mirroring woodCost()');
+  assert.ok(price > 0n, 'price mirror populated like bootChain does');
 
   const r = await buyTool(1, { maxTokenCost: price });
   assert.equal(r.ok, true, JSON.stringify(r));
@@ -624,51 +640,34 @@ test('no signing key is read anywhere in the client', async (t) => {
   });
 });
 
-// --- open settlement: settleHunt calldata ------------------------------
+// --- V10 writes: migrate / descend / study / fuse calldata -------------
 //
-// The regression that matters: the offset word for the trailing `bytes`
-// argument is a POSITION, not a presence flag. Encoding it as 0 makes every
-// settlement revert on a real chain with a bare `data: "0x"` and no error name,
-// so a shape check alone would not have caught it -- the payload has to be
-// sent to a contract. script/dryrun-client-abi.mjs does that; these assertions
-// pin the arithmetic that produced the wrong value.
-//
-// Written with test(), not describe(), to match this file -- it imports only
-// `test` from node:test, and a stray describe() fails the whole file under
-// `node --test`.
-const SETTLE_SIG = 'settleHunt(address,uint8,uint256[5],uint256,bytes)';
-const P = '0xf39Fd6e51aad88F6F4ce6aB8827279cfffb92266';
-const COUNTS = [4n, 1n, 0n, 0n, 0n];
-const slot = (data, i) => BigInt('0x' + data.slice(8 + 64 * i, 8 + 64 * (i + 1)));
+// Same discipline as the buyTool block above: decode the calldata BACK and
+// check the words, so a silently-wrong offset or a truncated uint8 cannot
+// pass a shape check. All four builders return hex, no 0x, selector first.
+const V10_P = '0xf39Fd6e51aad88F6F4ce6aB8827279cfffb92266';
 
-test('calldataSettleHunt: keeps the keeper-era selector', () => {
-  const data = calldataSettleHunt(P, 1, COUNTS);
-  assert.equal(decodeHeader(data), sel(SETTLE_SIG), 'selector must be unchanged');
-  assert.equal(data.length, 8 + 64 * 10, '4 bytes + 10 words');
+test('V10 zero-arg builders embed the contract selectors', () => {
+  assert.equal(decodeHeader(calldataMigrateFromV9()), sel('migrateFromV9()'));
+  assert.equal(decodeHeader(calldataDescend()), sel('descend()'));
+  assert.equal(decodeHeader(calldataStudy()), sel('study()'));
+  // bare-selector payloads: 8 hex chars, nothing else
+  for (const d of [calldataMigrateFromV9(), calldataDescend(), calldataStudy()]) {
+    assert.equal(d.length, 8, 'zero-arg calldata is exactly the selector');
+  }
 });
 
-test('calldataSettleHunt: points the bytes offset past the head', () => {
-  const data = calldataSettleHunt(P, 1, COUNTS);
-  // slots: 0 player, 1 tier, 2..6 counts, 7 best(0n), 8 offset, 9 length
-  assert.equal(slot(data, 8), 9n * 32n, 'offset must be 0x120');
-  assert.notEqual(slot(data, 8), 0n, 'offset 0 reverts on chain, with no error name');
-  assert.equal(slot(data, 9), 0n, 'the ignored signature is empty');
+test('calldataFuse: encodes rarity and times as uint8 words', () => {
+  const data = calldataFuse(2, 3);
+  assert.equal(decodeHeader(data), sel('fuse(uint8,uint8)'), 'selector first');
+  assert.equal(data.length, 8 + 64 + 64, 'selector + two padded uint8 words');
+  assert.equal(BigInt('0x' + data.slice(8, 72)), 2n, 'rarity word');
+  assert.equal(BigInt('0x' + data.slice(72, 136)), 3n, 'times word');
 });
 
-test('calldataSettleHunt: inlines the fixed-size counts array', () => {
-  const data = calldataSettleHunt(P, 1, COUNTS);
-  assert.equal(slot(data, 0), BigInt(P), 'player is left-padded into slot 0');
-  assert.equal(slot(data, 1), 1n, 'tier');
-  COUNTS.forEach((c, i) => assert.equal(slot(data, 2 + i), c, `count ${i}`));
-  assert.equal(slot(data, 7), 0n, 'bestSingleWei is 0n (removed in V6)');
-});
-
-test('calldataSettleHunt: refuses a counts array that is not five long', () => {
-  assert.throws(() => calldataSettleHunt(P, 1, [1, 2, 3]), /exactly 5/);
-  assert.throws(() => calldataSettleHunt(P, 1, 'nope'), /exactly 5/);
-});
-
-test('calldataSettleHunt: rejects an out-of-range tier rather than truncating', () => {
-  assert.throws(() => calldataSettleHunt(P, 9, COUNTS));
-  assert.throws(() => calldataSettleHunt(P, 0, COUNTS));
+test('calldataFuse: rejects bad args instead of truncating', () => {
+  assert.throws(() => calldataFuse(4, 1), /0\.\.3/);   // Diamond has no up-step
+  assert.throws(() => calldataFuse(-1, 1), /0\.\.3/);
+  assert.throws(() => calldataFuse(0, 0), />= 1/);
+  assert.throws(() => calldataFuse(0, 1.5), />= 1/);
 });

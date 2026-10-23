@@ -85,6 +85,14 @@ export const ECONOMY_ABI = [
   'function silverCost() view returns (uint256)',
   'function goldCost() view returns (uint256)',
   'function mithrilCost() view returns (uint256)',
+  // --- V10 read surface: prestige, research, fusion, migration ---
+  'function v10Config() view returns (uint256,uint256,uint256,bool,uint256,uint256)',
+  'function researchOf(address) view returns (uint256)',
+  'function prestigeCount(address) view returns (uint16)',
+  'function prestigeBpsOf(uint256) view returns (uint256)',
+  'function migratedV9(address) view returns (bool)',
+  'function fusionRates(uint256) view returns (uint256)',
+  'function legacyV9() view returns (address)',
 ];
 
 /** Everything a player or the owner sends. */
@@ -113,6 +121,11 @@ export const ACTION_ABI = [
   'function startSeasonOne() nonpayable returns ()',
   'function transferOwnership(address) nonpayable returns ()',
   'function upgradeSkill(uint8) nonpayable returns ()',
+  // --- V10 writes: migration, prestige, research, fusion ---
+  'function migrateFromV9() nonpayable returns ()',
+  'function descend() nonpayable returns ()',
+  'function study() nonpayable returns ()',
+  'function fuse(uint8,uint8) nonpayable returns ()',
 ];
 
 /** The subset the UI binds to. Kept separate so a test can assert the app
@@ -121,9 +134,13 @@ export const ACTION_ABI = [
 export const PLAYER_ACTIONS = [
   'buyTool',
   'repairTool',
-  'settleHunt',
+  'settleBatch',
   'upgradeSkill',
   'redeemGems',
+  'migrateFromV9',
+  'descend',
+  'study',
+  'fuse',
   'commitSeed',
   'openSeason',
   'pausePre',

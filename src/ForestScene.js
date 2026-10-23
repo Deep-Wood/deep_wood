@@ -1993,7 +1993,7 @@ export class ForestScene extends Phaser.Scene {
             const wasQueued = this.queue.size;
             const wasTier = this.queue.tier;
             const wasSkill = this.queue.skill;
-            this.queue.rebase(idx, tier, this.econ.skill);
+            this.queue.rebase(idx, tier, this.econ.skill, this._v10FindWeight);
             window.renderQueue?.(this.queue.size);
             // Keep storage an exact mirror of the live queue: dropped by
             // the rebase -> gone from disk; survived -> unchanged on disk.
@@ -2886,7 +2886,11 @@ export class ForestScene extends Phaser.Scene {
     // batch on the season board in one entry, drop the queue, and repaint
     // so satchel + "n pending" badge and tool all show the post-settle truth.
     window.renderQueue?.(0);
-    this.queue = new HuntQueue(this.queue.nextIndex, this.queue.tier, this.queue.skill);
+    this.queue = new HuntQueue(this.queue.nextIndex, this.queue.tier, this.queue.skill,
+      this._v10FindWeight);
+    // Settling moved leq, so the cached multiplier is stale: the next dig
+    // must re-read it (engine.js rolls with it; a stale value reverts batches).
+    this._v10FindWeight = undefined;
     // Night digs: the banked batch is dead storage now -- remove it so a
     // reload cannot resurrect settled hunts.
     dropStoredQueue(window.localStorage);
@@ -3123,7 +3127,126 @@ export class ForestScene extends Phaser.Scene {
         onOpen: () => { import('./analytics.js').then(({ track }) => track('camp_open')); },
       });
     }
+    // V10 sections (Descend + Research) live in the same card; their
+    // numbers are live reads, so refresh them on every open.
+    if (!this._campv10) {
+      const { createCampV10 } = await import('./campv10.js');
+      const { readV10Panels } = await import('./v10.js');
+      const { getReader, descendOnchain, studyOnchain } = await import('./onchain.js');
+      const { getState } = await import('./wallet.js');
+      this._campv10 = createCampV10({
+        readPanel: async () => {
+          const r = await getReader();
+          const { account } = getState();
+          if (!r || !account) return null;
+          try {
+            const p = await readV10Panels(r, account);
+            return { ...p, prestigeBps: await r.prestigeBpsOf(p.leq) };
+          } catch { return null; }
+        },
+        onDescend: () => descendOnchain(),
+        onStudy: () => studyOnchain(),
+        onDone: async () => {
+          await this.refreshChainTool();
+          window.renderGems?.(); window.renderHunter?.();
+          this.refreshBelt();
+          // Descend/study change the roll multiplier: force the next dig
+          // to re-read it (stale cached value reverts queued batches).
+          this._v10FindWeight = undefined;
+        },
+        onStatus: (m, k) => this.flash(m, k),
+      });
+    }
+    this._campv10?.refresh();
     this._camp?.open();
+  }
+
+  /**
+   * Open the Fusion card (V10). Same ownership rule as the redeem card:
+   * this scene owns the controller; the wallet menu reaches it through
+   * openFuseCard().
+   */
+  async openFuseCard() {
+    if (!this._fuseCard) {
+      const { createFusionCard } = await import('./fusioncard.js');
+      const { getReader, fuseOnchain } = await import('./onchain.js');
+      this._fuseCard = createFusionCard({
+        getBalances: () => this.econ.gems ?? [0, 0, 0, 0, 0],
+        readRates: async () => {
+          const r = await getReader();
+          if (!r?.fusionRates) return null;
+          try {
+            return await Promise.all([0, 1, 2, 3].map((i) => r.fusionRates(i)));
+          } catch { return null; }
+        },
+        onFuse: (rarity, times) => fuseOnchain(rarity, times),
+        onDone: async () => {
+          await this.refreshChainTool();
+          window.renderGems?.(); window.renderHunter?.();
+          this.refreshBelt();
+        },
+        onStatus: (m, k) => this.flash(m, k),
+      });
+    }
+    this._fuseCard?.open();
+  }
+
+  /**
+   * V9 -> V10 migration: a chip in the status row appears when the
+   * connected wallet has unmigrated V9 state. Clicking it runs the
+   * one-shot self-serve migration and refreshes everything that reads
+   * player state. Callers: the wallet connect sync (index.html) and the
+   * chip's own click handler.
+   */
+  async checkV9Migration() {
+    const chip = document.getElementById('migrate-chip');
+    if (!chip) return;
+    if (!chip.dataset.bound) {
+      chip.dataset.bound = '1';
+      chip.addEventListener('click', async () => {
+        chip.classList.add('hidden');
+        this.beltMsg('Confirm the carry-over in your wallet\u2026', 'busy');
+        const { migrateFromV9Onchain } = await import('./onchain.js');
+        const res = await migrateFromV9Onchain();
+        if (!res.ok) {
+          this.beltMsg(res.reason || 'Carry-over failed.', 'bad');
+          chip.classList.remove('hidden');
+          return;
+        }
+        this.beltMsg('Progress carried over \u2014 welcome to the new cave.', 'good');
+        this.flash('Your V9 progress is now live on V10.');
+        await this.refreshChainTool();
+        window.renderGems?.(); window.renderHunter?.();
+        this.refreshBelt();
+      });
+    }
+    const { getReader } = await import('./onchain.js');
+    const { getState } = await import('./wallet.js');
+    const { account } = getState();
+    if (!account) { chip.classList.add('hidden'); return; }
+    const r = await getReader();
+    if (!r?.migratedV9 || !r?.legacyV9) return;
+    let migrated;
+    try { migrated = await r.migratedV9(account); } catch { return; }
+    if (migrated) { chip.classList.add('hidden'); return; }
+    // Only offer the carry when the legacy contract actually holds state.
+    let hasLegacy = false;
+    try {
+      const legacy = await r.legacyV9();
+      if (legacy && /^0x[0-9a-fA-F]{40}$/.test(legacy) && BigInt(legacy) !== 0n) {
+        const { connect } = await import('./chain.js');
+        const { config } = await import('./config.js');
+        const v9 = await connect({
+          rpcUrl: config.rpcUrl, fallbackRpcUrls: config.fallbackRpcUrls,
+          address: legacy, player: account,
+        });
+        const [idx, g0, g1, tool] = await Promise.all([
+          v9.huntIndexOf(account), v9.gemsOf(account, 0), v9.gemsOf(account, 1), v9.toolOf(account),
+        ]);
+        hasLegacy = idx > 0n || g0 > 0n || g1 > 0n || Number(tool?.[0] ?? 0n) > 0;
+      }
+    } catch { /* legacy unreadable: keep the chip hidden */ }
+    chip.classList.toggle('hidden', !hasLegacy);
   }
 
   openRedeemCard() {
@@ -4313,6 +4436,16 @@ export class ForestScene extends Phaser.Scene {
             // match it -- a stale mirror skill here would false-refuse a
             // perfectly good settle at the pre-flight.
             if (this.queue && this.queue.size === 0) this.queue.skill = Number(s);
+            // V10: the roll multiplier (prestige + luck) is as much a part
+            // of the roll as the skill is -- engine.js must apply exactly
+            // this to every local roll or the settle gate reverts. Read it
+            // in the same session batch; refreshed after settle/study.
+            try {
+              const { findWeightBps } = await import('./v10.js');
+              const fw = await findWeightBps(r2, account);
+              this._v10FindWeight = fw.findWeightBps;
+              if (this.queue && this.queue.size === 0) this.queue.findWeightBps = fw.findWeightBps;
+            } catch { /* non-fatal: local rolls fall back to 1x below */ }
           }
         } catch { /* non-fatal: later digs re-read */ }
       } else {
@@ -4345,6 +4478,7 @@ export class ForestScene extends Phaser.Scene {
         const localRoll = rollHunt(
           this._chainSeed, acct, this.queue.nextIndex, rollTier,
           this._chainSkill ?? 0,
+          this._v10FindWeight ?? 10000n,
         );
         // Price the best from the CONTRACT, not the local FACE_VALUE table:
         // V6 gem prices are owner-settable DEEPWOOD values (quartz = 400

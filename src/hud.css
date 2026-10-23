@@ -1993,3 +1993,71 @@ button.chip { position: relative; }
 .bt-text span { font-size: 9px; color: var(--dim); }
 .badge-toast.streak { border-color: rgba(232,132,44,.45); }
 @keyframes toast-in { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
+
+
+/* ---- V10: fusion card rows, camp prestige/research, migrate chip ------- */
+
+.fusion-rows { display: grid; gap: 8px; margin: 0 0 14px; }
+.fusion-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid rgba(207, 214, 221, 0.18);
+  border-radius: 10px;
+  background: rgba(18, 22, 28, 0.55);
+  color: #e8edf2;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.fusion-row:hover:not(:disabled) { border-color: rgba(207, 214, 221, 0.45); }
+.fusion-row.sel { border-color: #d9a441; background: rgba(217, 164, 65, 0.10); }
+.fusion-row.off { opacity: 0.45; cursor: not-allowed; }
+.fusion-rate { font-weight: 600; }
+.fusion-arrow { opacity: 0.55; }
+.fusion-out { color: #d9a441; font-weight: 600; }
+.fusion-sink { justify-self: end; font-size: 12px; opacity: 0.75; }
+
+/* Camp card V10 sections share the card's rhythm. */
+.camp-v10 { display: grid; gap: 10px; margin: 0 0 14px; }
+.cv-copy { font-size: 13px; line-height: 1.45; opacity: 0.9; }
+.cv-copy b { color: #d9a441; }
+.cv-lists { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.cv-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.cv-list li { font-size: 12px; padding-left: 14px; position: relative; }
+.cv-list li::before { position: absolute; left: 0; }
+.cv-lose::before { content: "\2715"; color: #d83a5a; }
+.cv-keep::before { content: "\2713"; color: #7bd88a; }
+.cv-btn {
+  justify-self: start;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(207, 214, 221, 0.35);
+  background: rgba(207, 214, 221, 0.08);
+  color: #e8edf2;
+  font: inherit;
+  cursor: pointer;
+}
+.cv-btn:hover:not(:disabled) { background: rgba(207, 214, 221, 0.16); }
+.cv-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.cv-btn.cv-danger { border-color: #d83a5a; color: #ff8a9b; }
+
+/* Migrate chip: an actionable status chip, not a banner. */
+.migrate-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(123, 216, 138, 0.55);
+  background: rgba(123, 216, 138, 0.12);
+  color: #b9f0c3;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.migrate-chip:hover { background: rgba(123, 216, 138, 0.22); }
+.migrate-chip.hidden { display: none; }

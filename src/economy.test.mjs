@@ -59,11 +59,14 @@ test('no tier drops a rarity above its own ceiling except Gold', () => {
   }
 });
 
-test('Gold drops Diamond only with Skill 4', () => {
-  const withSkill = dropTable(5, 4);
-  const without = dropTable(5, 3);
-  assert.ok(withSkill[4] > 0, 'Gold with skill 4 must be able to drop Diamond');
-  assert.equal(without[4], 0, 'Gold without skill 4 must never drop Diamond');
+test('Gold drops Diamond only with Skill 5', () => {
+  // The CONTRACT's fold (`r >= skill`) gates Diamond behind skill 5: at
+  // skill 4, r=4 (Diamond) folds into Quartz. The old "Skill 4" wording
+  // was the approximation era; the exact fold is what settles on-chain.
+  const withSkill = dropTable(5, 5);
+  const without = dropTable(5, 4);
+  assert.ok(withSkill[4] > 0, 'Gold with skill 5 must be able to drop Diamond');
+  assert.equal(without[4], 0, 'Gold below skill 5 must never drop Diamond');
 });
 
 // --- section 3: the rarity ladder ------------------------------------------

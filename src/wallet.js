@@ -291,46 +291,61 @@ export function calldataRedeemGems(rarity, count) {
 }
 
 /**
- * `settleHunt(address,uint8,uint256[5],uint256,bytes)` -- open settlement.
+ * V10 write builders: migrateFromV9, descend, study, fuse.
  *
- * V6: bestSingleWei was removed from previewHunt and is no longer sent by the
- * client. The contract may compute it internally now. The ABI signature is
- * unchanged for backward compatibility; we pass 0n for the unused field.
- *
- * Layout: 4 + 32 (player) + 32 (tier) + 5*32 (counts, INLINED because the
- * array type is fixed-size) + 32 (bestSingleWei, always 0n) + 32 (offset to
- * bytes) + 32 (bytes length) = 292 bytes = 584 hex chars plus the selector.
- *
- * The trailing `bytes signature` is RETAINED IN THE ABI BUT IGNORED by the
- * contract. We still send `0x` so the selector stays `0x2ded79da`.
- *
- * The counts MUST be the chain's own `previewHunt` output. The contract
- * recomputes the result from (season seed, season, player, hunt index) and
- * reverts ResultMismatch on any difference, so a locally rolled find is
- * rejected. This is not a formality: `rollHunt` hashing the 0x-prefixed
- * address instead of the bare hex made every client find unrepresentable.
- *
- * @param {string} player      the settling player's address (must be you)
- * @param {number} tier        1..5
- * @param {(bigint|number)[]} counts  five rarity counts, from previewHunt
+ * All four are promptless single-purpose writes. Same conventions as every
+ * other builder here: returns HEX, NO 0x PREFIX, selector included --
+ * `send()` prepends '0x' and nothing else.
  */
-export function calldataSettleHunt(player, tier, counts) {
-  if (!Array.isArray(counts) || counts.length !== 5) {
-    const e = new Error("counts must be an array of exactly 5 rarity counts");
+
+/**
+ * `migrateFromV9()` -- self-serve, one-shot. Pulls satchel, tool, skill,
+ * hunt index, lifetime stats and season score from the legacy V9 contract
+ * via its public views. Roll continuity: V10 committed V9's seed, so the
+ * carried hunt index continues the same entropy stream.
+ */
+export function calldataMigrateFromV9() {
+  return sel("migrateFromV9()").slice(2);
+}
+
+/**
+ * `descend()` -- prestige. Wipes satchel, tool and skill for a permanent
+ * find-weight multiplier derived from lifetime leq. Keeps research,
+ * lifetime stats and board standing. Requires leq >= minLeqForDescend.
+ */
+export function calldataDescend() {
+  return sel("descend()").slice(2);
+}
+
+/**
+ * `study()` -- one luck research level. Burns `luckBase << level` Quartz;
+ * luck adds bps to the find-weight multiplier for every future roll.
+ */
+export function calldataStudy() {
+  return sel("study()").slice(2);
+}
+
+/**
+ * `fuse(uint8,uint8)` -- burn `fusionRates[rarity] * times` of gem
+ * `rarity`, credit `times` of gem `rarity + 1`. Steps 0..3 only
+ * (Quartz->Amber .. Ruby->Diamond); the contract reverts FusionDisabled
+ * beyond that or when the rate is zero.
+ *
+ * @param {number} rarity 0..3
+ * @param {number} times  >= 1
+ */
+export function calldataFuse(rarity, times) {
+  if (!Number.isInteger(rarity) || rarity < 0 || rarity > 3) {
+    const e = new Error("rarity must be 0..3 (Quartz->Amber .. Ruby->Diamond)");
     e.code = "bad-arg";
     throw e;
   }
-  const t = checkTier(tier);
-  let head = sel("settleHunt(address,uint8,uint256[5],uint256,bytes)").slice(2);
-  head += encAddress(player);
-  head += encUint8(t);
-  for (const c of counts) head += encUint256(c);
-  head += encUint256(0n); // bestSingleWei -- removed in V6, pass 0n
-  // Offset to the bytes payload. The head is 9 slots (player, tier, 5 counts,
-  // best, this offset), so the tail -- the bytes length word -- starts at 0x120.
-  head += encUint(9n * 32n, 256, "uint256");
-  head += encUint(0n, 256, "uint256"); // its length -- empty, and ignored
-  return head;
+  if (!Number.isInteger(times) || times < 1) {
+    const e = new Error("times must be a whole number >= 1");
+    e.code = "bad-arg";
+    throw e;
+  }
+  return sel("fuse(uint8,uint8)").slice(2) + encUint8(rarity) + encUint8(times);
 }
 
 /**
@@ -910,23 +925,26 @@ export async function redeemGems(rarity, count) {
 }
 
 /**
- * Settle your own hunt. Anyone may call it; the contract requires the caller
- * to BE the player, so a third party cannot settle on your behalf (that would
- * burn your cooldown and your tool durability).
- *
- * V6: bestSingleWei was removed from previewHunt. The contract still takes
- * the parameter in the ABI signature but ignores it; we pass 0n internally.
- *
- * @param {object} o
- * @param {string} o.player
- * @param {number} o.tier
- * @param {(bigint|number)[]} o.counts    from chain.previewHunt
- * @returns {Promise<{ok:boolean, hash?:string, code?:string, reason?:string}>}
+ * V10 one-shot writes: migrate / descend / study / fuse. Each is a single
+ * purpose write with its own confirm discipline in onchain.js; a receipt
+ * on this chain is not proof, so the wrappers poll state, not status.
  */
-export async function settleHunt({ player, tier, counts }) {
+export async function migrateFromV9() {
+  return send(calldataMigrateFromV9());
+}
+
+export async function descend() {
+  return send(calldataDescend());
+}
+
+export async function study() {
+  return send(calldataStudy());
+}
+
+export async function fuse(rarity, times) {
   let data;
   try {
-    data = calldataSettleHunt(player, tier, counts);
+    data = calldataFuse(rarity, times);
   } catch (e) {
     return { ok: false, code: e.code || "bad-arg", reason: e.message };
   }

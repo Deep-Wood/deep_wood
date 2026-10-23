@@ -33,18 +33,54 @@ export const RARITY_NAME = ['Quartz', 'Amber', 'Sapphire', 'Ruby', 'Diamond'];
  */
 export const DROP_TABLE = ECONOMY_DROP_TABLE;
 
-/** Gold without Skill 4 has no Diamond at all (SPEC section 2). */
-const GOLD_NO_SKILL4 = [3000, 3000, 3000, 1000, 0];
+/**
+ * The contract folds skill-locked rarities into Quartz BEFORE the roll
+ * (V10 _rollHunt: `if (skill == 0 || r >= skill) { table[0] += table[r];
+ * table[r] = 0; }` -- skill S unlocks Rarity(S-1)). This exact fold
+ * replaced the old GOLD_NO_SKILL4 approximation on 2026-10-22: the
+ * approximation diverged from the chain for every sub-skill Gold player
+ * (skill 1 rolls 100% Quartz on-chain but 30% locally; skill 4 rolls
+ * Ruby at 1300 but locally at 1000), so every local dig after the first
+ * was a guaranteed ResultMismatch at settle. Mirrors the fold, never
+ * approximates it.
+ */
+export function foldTable(table, skill) {
+  const t = [...table];
+  for (let r = 1; r < 5; r++) {
+    if (skill === 0 || r >= skill) { t[0] += t[r]; t[r] = 0; }
+  }
+  return t;
+}
 
 /**
- * The table for a tier, accounting for the Skill 4 Diamond gate.
- *
- * This copy also had no tier-5 row, so buying Gold threw `bad toolTier 5` and
- * the hunt could not resolve at all.
+ * V10 prestige + research luck: non-Quartz weights scale by
+ * findWeightBps / 10_000, Quartz takes the remainder, acc capped at
+ * 10_000 so a big multiplier can never underflow the Quartz slot.
+ * Byte-mirrors the contract's block in _rollHunt -- the same math the
+ * settle gate recomputes, or queued digs revert ResultMismatch.
+ */
+export function applyFindWeight(table, findWeightBps) {
+  const mult = Number(findWeightBps);
+  if (mult <= 10000) return [...table];
+  const t = [...table];
+  let acc = 0;
+  for (let r = 1; r < 5; r++) {
+    t[r] = Math.floor((t[r] * mult) / 10000);
+    acc += t[r];
+  }
+  if (acc > 10000) acc = 10000;
+  t[0] = 10000 - acc;
+  return t;
+}
+
+/**
+ * The table for a tier, folded for the player's skill exactly as the
+ * contract folds it at roll time.
  */
 export function tableFor(tier, skill = 1) {
-  if (tier === 5 && skill < 4) return GOLD_NO_SKILL4;
-  return ECONOMY_DROP_TABLE[tier];
+  const row = ECONOMY_DROP_TABLE[tier];
+  if (!row) throw new Error(`bad toolTier ${tier}`);
+  return foldTable(row, skill);
 }
 
 /**
@@ -85,11 +121,12 @@ function concat(...parts) {
   return out;
 }
 
-export function rollHunt(seed, player, huntIndex, toolTier, skill = 1) {
-  // tableFor(), not DROP_TABLE[toolTier]: the direct index threw on tier 5,
-  // which the local copy did not have a row for.
-  const table = tableFor(toolTier, skill);
-  if (!table) throw new Error(`bad toolTier ${toolTier}`);
+export function rollHunt(seed, player, huntIndex, toolTier, skill = 1, findWeightBps = 10000) {
+  // tableFor(tier, skill) folds skill-locked rarities into Quartz and
+  // applyFindWeight scales the folded table by the V10 prestige + luck
+  // multiplier -- both byte-mirror _rollHunt, which is the whole point:
+  // the settle gate recomputes this exact pipeline from the same seed.
+  const table = applyFindWeight(tableFor(toolTier, skill), findWeightBps);
 
   // Concatenate without Buffer: keep a running list and join into one array.
   const h = hash(concat(

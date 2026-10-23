@@ -27,7 +27,6 @@ import {
   repairTool as wRepairTool,
   upgradeSkill as wUpgradeSkill,
   redeemGems as wRedeemGems,
-  settleHunt as wSettleHunt,
 } from "./wallet.js";
 import { rpcCall } from "./rpc.js";
 import { connect as readConnect } from "./chain.js";
@@ -620,92 +619,140 @@ export async function redeemGemsOnchain(rarity, count) {
 }
 
 /**
- * Settle your own hunt on chain.
- *
- * Same rule as every other write in this module: send, then poll until the
- * contract's own state proves it applied. Here the signal is
- * `huntIndexOf(player)`, which settleHunt increments exactly once.
- *
- * The counts are NOT computed locally. They are read from the contract's own
- * `previewHunt`, because settleHunt recomputes the result from the committed
- * season seed and reverts ResultMismatch on any difference. Rolling it here
- * would produce finds the chain refuses -- which is exactly what happened when
- * `rollHunt` hashed the 0x-prefixed address.
- *
- * V6: previewHunt returns only (uint256[5] counts) -- bestSingleWei was
- * removed. The contract computes bestSingleFind internally now.
- *
- * @param {number} tier 1..4
- * @returns {Promise<{ok:boolean, counts?:bigint[],
- *                    hash?:string, code?:string, reason?:string}>}
+ * V10 one-shot writes, same rule as every other write in this module:
+ * send, then poll until the contract's own state proves it applied. On
+ * 46630 a reverted call still yields a status-0x1 receipt, so a hash
+ * proves nothing; only a moved read does.
  */
-export async function settleHuntOnchain(tier) {
+
+/**
+ * Carry your V9 progress into V10. One-shot per player.
+ *
+ * Signal: `migratedV9(player)` flips to true. Everything the migration
+ * pulled is then readable through the normal V10 getters.
+ *
+ * @returns {Promise<{ok:boolean, hash?:string, code?:string, reason?:string}>}
+ */
+export async function migrateFromV9Onchain() {
   const r = await getReader();
-  if (!r)
-    return fail(
-      "not-configured",
-      "GAME_ADDRESS not set - no contract to write to",
-    );
-
+  if (!r) return fail("not-configured", "GAME_ADDRESS not set - no contract to write to");
   const { account } = getState();
-
-  // A season with no committed seed cannot settle anything. Say that plainly
-  // rather than letting the player pay gas to be rejected with SeedNotCommitted.
-  let season;
+  let before;
   try {
-    season = await r.current();
+    before = await r.migratedV9(account);
   } catch {
-    return fail("read-failed", "could not read the current season");
+    return fail("read-failed", "could not read the migration flag");
   }
-  if (!season.seedCommitted) {
-    return fail(
-      "no-seed",
-      "this season has no committed seed yet, so hunts cannot be settled",
-    );
-  }
+  if (before) return fail("already", "this wallet already carried its progress over");
 
-  let preview;
+  const { migrateFromV9 } = await import("./wallet.js");
+  const sent = await migrateFromV9();
+  if (!sent.ok) return fail(sent.code || "send-failed", sent.reason || "transaction was not sent");
+
+  const after = await pollUntilChanged(() => r.migratedV9(account), before, (b, a) => a === true);
+  if (!after.changed) {
+    return fail("reverted", "contract did not apply the migration (it reverted)");
+  }
+  const { track } = await import('./analytics.js');
+  track('v9_migrate', {});
+  return { ok: true, hash: sent.hash, confirmed: true };
+}
+
+/**
+ * Prestige: wipe satchel, tool and skill for a permanent find-weight
+ * multiplier. Signal: `prestigeCount(player)` increments.
+ *
+ * @returns {Promise<{ok:boolean, hash?:string, code?:string,
+ *                    reason?:string, prestigeCount?:number}>}
+ */
+export async function descendOnchain() {
+  const r = await getReader();
+  if (!r) return fail("not-configured", "GAME_ADDRESS not set - no contract to write to");
+  const { account } = getState();
+  let before;
   try {
-    preview = await r.previewHunt(account, tier);
-  } catch (e) {
-    return fail("read-failed", `could not preview the hunt: ${e.message}`);
+    before = await r.prestigeCount(account);
+  } catch {
+    return fail("read-failed", "could not read the prestige count");
   }
 
-  const before = await r.huntIndexOf(account);
-  const sent = await wSettleHunt({
-    player: account,
-    tier,
-    counts: preview.counts,
-  });
-  if (!sent.ok)
-    return fail(
-      sent.code || "send-failed",
-      sent.reason || "transaction was not sent",
-    );
+  const { descend } = await import("./wallet.js");
+  const sent = await descend();
+  if (!sent.ok) return fail(sent.code || "send-failed", sent.reason || "transaction was not sent");
+
+  const after = await pollUntilChanged(() => r.prestigeCount(account), before, (b, a) => a > b);
+  if (!after.changed) {
+    return fail("reverted", "contract did not apply the descend (it reverted)");
+  }
+  const { track } = await import('./analytics.js');
+  track('descend', {});
+  return { ok: true, hash: sent.hash, confirmed: true, prestigeCount: after.value };
+}
+
+/**
+ * Buy one luck research level. Signal: `researchOf(player)` packed value
+ * grows (the luck byte is 2, so +1 level adds 0x100 to the packed word).
+ *
+ * @returns {Promise<{ok:boolean, hash?:string, code?:string, reason?:string}>}
+ */
+export async function studyOnchain() {
+  const r = await getReader();
+  if (!r) return fail("not-configured", "GAME_ADDRESS not set - no contract to write to");
+  const { account } = getState();
+  let before;
+  try {
+    before = await r.researchOf(account);
+  } catch {
+    return fail("read-failed", "could not read the research levels");
+  }
+
+  const { study } = await import("./wallet.js");
+  const sent = await study();
+  if (!sent.ok) return fail(sent.code || "send-failed", sent.reason || "transaction was not sent");
+
+  const after = await pollUntilChanged(() => r.researchOf(account), before, (b, a) => a > b);
+  if (!after.changed) {
+    return fail("reverted", "contract did not apply the study (it reverted)");
+  }
+  const { track } = await import('./analytics.js');
+  track('study', {});
+  return { ok: true, hash: sent.hash, confirmed: true };
+}
+
+/**
+ * Fuse `times` steps of gem `rarity` up into gem `rarity + 1`. Signal:
+ * the credited gem balance grows by exactly `times`.
+ *
+ * @param {number} rarity 0..3
+ * @param {number} times   >= 1
+ * @returns {Promise<{ok:boolean, hash?:string, code?:string, reason?:string}>}
+ */
+export async function fuseOnchain(rarity, times) {
+  const r = await getReader();
+  if (!r) return fail("not-configured", "GAME_ADDRESS not set - no contract to write to");
+  const { account } = getState();
+  let before;
+  try {
+    before = await r.gemsOf(account, rarity + 1);
+  } catch {
+    return fail("read-failed", "could not read the gem balance");
+  }
+
+  const { fuse } = await import("./wallet.js");
+  const sent = await fuse(rarity, times);
+  if (!sent.ok) return fail(sent.code || "send-failed", sent.reason || "transaction was not sent");
 
   const after = await pollUntilChanged(
-    () => r.huntIndexOf(account),
+    () => r.gemsOf(account, rarity + 1),
     before,
-    (b, a) => a > b,
+    (b, a) => a >= b + BigInt(times),
   );
   if (!after.changed) {
-    // Same shape as the other writes: a receipt here proves nothing. On 46630 a
-    // reverted call still yields status 0x1.
-    return fail(
-      "reverted",
-      "contract did not apply the settlement (it reverted) - find not credited",
-    );
+    return fail("reverted", "contract did not apply the fusion (it reverted)");
   }
-
   const { track } = await import('./analytics.js');
-  track('hunt_settle', {mode: 'single'});
-  return {
-    ok: true,
-    hash: sent.hash,
-    confirmed: true,
-    counts: preview.counts,
-    huntIndex: after.value,
-  };
+  track('fuse', { rarity, times });
+  return { ok: true, hash: sent.hash, confirmed: true };
 }
 
 /**
@@ -734,8 +781,8 @@ export async function previewHuntFor(tier) {
  * Settle the whole queued session in ONE transaction. Invoked only by the
  * SETTLE button -- never by gameplay.
  *
- * Same confirm discipline as settleHuntOnchain: huntIndexOf(player) must
- * advance by exactly `n`, because on 46630 a receipt proves nothing. A
+ * Same confirm discipline as every write in this module: huntIndexOf(player)
+ * must advance by exactly `n`, because on 46630 a receipt proves nothing. A
  * short move means the batch reverted and NOTHING was credited -- the queue
  * stays intact and the player can retry.
  *

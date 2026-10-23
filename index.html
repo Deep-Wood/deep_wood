@@ -169,6 +169,9 @@
          chain state is readable without a full-width bar holding it. -->
     <div id="status">
       <div class="chip" id="chainstat"><span class="dot warn"></span><span id="chaintext">checking&hellip;</span></div>
+      <button type="button" class="chip migrate-chip hidden" id="migrate-chip" aria-label="Carry your progress from the previous cave into V10">
+        <span class="dot good"></span>Carry your V9 progress over
+      </button>
     </div>
 
     <!-- RIGHT: the toolbelt. Discrete tiles, no container -- the reference art
@@ -265,6 +268,15 @@
 
         <div class="redeem-label">Trophies <span class="camp-badge-count" id="camp-badge-count">0/0</span></div>
         <div class="camp-badges" id="camp-badges"></div>
+
+        <!-- V10 prestige: Descend. Static explainers with LIVE numbers
+             (leq, current multiplier, what resets vs keeps). -->
+        <div class="redeem-label">Descend <span class="camp-utc" id="descend-mult">--</span></div>
+        <div class="camp-v10" id="camp-descend"></div>
+
+        <!-- V10 research: luck. One perk, costs double per level. -->
+        <div class="redeem-label">Research <span class="camp-utc" id="research-luck">--</span></div>
+        <div class="camp-v10" id="camp-research"></div>
       </div>
     </div>
 
@@ -313,6 +325,42 @@
         <div class="redeem-msg" id="redeem-msg" role="status"></div>
 
         <button type="button" class="redeem-btn" id="redeem-go" disabled>Redeem</button>
+      </div>
+    </div>
+
+    <!-- FUSION CARD: burn N of a gem, receive the next tier up. Same visual
+         system as the redemption card; recipes and rates are LIVE reads
+         (fusionRates is owner-settable), and every row shows the honest
+         sink so the trade is never presented as value-neutral when it is
+         not. Diamond has no up-step and is not listed. -->
+    <div id="fusion-card" class="redeem-card hidden" role="dialog" aria-modal="true" aria-label="Fuse gems">
+      <div class="redeem-head">
+        <span class="redeem-title">Fuse gems</span>
+        <button type="button" class="redeem-x" id="fusion-close" aria-label="Close">&#215;</button>
+      </div>
+
+      <div class="redeem-body">
+        <div class="redeem-label">Recipe</div>
+        <div class="fusion-rows" id="fusion-rows" role="radiogroup" aria-label="Fusion step"></div>
+
+        <div class="redeem-label">Steps</div>
+        <div class="redeem-amount">
+          <input type="text" id="fusion-input" class="redeem-input" inputmode="numeric"
+                 autocomplete="off" spellcheck="false" aria-label="Fusions to perform">
+          <span class="redeem-of" id="fusion-of">of 0</span>
+        </div>
+        <div class="redeem-pcts" id="fusion-pcts"></div>
+
+        <div class="redeem-quote">
+          <span class="redeem-quote-label">You receive</span>
+          <span class="redeem-quote-amt">
+            <span class="redeem-quote-val" id="fusion-quote">--</span>
+            <span class="redeem-quote-cur" id="fusion-quote-cur">Amber</span>
+          </span>
+        </div>
+        <div class="redeem-msg" id="fusion-msg" role="status"></div>
+
+        <button type="button" class="redeem-btn" id="fusion-go" disabled>Fuse</button>
       </div>
     </div>
 
@@ -863,6 +911,7 @@
           '<button class="wm-item" type="button" id="wm-leaderboard">Leaderboard</button>' +
           '<button class="wm-item" type="button" id="wm-camp">Camp</button>' +
           '<button class="wm-item" type="button" id="wm-redeem">Redeem gems</button>' +
+          '<button class="wm-item" type="button" id="wm-fuse">Fuse gems</button>' +
           '<button class="wm-item" type="button" id="wm-about">About Game</button>' +
         '</div>' +
         // The bottom item flips with the session: "Disconnect" when attached,
@@ -938,6 +987,19 @@
         }
       });
 
+      // Fuse gems — opens the fusion card. Same ownership rule as redeem:
+      // the card lives in ForestScene, reached through the game instance.
+      walletMenu.querySelector('#wm-fuse').addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeWalletMenu();
+        const scene = window.__scene || window.__game?.scene;
+        if (scene && typeof scene.openFuseCard === 'function') {
+          scene.openFuseCard();
+        } else {
+          setPending('Fusion is not ready yet — try again in a moment.');
+        }
+      });
+
       // Connect wallet — the bottom item when there is no session. Runs the
       // same connect-and-switch flow the button itself used to fire directly.
       walletMenu.querySelectorAll('.wm-connect').forEach((item) => {
@@ -1001,6 +1063,9 @@
         // player who already owns a tool is told to buy it again -- and that
         // second purchase reverts TierLocked after they have signed it.
         await window.__scene?.refreshChainTool?.();
+        // V9 -> V10: offer the one-shot carry-over when the connected wallet
+        // still has unmigrated state on the legacy contract.
+        window.__scene?.checkV9Migration?.();
         const b = await walletBalanceWeiOnchain();
         window.__scene?.setChainBalance?.(b);
         render();

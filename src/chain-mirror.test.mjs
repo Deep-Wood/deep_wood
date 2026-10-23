@@ -36,7 +36,11 @@ test('the mirror is written from the chain-confirmed tier, not the local sim', (
 
 /** The ON-CHAIN branch only: the preview branch above it legitimately differs. */
 function onchainBuyBranch() {
-  const a = scene.indexOf('async _doBuyTool');
+  // Exact-anchored: 'async _doBuyTool' alone matches _doBuyToolWithToken first,
+  // and the slice then swallows _doBuyTool's own PREVIEW branch (which is
+  // SUPPOSED to size against simBalance) -- a false positive that read as
+  // "the on-chain path uses the simulated balance" when it never did.
+  const a = scene.indexOf('async _doBuyTool(tier)');
   const off = scene.indexOf('ON-CHAIN:', a);
   const end = scene.indexOf('async doRepair', a);
   return scene.slice(off, end);
