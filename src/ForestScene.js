@@ -262,6 +262,11 @@ export class ForestScene extends Phaser.Scene {
     this.tokenAddress = config.tokenAddress || null;
     this.poolManager = config.poolManager || null;
     this.poolId = config.poolId || null;
+
+    // Footstep sync (distance-based, works for animated + static hunter)
+    this._stepAccum = 0;
+    this._lastStepX = 0;
+    this._lastStepY = 0;
   }
 
   /**
@@ -442,6 +447,10 @@ export class ForestScene extends Phaser.Scene {
     const spawnX = (((Math.random() * 2) - 1) * spawnJitter) | 0;
     const spawnY = (((Math.random() * 2) - 1) * spawnJitter) | 0;
     this.player = this.physics.add.sprite(spawnX, spawnY, 'hunter', 0);
+
+    // Footstep sync: seed with spawn pos so first step isn't a huge jump
+    this._lastStepX = spawnX;
+    this._lastStepY = spawnY;
 
     // The generated sheet is 16 logical px at 4x = 64px. The world tile is
     // 32px, so draw the character at 0.5 to keep it tile-sized.
@@ -3794,17 +3803,21 @@ export class ForestScene extends Phaser.Scene {
     if (moving) {
       // pick the dominant axis for the sprite direction
       this.animatePlayer(vx, vy);
-      // Footstep fires ON the walk-cycle contact frames (0 and 2 of the 4-frame
-      // row) so the sound lands exactly when the sprite's foot strikes the
-      // ground -- not on a wall-clock timer that drifts against the animation.
-      const frame = this.player.anims.currentFrame?.index ?? 0;
-      if ((frame === 0 || frame === 2) && frame !== this._lastStepFrame) {
-        this._lastStepFrame = frame;
+
+      // Footstep sync: distance-based, not frame-based.
+      // Frame-based only works when the animated sheet is playing; the
+      // static gen-hunter has no animation so currentFrame is undefined.
+      // Distance works for both: every ~32px (1 tile) = one step sound.
+      this._stepAccum += Phaser.Math.Distance.Between(this.player.x, this.player.y, this._lastStepX, this._lastStepY);
+      this._lastStepX = this.player.x;
+      this._lastStepY = this.player.y;
+      while (this._stepAccum >= 32) {
+        this._stepAccum -= 32;
         this.dust.emitParticleAt(this.player.x, this.player.y + 14);
         playFootstep();
       }
     } else {
-      this._lastStepFrame = -1;
+      this._stepAccum = 0;
       this.animateIdle(vx, vy);
     }
 
