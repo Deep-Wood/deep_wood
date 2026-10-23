@@ -3800,7 +3800,7 @@ export class ForestScene extends Phaser.Scene {
     // puts them in front. Depth is the object's base y.
     this.player.setDepth(this.player.y);
 
-    if (moving) {
+    if (moving && !this.mining) {
       // pick the dominant axis for the sprite direction
       this.animatePlayer(vx, vy);
 
@@ -4167,8 +4167,29 @@ export class ForestScene extends Phaser.Scene {
         color: '#e8f6ff', stroke: '#0b1512', strokeThickness: 4,
       }).setOrigin(0.5).setDepth(node.depth + 2);
 
-      // Face the site immediately, or the first swing lands behind him.
-      this.player.setRotation(Math.atan2(node.y - this.player.y, node.x - this.player.x));
+      // Face the site in the correct cardinal direction (down/left/right/up)
+      // so the hunter's body orientation matches the beacon's relative position.
+      const dx = node.x - this.player.x;
+      const dy = node.y - this.player.y;
+      let faceFrame;
+      if (Math.abs(dx) > Math.abs(dy)) {
+        faceFrame = dx < 0 ? 1 : 2; // left or right
+      } else {
+        faceFrame = dy < 0 ? 3 : 0; // up or down
+      }
+      if (this.genHunter) {
+        // Static image: flip horizontally for left/right
+        this.player.setFlipX(faceFrame === 1);
+        // For up/down, gen-hunter is a single still; rotation not used
+      } else {
+        // Animated hunter: play the idle frame of the correct walk cycle
+        this.player.anims.stop();
+        this.player.setFrame(faceFrame * 4); // frame 0 of the 4-frame row
+      }
+      // Store the facing so subsequent strikes lean from this orientation
+      this._digFaceFrame = faceFrame;
+      // Stop movement so the strike animation isn't fought by velocity
+      this.player.setVelocity(0, 0);
       this.updateMiningLabel();
     }
 
@@ -4282,75 +4303,82 @@ export class ForestScene extends Phaser.Scene {
       }
     }
 
-  /** One pick impact: the hunter leans, swings, and recovers -- dirt flies. */
-  strike(node, power) {
-    if (!node.active) return;
-    const baseSX = this.player.scaleX;
-    const baseSY = this.player.scaleY;
-    const baseRot = this.player.rotation;
-    const flip = this._strikeFlip ? 1 : -1;
-    this._strikeFlip = !this._strikeFlip;
+  /** One pick impact: the hunter leans, swings, and recovers upright -- dirt flies. */
+    strike(node, power) {
+      if (!node.active) return;
+      // Always recover to fully upright (rotation 0, scale 1 for animated, 0.62 for gen-hunter)
+      const uprightSX = this.genHunter ? 0.62 : 1;
+      const uprightSY = this.genHunter ? 0.62 : 1;
+      const uprightRot = 0;
+      // Base rotation from the dig facing (down=PI/2, left=PI, right=0, up=-PI/2)
+      const faceFrame = this._digFaceFrame ?? 0;
+      const baseRot = faceFrame === 0 ? Math.PI / 2
+        : faceFrame === 1 ? Math.PI
+        : faceFrame === 2 ? 0
+        : -Math.PI / 2;
+      const flip = this._strikeFlip ? 1 : -1;
+      this._strikeFlip = !this._strikeFlip;
 
-    // --- 1. WIND-UP: lean back, pick raises ---
-    this.tweens.add({
-      targets: this.player,
-      rotation: baseRot - 0.35 * flip,
-      scaleX: baseSX * 1.05,
-      scaleY: baseSY * 0.95,
-      duration: 90,
-      ease: 'Quad.out',
-      onComplete: () => {
-        // --- 2. SWING: violent forward arc ---
-        this.tweens.add({
-          targets: this.player,
-          rotation: baseRot + 0.65 * flip,
-          scaleX: baseSX * (1 + 0.18 * power),
-          scaleY: baseSY * (1 - 0.15 * power),
-          duration: 70,
-          ease: 'Cubic.in',
-          onComplete: () => {
-            // --- 3. IMPACT: hit pause + node reaction ---
-            this.tweens.add({
-              targets: this.player,
-              rotation: baseRot + 0.55 * flip,
-              duration: 50,
-              ease: 'Quad.out',
-            });
-            // Node shakes
-            this.tweens.add({
-              targets: node,
-              x: node.x + 4 * flip * power,
-              alpha: 1 - 0.22 * power,
-              duration: 60, yoyo: true, ease: 'Quad.out',
-            });
-            // Dirt + sparks (existing, kept)
-            const dirt = this.add.particles(node.x, node.y - 6, 'spark', {
-              speed: { min: 25, max: 70 * power }, angle: { min: 190, max: 350 },
-              gravityY: 240, scale: { start: 0.25, end: 0 },
-              lifespan: 400, quantity: 1, emitting: false,
-            });
-            dirt.setDepth(node.depth - 1);
-            dirt.explode(4 + Math.round(power * 7));
-            const cap = this.add.particles(node.x, node.y - 24, 'spark', {
-              speed: { min: 12, max: 50 * power },
-              scale: { start: 0.35, end: 0 }, lifespan: 320,
-              quantity: 1, emitting: false,
-            });
-            cap.explode(3);
-            // --- 4. RECOVER: stand upright ---
-            this.tweens.add({
-              targets: this.player,
-              rotation: baseRot,
-              scaleX: baseSX,
-              scaleY: baseSY,
-              duration: 140,
-              ease: 'Back.out',
-            });
-          },
-        });
-      },
-    });
-  }
+      // --- 1. WIND-UP: lean back, pick raises ---
+      this.tweens.add({
+        targets: this.player,
+        rotation: baseRot - 0.35 * flip,
+        scaleX: uprightSX * 1.05,
+        scaleY: uprightSY * 0.95,
+        duration: 90,
+        ease: 'Quad.out',
+        onComplete: () => {
+          // --- 2. SWING: violent forward arc ---
+          this.tweens.add({
+            targets: this.player,
+            rotation: baseRot + 0.65 * flip,
+            scaleX: uprightSX * (1 + 0.18 * power),
+            scaleY: uprightSY * (1 - 0.15 * power),
+            duration: 70,
+            ease: 'Cubic.in',
+            onComplete: () => {
+              // --- 3. IMPACT: hit pause + node reaction ---
+              this.tweens.add({
+                targets: this.player,
+                rotation: baseRot + 0.55 * flip,
+                duration: 50,
+                ease: 'Quad.out',
+              });
+              // Node shakes
+              this.tweens.add({
+                targets: node,
+                x: node.x + 4 * flip * power,
+                alpha: 1 - 0.22 * power,
+                duration: 60, yoyo: true, ease: 'Quad.out',
+              });
+              // Dirt + sparks (existing, kept)
+              const dirt = this.add.particles(node.x, node.y - 6, 'spark', {
+                speed: { min: 25, max: 70 * power }, angle: { min: 190, max: 350 },
+                gravityY: 240, scale: { start: 0.25, end: 0 },
+                lifespan: 400, quantity: 1, emitting: false,
+              });
+              dirt.setDepth(node.depth - 1);
+              dirt.explode(4 + Math.round(power * 7));
+              const cap = this.add.particles(node.x, node.y - 24, 'spark', {
+                speed: { min: 12, max: 50 * power },
+                scale: { start: 0.35, end: 0 }, lifespan: 320,
+                quantity: 1, emitting: false,
+              });
+              cap.explode(3);
+              // --- 4. RECOVER: stand fully upright ---
+              this.tweens.add({
+                targets: this.player,
+                rotation: uprightRot,
+                scaleX: uprightSX,
+                scaleY: uprightSY,
+                duration: 140,
+                ease: 'Back.out',
+              });
+            },
+          });
+        },
+      });
+    }
 
   async reveal(node) {
     // Snapshot the tier BEFORE the reveal, so a tool that breaks on this
