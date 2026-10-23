@@ -4269,38 +4269,74 @@ export class ForestScene extends Phaser.Scene {
       }
     }
 
-  /** One pick impact: the hunter rocks, the site shakes, dirt flies. */
+  /** One pick impact: the hunter leans, swings, and recovers -- dirt flies. */
   strike(node, power) {
     if (!node.active) return;
-    const sx = this.player.scaleX, sy = this.player.scaleY;
-    this.tweens.add({
-      targets: this.player,
-      scaleX: sx * (1 + 0.16 * power), scaleY: sy * (1 - 0.13 * power),
-      duration: 110, yoyo: true, ease: 'Quad.out',
-    });
-    this.tweens.add({
-      targets: node,
-      x: node.x + (this._strikeFlip ? 3 : -3),
-      alpha: 1 - 0.18 * power,
-      duration: 90, yoyo: true, ease: 'Quad.out',
-    });
+    const baseSX = this.player.scaleX;
+    const baseSY = this.player.scaleY;
+    const baseRot = this.player.rotation;
+    const flip = this._strikeFlip ? 1 : -1;
     this._strikeFlip = !this._strikeFlip;
 
-    const dirt = this.add.particles(node.x, node.y - 6, 'spark', {
-      speed: { min: 20, max: 60 * power }, angle: { min: 200, max: 340 },
-      gravityY: 220, scale: { start: 0.22, end: 0 },
-      lifespan: 380, quantity: 1, emitting: false,
+    // --- 1. WIND-UP: lean back, pick raises ---
+    this.tweens.add({
+      targets: this.player,
+      rotation: baseRot - 0.35 * flip,
+      scaleX: baseSX * 1.05,
+      scaleY: baseSY * 0.95,
+      duration: 90,
+      ease: 'Quad.out',
+      onComplete: () => {
+        // --- 2. SWING: violent forward arc ---
+        this.tweens.add({
+          targets: this.player,
+          rotation: baseRot + 0.65 * flip,
+          scaleX: baseSX * (1 + 0.18 * power),
+          scaleY: baseSY * (1 - 0.15 * power),
+          duration: 70,
+          ease: 'Cubic.in',
+          onComplete: () => {
+            // --- 3. IMPACT: hit pause + node reaction ---
+            this.tweens.add({
+              targets: this.player,
+              rotation: baseRot + 0.55 * flip,
+              duration: 50,
+              ease: 'Quad.out',
+            });
+            // Node shakes
+            this.tweens.add({
+              targets: node,
+              x: node.x + 4 * flip * power,
+              alpha: 1 - 0.22 * power,
+              duration: 60, yoyo: true, ease: 'Quad.out',
+            });
+            // Dirt + sparks (existing, kept)
+            const dirt = this.add.particles(node.x, node.y - 6, 'spark', {
+              speed: { min: 25, max: 70 * power }, angle: { min: 190, max: 350 },
+              gravityY: 240, scale: { start: 0.25, end: 0 },
+              lifespan: 400, quantity: 1, emitting: false,
+            });
+            dirt.setDepth(node.depth - 1);
+            dirt.explode(4 + Math.round(power * 7));
+            const cap = this.add.particles(node.x, node.y - 24, 'spark', {
+              speed: { min: 12, max: 50 * power },
+              scale: { start: 0.35, end: 0 }, lifespan: 320,
+              quantity: 1, emitting: false,
+            });
+            cap.explode(3);
+            // --- 4. RECOVER: stand upright ---
+            this.tweens.add({
+              targets: this.player,
+              rotation: baseRot,
+              scaleX: baseSX,
+              scaleY: baseSY,
+              duration: 140,
+              ease: 'Back.out',
+            });
+          },
+        });
+      },
     });
-    dirt.setDepth(node.depth - 1);
-    dirt.explode(3 + Math.round(power * 6));
-
-    // Sparks at the cap, so a beacon being struck is visible from a distance.
-    const cap = this.add.particles(node.x, node.y - 24, 'spark', {
-      speed: { min: 10, max: 45 * power },
-      scale: { start: 0.3, end: 0 }, lifespan: 300,
-      quantity: 1, emitting: false,
-    });
-    cap.explode(2);
   }
 
   async reveal(node) {
