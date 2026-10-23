@@ -171,13 +171,24 @@ Cuts, in order:
   `setMaxMigrateGems` precedent), `toolOf`, `skillOf`, `huntIndexOf` — and
   marks `migratedV9[player] = true`. Second call reverts `AlreadyMigrated`.
 - **Seed continuity (critical):** the constructor commits the SAME
-  preseason seed (`0xd1aff9…`, sha256('deepwood-v3-preseason')). Same seed
-  + migrated hunt index ⇒ every player's future rolls continue exactly
-  where V9 left them — no preview drift, no re-verification of the fairness
-  model needed.
+  preseason seed V9 actually carries on-chain: `0xc05f61e5…`
+  (keccak256('deepwood-v9-preseason')). (The `0xd1aff9…` value recorded
+  earlier in this doc was the V3-era sha256 seed and would have silently
+  broken roll continuity — resolved 2026-10-22 by reading `seasonSeed()`
+  from the live V9 before deploying.) Same seed + migrated hunt index ⇒
+  every player's future rolls continue exactly where V9 left them — no
+  preview drift, no re-verification of the fairness model needed.
 - Token address unchanged ($DEEPWOOD), treasury unchanged.
 - V9 is left paused (never drained for gameplay; `emergencyWithdraw` only
-  if ever needed — decide at deploy time whether to sweep or leave).
+  if ever needed). **Resolved 2026-10-22, post-cutover:** V9's remaining
+  DEEP balance — 21,839,940 DEEP, refilled by purchases after the 10-19
+  owner sweep — was moved to V10.1 as redemption backing via
+  `emergencyWithdraw(DEEP, full, V10.1)` (tx `0x8248e275…`), because
+  V10.1's own balance (180,000 DEEP from flow-test tool buys) was SHORT of
+  trader2's migrated satchel liability (234,720 DEEP) — a full redeem would
+  have reverted `InsufficientTokenBalance`. V9 now holds 0 DEEP; V10.1
+  holds 22,019,940 DEEP against ~235k outstanding migrated liability
+  (21.8M headroom). V9's gem-state views remain readable for migration.
 
 ---
 
