@@ -620,7 +620,8 @@
       // Tool: tier 0 means no pick yet.
       const toolTierName = p.tier >= 1 ? TIER_NAME[p.tier] : 'None';
       const toolInitial = p.tier >= 1 ? 'WBSGM'[p.tier - 1] : '—';
-      toolName.textContent = toolTierName;
+      // Show only the initial in the main slot; full name in tooltip
+      toolName.textContent = toolInitial;
       toolIc.title = `Tool: ${toolTierName} (${toolInitial})`;
       // The pickaxe avatar beside the tool name, wearing the player's chosen
       // EARNED skin (chosenSkin reverts to base when the honor lapses). The
@@ -641,14 +642,6 @@
         const avatarEl = line.querySelector('.gs-avatar');
         if (avatarEl.innerHTML !== svg) avatarEl.innerHTML = svg;
         line.title = skin ? `Skin: ${skin.name}` : 'Skin: standard wood';
-        // Add/update initial badge
-        let initialEl = line.querySelector('.gs-initial');
-        if (!initialEl) {
-          initialEl = document.createElement('span');
-          initialEl.className = 'gs-initial';
-          line.appendChild(initialEl);
-        }
-        initialEl.textContent = toolInitial;
       } else if (line) {
         // No tool held: put the name back as a direct child and drop the avatar.
         toolIc.appendChild(toolName);
@@ -660,7 +653,8 @@
       const skillRank = p.skill ?? 0;
       const skillFullName = skillRank >= 1 ? SKILL_NAME[skillRank] : 'None';
       const skillInitial = skillRank >= 1 ? 'GPDAL'[skillRank - 1] : '—';
-      skillName.textContent = skillFullName;
+      // Show only the initial in the main slot; full name in tooltip
+      skillName.textContent = skillInitial;
       skillIc.title = `Skill: ${skillFullName} (${skillInitial})`;
       // Skill avatar (gem cut by rank)
       let skillLine = skillIc.querySelector('.gs-skillline');
@@ -675,14 +669,6 @@
         }
         const avatarEl = skillLine.querySelector('.gs-avatar');
         if (avatarEl.innerHTML !== avatarSvg) avatarEl.innerHTML = avatarSvg;
-        // Add/update initial badge
-        let initialEl = skillLine.querySelector('.gs-initial');
-        if (!initialEl) {
-          initialEl = document.createElement('span');
-          initialEl.className = 'gs-initial';
-          skillLine.appendChild(initialEl);
-        }
-        initialEl.textContent = skillInitial;
       } else if (skillLine) {
         // No skill: put the name back as direct child and drop the avatar line
         skillIc.appendChild(skillName);
