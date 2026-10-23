@@ -598,10 +598,10 @@
     window.renderGems = renderGems;
 
     // ---- hunter row: the player's current tool and skill ------------------
-    // The second row of the gemstrip: one pickaxe avatar + tier name, one gem
-    // avatar + skill name. Not a ladder -- the thing the player HOLDS,
-    // replaced on upgrade. The avatars are inline SVG generated in economy.js
-    // so there is no image to 404.
+    // The second row of the gemstrip: one pickaxe avatar + tier name + initial,
+    // one gem avatar + skill name + initial. Not a ladder -- the thing the
+    // player HOLDS, replaced on upgrade. The avatars are inline SVG generated
+    // in economy.js so there is no image to 404.
     // Loaded lazily via dynamic import so this block does not need to be a
     // module itself -- the surrounding script is a plain inline one.
     async function renderHunterStrip() {
@@ -612,17 +612,19 @@
         setTimeout(renderHunterStrip, 200);
         return;
       }
-      const { TIER_NAME, SKILL_NAME, toolAvatarSkinned } = await import('/src/economy.js');
+      const { TIER_NAME, SKILL_NAME, toolAvatarSkinned, SKILL_AVATARS } = await import('/src/economy.js');
       const { chosenSkin } = await import('/src/engagement.js');
       const skillName = document.getElementById('gs-skill-name');
       const toolIc = document.getElementById('gs-tool');
       const skillIc = document.getElementById('gs-skill');
       // Tool: tier 0 means no pick yet.
-      toolName.textContent = p.tier >= 1 ? TIER_NAME[p.tier] : 'None';
-      toolIc.title = `Tool: ${p.tier >= 1 ? TIER_NAME[p.tier] : 'None'}`;
+      const toolTierName = p.tier >= 1 ? TIER_NAME[p.tier] : 'None';
+      const toolInitial = p.tier >= 1 ? 'WBSGM'[p.tier - 1] : '—';
+      toolName.textContent = toolTierName;
+      toolIc.title = `Tool: ${toolTierName} (${toolInitial})`;
       // The pickaxe avatar beside the tool name, wearing the player's chosen
       // EARNED skin (chosenSkin reverts to base when the honor lapses). The
-      // avatar + name share one inline line so the row's height never grows.
+      // avatar + name + initial share one inline line so the row's height never grows.
       let line = toolIc.querySelector('.gs-toolline');
       if (p.tier >= 1) {
         const skin = chosenSkin(window.__scene?._eng?.skinFacts ?? {}, window.localStorage);
@@ -639,17 +641,53 @@
         const avatarEl = line.querySelector('.gs-avatar');
         if (avatarEl.innerHTML !== svg) avatarEl.innerHTML = svg;
         line.title = skin ? `Skin: ${skin.name}` : 'Skin: standard wood';
+        // Add/update initial badge
+        let initialEl = line.querySelector('.gs-initial');
+        if (!initialEl) {
+          initialEl = document.createElement('span');
+          initialEl.className = 'gs-initial';
+          line.appendChild(initialEl);
+        }
+        initialEl.textContent = toolInitial;
       } else if (line) {
         // No tool held: put the name back as a direct child and drop the avatar.
         toolIc.appendChild(toolName);
         line.remove();
       }
       // Skill: 0 means a brand-new player who has not trained a skill yet;
-      // 1..4 map to Greenhorn through Lapidary. A fresh wallet (0) reads
+      // 1..5 map to Greenhorn through Lapidary. A fresh wallet (0) reads
       // "None" instead of Greenhorn.
-      const sv = SKILL_NAME[p.skill];
-      skillName.textContent = p.skill >= 1 ? sv : 'None';
-      skillIc.title = `Skill: ${p.skill >= 1 ? sv : 'None'}`;
+      const skillRank = p.skill ?? 0;
+      const skillFullName = skillRank >= 1 ? SKILL_NAME[skillRank] : 'None';
+      const skillInitial = skillRank >= 1 ? 'GPDAL'[skillRank - 1] : '—';
+      skillName.textContent = skillFullName;
+      skillIc.title = `Skill: ${skillFullName} (${skillInitial})`;
+      // Skill avatar (gem cut by rank)
+      let skillLine = skillIc.querySelector('.gs-skillline');
+      if (skillRank >= 1) {
+        const avatarSvg = SKILL_AVATARS[skillRank];
+        if (!skillLine) {
+          skillLine = document.createElement('span');
+          skillLine.className = 'gs-skillline';
+          skillLine.innerHTML = '<span class="gs-avatar"></span>';
+          skillIc.appendChild(skillLine);
+          skillLine.appendChild(skillName);
+        }
+        const avatarEl = skillLine.querySelector('.gs-avatar');
+        if (avatarEl.innerHTML !== avatarSvg) avatarEl.innerHTML = avatarSvg;
+        // Add/update initial badge
+        let initialEl = skillLine.querySelector('.gs-initial');
+        if (!initialEl) {
+          initialEl = document.createElement('span');
+          initialEl.className = 'gs-initial';
+          skillLine.appendChild(initialEl);
+        }
+        initialEl.textContent = skillInitial;
+      } else if (skillLine) {
+        // No skill: put the name back as direct child and drop the avatar line
+        skillIc.appendChild(skillName);
+        skillLine.remove();
+      }
     }
     window.renderHunter = renderHunterStrip;
 
