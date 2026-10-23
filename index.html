@@ -635,7 +635,7 @@
           line.appendChild(toolName);
         }
         const avatarEl = line.querySelector('.gs-avatar');
-        const newSrc = `/icons/tools/${toolImgName}.webp`;
+        const newSrc = `/icons/tools/${toolImgName}.webp?v=2`;
         if (avatarEl.src !== newSrc) avatarEl.src = newSrc;
         line.title = 'Skin: standard wood (image avatar)';
       } else if (line) {
@@ -663,7 +663,7 @@
           skillLine.appendChild(skillName);
         }
         const avatarEl = skillLine.querySelector('.gs-avatar');
-        const newSrc = `/icons/skills/${skillImgName}.webp`;
+        const newSrc = `/icons/skills/${skillImgName}.webp?v=2`;
         if (avatarEl.src !== newSrc) avatarEl.src = newSrc;
       } else if (skillLine) {
         skillIc.appendChild(skillName);
