@@ -623,7 +623,7 @@
       const toolImgName = p.tier >= 1 ? ['wood','bronze','silver','gold','mithril'][p.tier - 1] : null;
       // Show only the initial in the main slot; full name in tooltip
       toolName.textContent = toolInitial;
-      toolIc.title = `Tool: ${toolTierName} (${toolInitial})`;
+      toolIc.title = `Tool: ${toolTierName}`;
       // Tool avatar: use image file (skins not supported on image avatars yet)
       let line = toolIc.querySelector('.gs-toolline');
       if (p.tier >= 1) {
