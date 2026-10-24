@@ -55,10 +55,13 @@ test('applyFindWeight mirrors _rollHunt scaling, including the cap', () => {
   const folded = [4500, 3000, 2500, 0, 0]; // gold, skill 3
   // 1.5x: 3000->4500, 2500->3750, acc=8250, Quartz=1750
   assert.deepEqual(applyFindWeight(folded, 15000), [1750, 4500, 3750, 0, 0]);
-  // 3x at the prestige cap: 3000->9000, 2500->7500, acc=16500 -> capped at
-  // 10_000, so Quartz goes to zero exactly as the contract computes it
-  // (t[0] = 10_000 - min(acc,10_000)).
-  assert.deepEqual(applyFindWeight(folded, 30000), [0, 9000, 7500, 0, 0]);
+  // 3x at the prestige cap: 3000->9000, 2500->7500, acc=16500 -> re-normalized
+  // so weights sum to 10_000 (raw 9000+7500 would break %10000 roll:
+  // 9000 alone always wins since rarityRoll max is 9999).
+  const r3 = applyFindWeight(folded, 30000);
+  assert.equal(r3[0], 0, 'Quartz zeroed at cap');
+  assert.equal(r3.reduce((a, b) => a + b, 0), 10000, 'weights sum to 10k');
+  assert.ok(r3[1] > 0 && r3[2] > 0, 'both Amber and Sapphire remain rollable');
   // below the threshold: no scaling at all (mult <= 10_000)
   assert.deepEqual(applyFindWeight(folded, 10000), folded);
   assert.deepEqual(applyFindWeight(folded, 9999), folded);

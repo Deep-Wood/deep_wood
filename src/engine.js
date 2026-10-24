@@ -68,8 +68,22 @@ export function applyFindWeight(table, findWeightBps) {
     t[r] = Math.floor((t[r] * mult) / 10000);
     acc += t[r];
   }
-  if (acc > 10000) acc = 10000;
-  t[0] = 10000 - acc;
+  if (acc > 10000) {
+    // Re-normalize so non-Quartz weights sum to exactly 10000.
+    // Without this, a scaled weight > 10000 always wins because
+    // rarityRoll is % 10000 (max 9999) — Silver at prestige cap
+    // would roll 100% Amber (3500*3=10500 > 9999).
+    const scale = 10000 / acc;
+    let sum = 0;
+    for (let r = 1; r < 4; r++) {
+      t[r] = Math.floor(t[r] * scale);
+      sum += t[r];
+    }
+    t[4] = 10000 - sum; // last rarity takes the rounding remainder
+    t[0] = 0;
+  } else {
+    t[0] = 10000 - acc;
+  }
   return t;
 }
 
