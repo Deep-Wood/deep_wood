@@ -630,18 +630,20 @@
         if (!line) {
           line = document.createElement('span');
           line.className = 'gs-toolline';
-          line.innerHTML = '<img class="gs-avatar" alt="" draggable="false">';
+          line.innerHTML = '<img class="gs-avatar" alt="" draggable="false"><span class="gc"></span>';
           toolIc.appendChild(line);
-          line.appendChild(toolName);
         }
         const avatarEl = line.querySelector('.gs-avatar');
+        const nameEl = line.querySelector('.gc');
+        nameEl.textContent = toolInitial;
         const newSrc = `/icons/tools/${toolImgName}-v3.webp`;
         if (avatarEl.src !== newSrc) avatarEl.src = newSrc;
         line.title = 'Skin: standard wood (image avatar)';
       } else if (line) {
-        toolIc.appendChild(toolName);
-        line.remove();
+        toolIc.removeChild(line);
       }
+      // Clear the old toolName span -- display is now handled inside .gs-toolline
+      toolName.textContent = '';
       // Skill: 0 means a brand-new player who has not trained a skill yet;
       // 1..5 map to Greenhorn through Lapidary. A fresh wallet (0) reads
       // "None" instead of Greenhorn.
