@@ -777,6 +777,7 @@
     // the client -- every write is handed to the wallet, which prompts the
     // user. See src/wallet.js.
     import { connect, disconnect, switchToGameChain, getState, onWallet, GAME_CHAIN_ID } from '/src/wallet.js';
+    import { connectPrivy } from '/src/privy.js';
 
     const btn = document.getElementById('connect');
     const foot = document.getElementById('hint');
@@ -935,11 +936,11 @@
           '<button class="wm-item" type="button" id="wm-fuse">Fuse gems</button>' +
           '<button class="wm-item" type="button" id="wm-about">About Game</button>' +
         '</div>' +
-        // The bottom item flips with the session: "Disconnect" when attached,
-        // "Connect wallet" when not. Same slot, same styling, opposite action.
+        // The bottom section flips with the session.
         (s.connected
           ? '<button class="wm-item wm-disconnect" type="button">Disconnect</button>'
-          : '<button class="wm-item wm-connect" type="button">Connect wallet</button>');
+          : '<button class="wm-item wm-connect" type="button">Connect wallet (EIP-1193)</button>' +
+            '<button class="wm-item wm-privy" type="button">Connect with Privy (email/social)</button>');
       // Append the menu to the button and DO NOT touch its position.
       //
       // The button is already `position: absolute` (top-right corner, from
@@ -1021,13 +1022,42 @@
         }
       });
 
-      // Connect wallet — the bottom item when there is no session. Runs the
+      // Connect wallet (EIP-1193) — the bottom item when there is no session. Runs the
       // same connect-and-switch flow the button itself used to fire directly.
       walletMenu.querySelectorAll('.wm-connect').forEach((item) => {
         item.addEventListener('click', (e) => {
           e.stopPropagation();
           closeWalletMenu();
           doConnect();
+        });
+      });
+
+      // Connect with Privy (email/social -> embedded wallet).
+      // Returns an EIP-1193 provider that we pass to wallet.js connect().
+      walletMenu.querySelectorAll('.wm-privy').forEach((item) => {
+        item.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          closeWalletMenu();
+          btn.disabled = true;
+          try {
+            const r = await connectPrivy();
+            if (!r.ok) {
+              setPending(r.code === 'rejected' ? 'Privy login rejected.'
+                : r.code === 'not-configured' ? 'Privy not configured (missing App ID).'
+                : 'Privy connect failed: ' + r.reason);
+              render();
+              return;
+            }
+            // Privy returned a provider; pass it to wallet.js connect() to
+            // complete the chain check / switch flow and wire up listeners.
+            const walletResult = await connect({ provider: r.provider });
+            if (!walletResult.ok) {
+              setPending('Wallet connect failed: ' + walletResult.reason);
+            }
+            render();
+          } finally {
+            btn.disabled = false;
+          }
         });
       });
 
