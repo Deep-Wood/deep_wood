@@ -28,7 +28,8 @@
     "@privy-io/js-sdk-core": "^0.79.1",
     "@sentry/browser": "^11.2.0",
     "js-sha3": "^0.9.3",
-    "phaser": "^3.90.0"
+    "phaser": "^3.90.0",
+    "viem": "^2.57.12"
   },
   "devDependencies": {
     "puppeteer": "^23.11.1",
