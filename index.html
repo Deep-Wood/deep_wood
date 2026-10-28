@@ -966,7 +966,8 @@
       walletMenu.innerHTML =
         '<div class="wm-account">' + (s.account ? short(s.account) : 'No wallet connected') + '</div>' +
         (s.account && !s.rightChain
-          ? '<div class="wm-warn">Wallet on chain ' + s.chainId + ', game on ' + GAME_CHAIN_ID + '. Switch networks in Privy, then press Connect again.</div>'
+          ? '<div class="wm-warn">Wallet on chain ' + s.chainId + ', game on ' + GAME_CHAIN_ID + '.</div>' +
+            '<button class="wm-item wm-switch" type="button">Switch to Robinhood Testnet (' + GAME_CHAIN_ID + ')</button>'
           : '') +
         '<div class="wm-box">' +
           '<button class="wm-item" type="button" id="wm-leaderboard">Leaderboard</button>' +
@@ -1092,9 +1093,27 @@
           if (!r.ok) setPending('Disconnect failed: ' + (r.reason || 'unknown'));
           else if (r.revoked === false) setPending('Disconnected. The wallet may still remember this site -- clear it there too if you want a fresh prompt.');
           render();
-          // Also end the Privy email session (if any) so the next connect
-          // re-prompts instead of silently restoring the old wallet.
           disconnectPrivy();
+        });
+      });
+
+      // Switch to Robinhood Testnet (46630) — one visible button, no guessing
+      // where a Privy iframe prompt might be. Fires wallet_switchEthereumChain
+      // and reports success or the exact reason it failed.
+      walletMenu.querySelectorAll('.wm-switch').forEach((item) => {
+        item.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          closeWalletMenu();
+          btn.disabled = true;
+          const sw = await switchToGameChain();
+          btn.disabled = false;
+          if (sw.ok) {
+            setPending('Switched to Robinhood Testnet (' + GAME_CHAIN_ID + ').');
+            render();
+          } else {
+            setPending('Chain switch failed: ' + sw.reason);
+            render();
+          }
         });
       });
 
