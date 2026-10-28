@@ -35,18 +35,6 @@ function resolveAppId() {
 }
 
 /**
- * Safely read a user's embedded Ethereum wallet. The SDK helper
- * getUserEmbeddedEthereumWallet reads user.linked_accounts and calls .filter()
- * on it — but a freshly signed-up user has no linked_accounts at all, so it
- * throws "Cannot read properties of undefined (reading 'filter')". Guard
- * before calling.
- */
-function embeddedEthWallet(u) {
-  if (!u || !Array.isArray(u.linked_accounts)) return null;
-  return getUserEmbeddedEthereumWallet(u);
-}
-
-/**
  * Create + initialize the single Privy client. Idempotent; safe to await
  * from multiple call sites concurrently. Returns the client or null when
  * the app ID is missing / the backend is unreachable.
@@ -153,29 +141,36 @@ export async function loginPrivyWithCode(email, code) {
     } catch (iframeErr) {
       return { ok: false, code: 'iframe-error', reason: `Secure context failed: ${String(iframeErr?.message || iframeErr)}` };
     }
-    // The core SDK does not auto-create embedded wallets at login
-    // (no createOnLogin option): provision one on first sign-in. create()
-    // may throw embedded_wallet_already_exists on re-login — that's fine,
-    // just read the wallet off the current user.
+    // Find an embedded Ethereum wallet for this user. The SDK helper reads
+    // user.linked_accounts and calls .filter() on it — wrap in try/catch since
+    // linked_accounts may be undefined on a freshly signed-up user.
     let walletUser = user;
     let wallet;
     try {
-      wallet = embeddedEthWallet(user);
-    } catch (walletErr) {
-      return { ok: false, code: 'wallet-read-error', reason: `Wallet read failed: ${String(walletErr?.message || walletErr)}` };
+      wallet = getUserEmbeddedEthereumWallet(user);
+    } catch {
+      wallet = null;
     }
+
+    // No wallet yet: provision one on first sign-in. create() may throw
+    // embedded_wallet_already_exists on re-login — that's fine. After
+    // creating, refresh the user via client.user.get() so linked_accounts
+    // reflects the new wallet, then try reading it again.
     if (!wallet) {
       try {
-        const created = await client.embeddedWallet.create({});
-        // create() returns { address, user }, not just the user — pull the
-        // user object out so linked_accounts is readable.
-        walletUser = created?.user || user;
-        wallet = embeddedEthWallet(walletUser);
+        await client.embeddedWallet.create({});
       } catch (createErr) {
         const msg = String(createErr?.message || createErr);
         if (!msg.includes('already_exists')) throw createErr;
-        wallet = embeddedEthWallet(user);
-        walletUser = user;
+      }
+      try {
+        const { user: refreshed } = await client.user.get();
+        if (refreshed) walletUser = refreshed;
+      } catch {}
+      try {
+        wallet = getUserEmbeddedEthereumWallet(walletUser);
+      } catch {
+        wallet = null;
       }
     }
     if (!wallet) {
@@ -268,7 +263,13 @@ export async function restorePrivyProvider() {
     mountSecureContext(client);
     const { user } = await client.user.get();
     if (!user) return null;
-    const wallet = getUserEmbeddedEthereumWallet(user);
+    // linked_accounts may be undefined — guard the read.
+    let wallet;
+    try {
+      wallet = getUserEmbeddedEthereumWallet(user);
+    } catch {
+      wallet = null;
+    }
     if (!wallet) return null;
     const { entropyId, entropyIdVerifier } = getEntropyDetailsFromUser(user);
     const provider = await client.embeddedWallet.getEthereumProvider({
