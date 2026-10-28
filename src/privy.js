@@ -153,21 +153,46 @@ export async function loginPrivyWithCode(email, code) {
     if (!wallet) {
       return { ok: false, code: 'no-wallet', reason: 'Privy did not return an embedded wallet' };
     }
-    const { entropyId, entropyIdVerifier } = getEntropyDetailsFromUser(walletUser);
-    const provider = await client.embeddedWallet.getEthereumProvider({
-      wallet,
-      entropyId,
-      entropyIdVerifier,
-    });
+    let entropyId, entropyIdVerifier;
+    try {
+      const ent = getEntropyDetailsFromUser(walletUser);
+      if (!ent) {
+        return { ok: false, code: 'no-entropy', reason: 'Privy could not resolve wallet entropy' };
+      }
+      entropyId = ent.entropyId;
+      entropyIdVerifier = ent.entropyIdVerifier;
+    } catch (entErr) {
+      return { ok: false, code: 'entropy-error', reason: `Entropy resolution failed: ${String(entErr?.message || entErr)}` };
+    }
+    let provider;
+    try {
+      provider = await client.embeddedWallet.getEthereumProvider({
+        wallet,
+        entropyId,
+        entropyIdVerifier,
+      });
+    } catch (provErr) {
+      return { ok: false, code: 'provider-error', reason: `getEthereumProvider failed: ${String(provErr?.message || provErr)}` };
+    }
     if (!provider || typeof provider.request !== 'function') {
       return { ok: false, code: 'no-provider', reason: 'Privy did not return a valid EIP-1193 provider' };
     }
 
-    const accounts = await provider.request({ method: 'eth_accounts' });
+    let accounts;
+    try {
+      accounts = await provider.request({ method: 'eth_accounts' });
+    } catch (acctErr) {
+      return { ok: false, code: 'accounts-error', reason: `eth_accounts failed: ${String(acctErr?.message || acctErr)}` };
+    }
     if (!Array.isArray(accounts) || accounts.length === 0) {
       return { ok: false, code: 'no-accounts', reason: 'Embedded wallet returned no accounts' };
     }
-    const chainIdHex = await provider.request({ method: 'eth_chainId' });
+    let chainIdHex;
+    try {
+      chainIdHex = await provider.request({ method: 'eth_chainId' });
+    } catch (chainErr) {
+      return { ok: false, code: 'chain-error', reason: `eth_chainId failed: ${String(chainErr?.message || chainErr)}` };
+    }
     return {
       ok: true,
       provider,
