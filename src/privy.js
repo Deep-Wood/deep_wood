@@ -167,7 +167,9 @@ export async function loginPrivyWithCode(email, code) {
     if (!wallet) {
       try {
         const created = await client.embeddedWallet.create({});
-        walletUser = created || user;
+        // create() returns { address, user }, not just the user — pull the
+        // user object out so linked_accounts is readable.
+        walletUser = created?.user || user;
         wallet = embeddedEthWallet(walletUser);
       } catch (createErr) {
         const msg = String(createErr?.message || createErr);
