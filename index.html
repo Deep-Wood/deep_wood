@@ -270,6 +270,18 @@
       </div>
     </div>
 
+    <div id="switch-chain-card" class="camp-card hidden" role="dialog" aria-modal="true" aria-label="Switch network to Robinhood Testnet">
+      <div class="redeem-head">
+        <span class="redeem-title">Switch Network</span>
+        <button type="button" class="reedem-x" id="switch-chain-close" aria-label="Close">&#215;</button>
+      </div>
+      <div class="redeem-body">
+        <div class="redeem-label">Your wallet is on chain <b id="switch-chain-current"></b>. The game needs chain <b id="switch-chain-target"></b> (Robinhood Testnet).</div>
+        <button type="button" class="redeem-btn" id="switch-chain-btn">Switch to Robinhood Testnet</button>
+        <div id="switch-chain-err" class="privy-err" role="alert"></div>
+      </div>
+    </div>
+
     <div id="camp-card" class="camp-card hidden" role="dialog" aria-modal="true" aria-label="Camp: streak, daily quests, badges">
       <div class="redeem-head">
         <span class="redeem-title">Camp</span>
@@ -967,8 +979,10 @@
         '<div class="wm-account">' + (s.account ? short(s.account) : 'No wallet connected') + '</div>' +
         (s.account && !s.rightChain
           ? '<div class="wm-warn">Wallet on chain ' + s.chainId + ', game on ' + GAME_CHAIN_ID + '.</div>' +
-            '<button class="wm-item wm-switch" type="button">Switch to Robinhood Testnet (' + GAME_CHAIN_ID + ')</button>'
-          : '') +
+            '<button class="wm-item wm-copy" type="button">Copy address</button>'
+          : s.connected
+            ? '<button class="wm-item wm-copy" type="button">Copy address</button>'
+            : '') +
         '<div class="wm-box">' +
           '<button class="wm-item" type="button" id="wm-leaderboard">Leaderboard</button>' +
           '<button class="wm-item" type="button" id="wm-camp">Camp</button>' +
@@ -1097,24 +1111,66 @@
         });
       });
 
-      // Switch to Robinhood Testnet (46630) — one visible button, no guessing
-      // where a Privy iframe prompt might be. Fires wallet_switchEthereumChain
-      // and reports success or the exact reason it failed.
-      walletMenu.querySelectorAll('.wm-switch').forEach((item) => {
+      // Copy address to clipboard — available whenever there's an account.
+      walletMenu.querySelectorAll('.wm-copy').forEach((item) => {
         item.addEventListener('click', async (e) => {
           e.stopPropagation();
           closeWalletMenu();
-          btn.disabled = true;
-          const sw = await switchToGameChain();
-          btn.disabled = false;
-          if (sw.ok) {
-            setPending('Switched to Robinhood Testnet (' + GAME_CHAIN_ID + ').');
-            render();
-          } else {
-            setPending('Chain switch failed: ' + sw.reason);
-            render();
+          const addr = s.account;
+          try {
+            await navigator.clipboard.writeText(addr);
+            setPending('Address copied: ' + addr);
+          } catch {
+            setPending('Copy failed — tap and hold the address to copy manually.');
           }
+          render();
         });
+      });
+
+      // ---- Switch network popup (screen modal, replaces inline button) ----
+      const switchCard = document.getElementById('switch-chain-card');
+      const switchClose = document.getElementById('switch-chain-close');
+      const switchBtn = document.getElementById('switch-chain-btn');
+      const switchCurrent = document.getElementById('switch-chain-current');
+      const switchTarget = document.getElementById('switch-chain-target');
+      const switchErr = document.getElementById('switch-chain-err');
+
+      function openSwitchChainDialog() {
+        const st = getState();
+        if (!st.account || st.rightChain) return;
+        switchCurrent.textContent = st.chainId;
+        switchTarget.textContent = GAME_CHAIN_ID;
+        switchErr.textContent = '';
+        switchCard.classList.remove('hidden');
+      }
+
+      function closeSwitchChainDialog() {
+        switchCard.classList.add('hidden');
+      }
+
+      // Open the popup when the wallet is on the wrong chain (after menu renders).
+      if (s.account && !s.rightChain) {
+        setTimeout(openSwitchChainDialog, 0);
+      }
+
+      switchClose.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeSwitchChainDialog();
+      });
+
+      switchBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        closeSwitchChainDialog();
+        btn.disabled = true;
+        const sw = await switchToGameChain();
+        btn.disabled = false;
+        if (sw.ok) {
+          setPending('Switched to Robinhood Testnet (' + GAME_CHAIN_ID + ').');
+          render();
+        } else {
+          switchErr.textContent = 'Switch failed: ' + sw.reason;
+          openSwitchChainDialog();
+        }
       });
 
       // ---- Privy email-login dialog --------------------------------------
@@ -1147,7 +1203,10 @@
 
       privyCard.querySelector('.reedem-x').addEventListener('click', closePrivyDialog);
       document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && !privyCard.classList.contains('hidden')) closePrivyDialog();
+        if (e.key === 'Escape') {
+          if (!privyCard.classList.contains('hidden')) closePrivyDialog();
+          else if (!switchCard.classList.contains('hidden')) closeSwitchChainDialog();
+        }
       });
       privyEmail.addEventListener('keydown', (e) => { if (e.key === 'Enter') privySend.click(); });
       privyCode.addEventListener('keydown', (e) => { if (e.key === 'Enter') privyVerify.click(); });
