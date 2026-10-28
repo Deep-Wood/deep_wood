@@ -35,6 +35,18 @@ function resolveAppId() {
 }
 
 /**
+ * Safely read a user's embedded Ethereum wallet. The SDK helper
+ * getUserEmbeddedEthereumWallet reads user.linked_accounts and calls .filter()
+ * on it — but a freshly signed-up user has no linked_accounts at all, so it
+ * throws "Cannot read properties of undefined (reading 'filter')". Guard
+ * before calling.
+ */
+function embeddedEthWallet(u) {
+  if (!u || !Array.isArray(u.linked_accounts)) return null;
+  return getUserEmbeddedEthereumWallet(u);
+}
+
+/**
  * Create + initialize the single Privy client. Idempotent; safe to await
  * from multiple call sites concurrently. Returns the client or null when
  * the app ID is missing / the backend is unreachable.
@@ -148,7 +160,7 @@ export async function loginPrivyWithCode(email, code) {
     let walletUser = user;
     let wallet;
     try {
-      wallet = getUserEmbeddedEthereumWallet(user);
+      wallet = embeddedEthWallet(user);
     } catch (walletErr) {
       return { ok: false, code: 'wallet-read-error', reason: `Wallet read failed: ${String(walletErr?.message || walletErr)}` };
     }
@@ -156,11 +168,11 @@ export async function loginPrivyWithCode(email, code) {
       try {
         const created = await client.embeddedWallet.create({});
         walletUser = created || user;
-        wallet = getUserEmbeddedEthereumWallet(walletUser);
+        wallet = embeddedEthWallet(walletUser);
       } catch (createErr) {
         const msg = String(createErr?.message || createErr);
         if (!msg.includes('already_exists')) throw createErr;
-        wallet = getUserEmbeddedEthereumWallet(user);
+        wallet = embeddedEthWallet(user);
         walletUser = user;
       }
     }
