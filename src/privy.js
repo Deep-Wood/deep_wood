@@ -141,13 +141,23 @@ export async function loginPrivyWithCode(email, code) {
     } catch (iframeErr) {
       return { ok: false, code: 'iframe-error', reason: `Secure context failed: ${String(iframeErr?.message || iframeErr)}` };
     }
+    // After loginWithCode, refresh the user via client.user.get() so we
+    // have the full profile including linked_accounts. loginWithCode's
+    // return value may not include it.
+    let walletUser;
+    try {
+      const { user: refreshed } = await client.user.get();
+      walletUser = refreshed || user;
+    } catch {
+      walletUser = user;
+    }
+
     // Find an embedded Ethereum wallet for this user. The SDK helper reads
     // user.linked_accounts and calls .filter() on it — wrap in try/catch since
     // linked_accounts may be undefined on a freshly signed-up user.
-    let walletUser = user;
     let wallet;
     try {
-      wallet = getUserEmbeddedEthereumWallet(user);
+      wallet = getUserEmbeddedEthereumWallet(walletUser);
     } catch {
       wallet = null;
     }
