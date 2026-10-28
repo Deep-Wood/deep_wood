@@ -2506,6 +2506,17 @@ export class ForestScene extends Phaser.Scene {
     // The contract refunds excess TOKENS back to the player.
     const ethValue = 100_000_000_000_000_000n; // 0.1 ETH
 
+    // Guard: don't send a tx the wallet can't cover. Privy may not even
+    // surface a signing popup for an underfunded transaction.
+    const haveEth = this.chainBalanceWei ?? 0n;
+    if (haveEth < ethValue) {
+      this.beltMsg(
+        `Not enough ETH (need 0.1, have ${(Number(haveEth) / 1e18).toFixed(4)}). Claim testnet ETH at the faucet link in the buy menu.`,
+        'bad',
+      );
+      return;
+    }
+
     this.beltMsg('Confirm in wallet…', 'busy');
     this.setTxPending('belt-buy', 'buying');
     let r;
