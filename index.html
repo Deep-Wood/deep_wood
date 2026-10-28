@@ -964,7 +964,10 @@
       walletMenu = document.createElement('div');
       walletMenu.className = 'wallet-menu';
       walletMenu.innerHTML =
-        '<div class="wm-account">' + (s.connected ? short(s.account) : 'No wallet connected') + '</div>' +
+        '<div class="wm-account">' + (s.account ? short(s.account) : 'No wallet connected') + '</div>' +
+        (s.account && !s.rightChain
+          ? '<div class="wm-warn">Wallet on chain ' + s.chainId + ', game on ' + GAME_CHAIN_ID + '. Switch networks in Privy, then press Connect again.</div>'
+          : '') +
         '<div class="wm-box">' +
           '<button class="wm-item" type="button" id="wm-leaderboard">Leaderboard</button>' +
           '<button class="wm-item" type="button" id="wm-camp">Camp</button>' +
