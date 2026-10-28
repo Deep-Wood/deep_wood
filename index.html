@@ -1148,6 +1148,10 @@
         switchCard.classList.add('hidden');
       }
 
+      // Expose so ForestScene can open it from the buy flow when the wallet
+      // is on the wrong chain.
+      window.openSwitchChainDialog = openSwitchChainDialog;
+
       // Open the popup when the wallet is on the wrong chain (after menu renders).
       if (s.account && !s.rightChain) {
         setTimeout(openSwitchChainDialog, 0);

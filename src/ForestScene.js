@@ -2304,6 +2304,15 @@ export class ForestScene extends Phaser.Scene {
 
     // OFFLINE: local simulation only
     if (!onchainActive()) {
+      const { getState } = await import('./wallet.js');
+      const st = getState();
+      if (st.account && !st.rightChain) {
+        this.beltMsg('Switch to Robinhood Testnet (46630) first', 'bad');
+        if (typeof window.openSwitchChainDialog === 'function') {
+          window.openSwitchChainDialog();
+        }
+        return;
+      }
       this.beltMsg('Token buy requires wallet connection', 'bad');
       return;
     }
@@ -2440,6 +2449,14 @@ export class ForestScene extends Phaser.Scene {
 
     // OFFLINE: the local economy is authoritative and nothing leaves the page.
     if (!onchainActive()) {
+      const st = getState();
+      if (st.account && !st.rightChain) {
+        this.beltMsg('Switch to Robinhood Testnet (46630) first', 'bad');
+        if (typeof window.openSwitchChainDialog === 'function') {
+          window.openSwitchChainDialog();
+        }
+        return;
+      }
       const res = buyTool(p, tier, this.simBalance);
       if (!res.ok) { this.beltMsg(res.reason, 'bad'); return; }
 
