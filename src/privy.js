@@ -124,22 +124,31 @@ export async function loginPrivyWithCode(email, code) {
     return { ok: false, code: 'not-configured', reason: 'Privy not configured (missing App ID)' };
   }
   try {
-    const session = await client.auth.email.loginWithCode(email, code);
-    const user = session?.user || null;
+    // loginWithCode returns the AuthenticatedUser directly (SDK v0.79.1),
+    // NOT wrapped in { session: { user } }.
+    const user = await client.auth.email.loginWithCode(email, code);
     if (!user) {
       return { ok: false, code: 'login-failed', reason: 'Privy returned no user' };
     }
 
     mountSecureContext(client);
-    // The core SDK does not auto-create wallets at login (no createOnLogin
-    // option): provision one on first sign-in, then read it back off the
-    // user object that create() returns.
-    let wallet = getUserEmbeddedEthereumWallet(user);
+    // The core SDK does not auto-create embedded wallets at login
+    // (no createOnLogin option): provision one on first sign-in. create()
+    // may throw embedded_wallet_already_exists on re-login — that's fine,
+    // just read the wallet off the current user.
     let walletUser = user;
+    let wallet = getUserEmbeddedEthereumWallet(user);
     if (!wallet) {
-      const created = await client.embeddedWallet.create({});
-      walletUser = created?.user || user;
-      wallet = getUserEmbeddedEthereumWallet(walletUser);
+      try {
+        const created = await client.embeddedWallet.create({});
+        walletUser = created || user;
+        wallet = getUserEmbeddedEthereumWallet(walletUser);
+      } catch (createErr) {
+        const msg = String(createErr?.message || createErr);
+        if (!msg.includes('already_exists')) throw createErr;
+        wallet = getUserEmbeddedEthereumWallet(user);
+        walletUser = user;
+      }
     }
     if (!wallet) {
       return { ok: false, code: 'no-wallet', reason: 'Privy did not return an embedded wallet' };
