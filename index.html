@@ -614,7 +614,9 @@
       + '<span class="gs-label">Current<br>Skill:</span>'
       + '<span class="gc" id="gs-skill-name">--</span></div>'
       + `</div>`;
-      renderHunterStrip();
+      // Deferred — module scripts set window.TIER_NAME / window.SKILL_NAME after
+      // this plain-script block executes. Defers the first render until then.
+      setTimeout(renderHunterStrip, 0);
     }
     // Exposed so the belt's buy/repair/sell handlers can repaint the satchel
     // after they change the balance. Without this the satchel only refreshed on
