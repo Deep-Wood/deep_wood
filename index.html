@@ -1154,6 +1154,19 @@
           // Privy returned a provider; pass it to wallet.js connect() to
           // complete the chain check / switch flow and wire up listeners.
           const walletResult = await connect({ provider: r.provider });
+          if (!walletResult.ok && walletResult.code === 'wrong-chain') {
+            // Wallet is real but on the wrong network -- switch to the game
+            // chain, same as the regular wallet connect flow.
+            const sw = await switchToGameChain();
+            if (sw.ok) {
+              render();
+              return;
+            }
+            setPending('Connected, but could not switch to chain ' + GAME_CHAIN_ID
+              + ' (' + sw.reason + '). Switch it in your wallet, then press again.');
+            render();
+            return;
+          }
           if (!walletResult.ok) {
             setPending('Wallet connect failed: ' + walletResult.reason);
           }
