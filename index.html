@@ -636,7 +636,9 @@
         setTimeout(renderHunterStrip, 200);
         return;
       }
-      // TIER_NAME, SKILL_NAME, chosenSkin imported statically at module top
+      const TIER_NAME = window.TIER_NAME;
+      const SKILL_NAME = window.SKILL_NAME;
+      const chosenSkin = window.chosenSkin;
       const skillName = document.getElementById('gs-skill-name');
       const toolIc = document.getElementById('gs-tool');
       const skillIc = document.getElementById('gs-skill');
@@ -804,6 +806,12 @@
     import { TIER_NAME, SKILL_NAME } from '/src/economy.js';
     import { chosenSkin } from '/src/engagement.js';
     import { walletBalanceWeiOnchain, onchainActive } from '/src/onchain.js';
+    // Expose to the plain-script block (renderHunterStrip) that predates modules.
+    window.TIER_NAME = TIER_NAME;
+    window.SKILL_NAME = SKILL_NAME;
+    window.chosenSkin = chosenSkin;
+    window.walletBalanceWeiOnchain = walletBalanceWeiOnchain;
+    window.onchainActive = onchainActive;
 
     const btn = document.getElementById('connect');
     const foot = document.getElementById('hint');
