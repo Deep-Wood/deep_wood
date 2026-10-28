@@ -2500,18 +2500,23 @@ export class ForestScene extends Phaser.Scene {
 
     // toolCost() returns DEEPWOOD wei (e.g. 200,000 DEEPWOOD = 2e22).
     // That is NOT the ETH amount to send. The contract swaps msg.value ETH
-    // for DEEPWOOD tokens and checks received >= cost. We must send a
-    // reasonable ETH amount, not the DEEPWOOD cost directly.
-    // Testnet pool is thin — 0.1 ETH should be plenty for a small tool purchase.
-    // The contract refunds excess TOKENS back to the player.
-    const ethValue = 100_000_000_000_000_000n; // 0.1 ETH
+    // for DEEPWOOD via the Universal Router, then buys the tool with it.
+    // We don't query the pool rate (no poolManager/poolId configured), so
+    // we send a small fixed ETH amount and set minTokens = cost(tier) as
+    // slippage protection: if the swap produces fewer DEEPWOOD than the tool
+    // costs, the tx reverts and no funds move.
+    //
+    // 0.005 ETH (5e15 wei) is more than enough for any tool at any reasonable
+    // ETH→DEEPWOOD rate on this thin testnet pool. Do not hardcode 0.1 ETH —
+    // a player with 0.01 ETH cannot cover it, and Privy won't surface a
+    // signing popup for an underfunded transaction.
+    const ethValue = 5_000_000_000_000_000n; // 0.005 ETH
 
-    // Guard: don't send a tx the wallet can't cover. Privy may not even
-    // surface a signing popup for an underfunded transaction.
+    // Guard: don't send a tx the wallet can't cover.
     const haveEth = this.chainBalanceWei ?? 0n;
     if (haveEth < ethValue) {
       this.beltMsg(
-        `Not enough ETH (need 0.1, have ${(Number(haveEth) / 1e18).toFixed(4)}). Claim testnet ETH at the faucet link in the buy menu.`,
+        `Not enough ETH (need 0.005, have ${(Number(haveEth) / 1e18).toFixed(4)}). Claim testnet ETH at the faucet link in the buy menu, or pay with $DEEPWOOD tokens instead.`,
         'bad',
       );
       return;
@@ -2521,7 +2526,7 @@ export class ForestScene extends Phaser.Scene {
     this.setTxPending('belt-buy', 'buying');
     let r;
     try {
-      const txData = buyToolWithEthTx(tier, '0x', 0n);
+      const txData = buyToolWithEthTx(tier, '0x', cost);
       r = await sendTo(this.gameAddress, txData, { valueWei: ethValue });
     } finally {
       this.clearTxPending();
