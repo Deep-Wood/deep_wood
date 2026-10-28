@@ -131,11 +131,20 @@ export async function loginPrivyWithCode(email, code) {
     }
 
     mountSecureContext(client);
-    const wallet = getUserEmbeddedEthereumWallet(user);
+    // The core SDK does not auto-create wallets at login (no createOnLogin
+    // option): provision one on first sign-in, then read it back off the
+    // user object that create() returns.
+    let wallet = getUserEmbeddedEthereumWallet(user);
+    let walletUser = user;
     if (!wallet) {
-      return { ok: false, code: 'no-wallet', reason: 'No embedded wallet on this account' };
+      const created = await client.embeddedWallet.create({});
+      walletUser = created?.user || user;
+      wallet = getUserEmbeddedEthereumWallet(walletUser);
     }
-    const { entropyId, entropyIdVerifier } = getEntropyDetailsFromUser(user);
+    if (!wallet) {
+      return { ok: false, code: 'no-wallet', reason: 'Privy did not return an embedded wallet' };
+    }
+    const { entropyId, entropyIdVerifier } = getEntropyDetailsFromUser(walletUser);
     const provider = await client.embeddedWallet.getEthereumProvider({
       wallet,
       entropyId,
