@@ -636,8 +636,7 @@
         setTimeout(renderHunterStrip, 200);
         return;
       }
-      const { TIER_NAME, SKILL_NAME } = await import('/src/economy.js');
-      const { chosenSkin } = await import('/src/engagement.js');
+      // TIER_NAME, SKILL_NAME, chosenSkin imported statically at module top
       const skillName = document.getElementById('gs-skill-name');
       const toolIc = document.getElementById('gs-tool');
       const skillIc = document.getElementById('gs-skill');
@@ -802,6 +801,9 @@
     // user. See src/wallet.js.
     import { connect, disconnect, switchToGameChain, getState, onWallet, GAME_CHAIN_ID } from '/src/wallet.js';
     import { sendPrivyEmailCode, loginPrivyWithCode, disconnectPrivy, restorePrivyProvider } from '/src/privy.js';
+    import { TIER_NAME, SKILL_NAME } from '/src/economy.js';
+    import { chosenSkin } from '/src/engagement.js';
+    import { walletBalanceWeiOnchain, onchainActive } from '/src/onchain.js';
 
     const btn = document.getElementById('connect');
     const foot = document.getElementById('hint');
@@ -1229,40 +1231,35 @@
     // offline preview, and that fiction must never size a real transaction.
     // Refreshed here and on every provider event, so an account switch or a
     // chain change cannot leave a stale figure on screen.
-    import('/src/onchain.js').then(({ walletBalanceWeiOnchain, onchainActive }) => {
-      const sync = async () => {
-        if (!onchainActive()) return;
-        // Adopt the chain's view of the held TOOL as well as the balance. The
-        // belt renders from a local mirror that starts empty, so without this a
-        // player who already owns a tool is told to buy it again -- and that
-        // second purchase reverts TierLocked after they have signed it.
-        await window.__scene?.refreshChainTool?.();
-        // V9 -> V10: offer the one-shot carry-over when the connected wallet
-        // still has unmigrated state on the legacy contract.
-        window.__scene?.checkV9Migration?.();
-        const b = await walletBalanceWeiOnchain();
-        window.__scene?.setChainBalance?.(b);
-        render();
-      };
-      window.__syncBalance = sync;
-      sync();
-      onWallet(sync);
-      // The immediate sync() above runs BEFORE the silent reconnect resolves,
-      // so onchainActive() is false and it returns without doing anything. If
-      // the provider never emits an event for that transition, the page would
-      // sit connected with an empty mirror again -- so ask the wallet directly
-      // once the app's own reconnect has had a chance to land.
-      import('/src/wallet.js').then(({ getState }) => {
-        const waitForConnect = (n) => {
-          if (getState().connected) return sync();
-          if (n <= 0) return;
-          setTimeout(() => waitForConnect(n - 1), 400);
-        };
-        setTimeout(() => waitForConnect(25), 600);
-      });
-    }).catch(() => {
-      // No chain module in this build: the offline preview keeps working.
-    });
+    // walletBalanceWeiOnchain, onchainActive imported statically at module top
+    const sync = async () => {
+      if (!onchainActive()) return;
+      // Adopt the chain's view of the held TOOL as well as the balance. The
+      // belt renders from a local mirror that starts empty, so without this a
+      // player who already owns a tool is told to buy it again -- and that
+      // second purchase reverts TierLocked after they have signed it.
+      await window.__scene?.refreshChainTool?.();
+      // V9 -> V10: offer the one-shot carry-over when the connected wallet
+      // still has unmigrated state on the legacy contract.
+      window.__scene?.checkV9Migration?.();
+      const b = await walletBalanceWeiOnchain();
+      window.__scene?.setChainBalance?.(b);
+      render();
+    };
+    window.__syncBalance = sync;
+    sync();
+    onWallet(sync);
+    // The immediate sync() above runs BEFORE the silent reconnect resolves,
+    // so onchainActive() is false and it returns without doing anything. If
+    // the provider never emits an event for that transition, the page would
+    // sit connected with an empty mirror again -- so ask the wallet directly
+    // once the app's own reconnect has had a chance to land.
+    const waitForConnect = (n) => {
+      if (getState().connected) return sync();
+      if (n <= 0) return;
+      setTimeout(() => waitForConnect(n - 1), 400);
+    };
+    setTimeout(() => waitForConnect(25), 600);
 
     // UNSAVED-QUEUE GUARD: since night digs, a reload or tab close is SAFE --
     // the queue is mirrored to localStorage on every dig and re-validated
