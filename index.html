@@ -1200,11 +1200,16 @@
     // re-prompting for email / OTP. Same silent-swallow stance as the
     // window.ethereum reconnect above: a first-time or logged-out visitor is
     // not an error, and the connect button still works as the way to sign up.
-    Promise.resolve()
-      .then(restorePrivyProvider)
-      .then((r) => r ? connect({ provider: r.provider }) : null)
-      .then((r) => { if (r && r.ok) render(); })
-      .catch(() => {});
+    //
+    // Deferred with setTimeout so Privy SDK initialization (client.init +
+    // secure-context iframe) doesn't compete with the initial page load.
+    setTimeout(() => {
+      Promise.resolve()
+        .then(restorePrivyProvider)
+        .then((r) => r ? connect({ provider: r.provider }) : null)
+        .then((r) => { if (r && r.ok) render(); })
+        .catch(() => {});
+    }, 0);
 
     // A connected wallet must show its REAL balance, because a purchase is
     // sized against it. The scene starts with a simulated balance for the
