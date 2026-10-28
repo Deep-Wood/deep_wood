@@ -801,7 +801,7 @@
     // the client -- every write is handed to the wallet, which prompts the
     // user. See src/wallet.js.
     import { connect, disconnect, switchToGameChain, getState, onWallet, GAME_CHAIN_ID } from '/src/wallet.js';
-    import { sendPrivyEmailCode, loginPrivyWithCode, disconnectPrivy } from '/src/privy.js';
+    import { sendPrivyEmailCode, loginPrivyWithCode, disconnectPrivy, restorePrivyProvider } from '/src/privy.js';
 
     const btn = document.getElementById('connect');
     const foot = document.getElementById('hint');
@@ -1193,6 +1193,16 @@
     // not cause.
     Promise.resolve()
       .then(() => connect({ silent: true }))
+      .then((r) => { if (r && r.ok) render(); })
+      .catch(() => {});
+
+    // PRIVY BOOT RESTORE — re-attach a returning embedded-wallet user without
+    // re-prompting for email / OTP. Same silent-swallow stance as the
+    // window.ethereum reconnect above: a first-time or logged-out visitor is
+    // not an error, and the connect button still works as the way to sign up.
+    Promise.resolve()
+      .then(restorePrivyProvider)
+      .then((r) => r ? connect({ provider: r.provider }) : null)
       .then((r) => { if (r && r.ok) render(); })
       .catch(() => {});
 

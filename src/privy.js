@@ -194,9 +194,39 @@ export async function getPrivySession() {
 }
 
 /**
+ * Boot-restore for a returning Privy user: if a session is still stored and
+ * an embedded wallet exists for that user, return an EIP-1193 provider so
+ * the connection can be re-attached without re-prompting for email/OTP.
+ * Swallows all errors — a first-time or logged-out visitor is not an error.
+ */
+export async function restorePrivyProvider() {
+  const client = await initPrivy();
+  if (!client) return null;
+  try {
+    mountSecureContext(client);
+    const { user } = await client.user.get();
+    if (!user) return null;
+    const wallet = getUserEmbeddedEthereumWallet(user);
+    if (!wallet) return null;
+    const { entropyId, entropyIdVerifier } = getEntropyDetailsFromUser(user);
+    const provider = await client.embeddedWallet.getEthereumProvider({
+      wallet,
+      entropyId,
+      entropyIdVerifier,
+    });
+    if (!provider || typeof provider.request !== 'function') return null;
+    const accounts = await provider.request({ method: 'eth_accounts' });
+    if (!Array.isArray(accounts) || accounts.length === 0) return null;
+    return { provider, account: accounts[0], email: user.email?.address || null };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * End the Privy session (called from the wallet-menu Disconnect item).
  * Fire-and-forget by design: wallet.js owns the on-chain disconnect; this
- * only clears the Privy auth session so the next connect re-prompts.
+ * only clears the Privy auth cookie/session so the next connect re-prompts.
  */
 export async function disconnectPrivy() {
   if (!privy) return { ok: true, note: 'no privy session' };
