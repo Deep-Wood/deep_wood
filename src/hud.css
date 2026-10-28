@@ -1933,6 +1933,14 @@ button.chip { position: relative; }
   font-family: var(--mono); color: var(--ink);
 }
 .camp-card.hidden { display: none; }
+
+/* Privy email dialog: same panel language as the camp card. */
+#privy-step2.hidden { display: none; }
+.privy-err { margin-top: 9px; font-size: 10px; color: #ff9d7a; min-height: 14px;
+  line-height: 1.5; }
+.privy-back { margin-top: 12px; background: none; border: none; color: var(--dim);
+  font-family: var(--mono); font-size: 10px; cursor: pointer; padding: 0; }
+.privy-back:hover { color: var(--ink); }
 .camp-card .redeem-body { display: block; }
 
 .camp-utc, .camp-badge-count { float: right; color: var(--dim); font-weight: 400;

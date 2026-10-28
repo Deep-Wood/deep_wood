@@ -1,198 +1,202 @@
+// DeepWood — Privy embedded wallet (email OTP) connection.
+//
+// Built on @privy-io/js-sdk-core, the low-level vanilla SDK documented at
+// https://docs.privy.io/recipes/core-js. There is NO built-in login modal:
+// the game renders its own email dialog (see index.html) and drives this
+// module. Key material lives in a hidden secure-context iframe that we
+// mount and wire up below.
+//
+// Env: VITE_PRIVY_APP_ID (required — public client ID, ships in the bundle
+// by design). VITE_PRIVY_CLIENT_ID is optional extra config.
+//
+// Result shape matches wallet.js: { ok: true, ... } / { ok: false, code, reason }.
+
+import Privy, {
+  LocalStorage,
+  getUserEmbeddedEthereumWallet,
+  getEntropyDetailsFromUser,
+} from '@privy-io/js-sdk-core';
+
+let privy = null;        // single client instance (SDK requirement)
+let initPromise = null;   // in-flight initialize()
+let secureIframe = null;  // hidden secure-context iframe
+let messageListener = null;
+
+function resolveAppId() {
+  // Vite injects import.meta.env at build time; VITE_PRIVY_APP_ID is baked
+  // into the bundle from .env.production / the build environment.
+  if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_PRIVY_APP_ID) {
+    return import.meta.env.VITE_PRIVY_APP_ID;
+  }
+  if (typeof process !== 'undefined' && process.env?.VITE_PRIVY_APP_ID) {
+    return process.env.VITE_PRIVY_APP_ID; // Node test fallback
+  }
+  return null;
+}
+
 /**
- * Privy embedded wallet integration for DeepWood.
- *
- * This module initializes Privy and provides a `connectPrivy()` function that
- * returns an EIP-1193 provider. That provider is then passed to wallet.js's
- * `connect({ provider })` so the rest of the flow (chain switching, signing,
- * state management) remains exactly the same.
- *
- * NO PRIVATE KEYS. The embedded wallet lives inside Privy's iframe; every
- * transaction is signed by the user in the Privy UI. This module never sees
- * key material.
- *
- * Env: VITE_PRIVY_APP_ID (required for production; dev can use a local default).
+ * Create + initialize the single Privy client. Idempotent; safe to await
+ * from multiple call sites concurrently. Returns the client or null when
+ * the app ID is missing / the backend is unreachable.
  */
+async function initPrivy() {
+  if (privy) return privy;
+  if (initPromise) return initPromise;
 
-import PrivyClient from '@privy-io/js-sdk-core';
-import { config } from './config.js';
-
-let privyClient = null;
-let isInitialized = false;
-
-/**
- * Initialize the Privy client. Idempotent; safe to call multiple times.
- * Returns the client instance or null if initialization failed.
- */
-export async function initPrivy() {
-  if (isInitialized && privyClient) return privyClient;
-
-  const appId = (() => {
-    // Vite injects import.meta.env at build time
-    if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_PRIVY_APP_ID) {
-      return import.meta.env.VITE_PRIVY_APP_ID;
-    }
-    // Node test fallback
-    if (typeof process !== 'undefined' && process.env?.VITE_PRIVY_APP_ID) {
-      return process.env.VITE_PRIVY_APP_ID;
-    }
-    return null;
-  })();
-
+  const appId = resolveAppId();
   if (!appId) {
-    console.warn('[Privy] VITE_PRIVY_APP_ID not set — Privy login will not work');
+    console.warn('[Privy] VITE_PRIVY_APP_ID not set — email login will not work');
     return null;
   }
 
-  try {
-    privyClient = new PrivyClient(appId, {
-      // Don't auto-connect; we want explicit user action
-      loginMethods: ['email', 'wallet'],
-      appearance: {
-        theme: 'dark',
-        accentColor: '#4a7c59', // DeepWood green
-        logo: '/art/deepwood-emblem-round.png',
-        showWalletLoginFirst: false, // Show email/social first for embedded wallet
-      },
-      embeddedWallets: {
-        createOnLogin: 'users-without-wallets', // Create embedded wallet for email/social users
-        requireUserPasswordOnCreate: false, // Optional: add password protection
-      },
-      // Chain configuration for the embedded wallet
-      supportedChains: [
-        {
-          id: config.chainId,
-          name: 'Robinhood Chain Testnet',
-          nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-          rpcUrls: [config.rpcUrl],
-          blockExplorerUrls: ['https://explorer.testnet.chain.robinhood.com'],
-        },
-      ],
-      defaultChain: config.chainId,
-    });
-
-    // Wait for Privy to be ready
-    await privyClient.ready();
-    isInitialized = true;
-    console.log('[Privy] Initialized with app ID:', appId);
-    return privyClient;
-  } catch (err) {
+  initPromise = (async () => {
+    const config = { appId, storage: new LocalStorage() };
+    if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_PRIVY_CLIENT_ID) {
+      config.clientId = import.meta.env.VITE_PRIVY_CLIENT_ID;
+    }
+    const client = new Privy(config);
+    // Establishes the backend connection and restores any stored session.
+    await client.initialize();
+    privy = client;
+    return client;
+  })().catch((err) => {
     console.error('[Privy] Initialization failed:', err);
-    privyClient = null;
-    isInitialized = false;
+    initPromise = null; // allow retry on a later click
     return null;
-  }
+  });
+  return initPromise;
 }
 
 /**
- * Get the Privy client, initializing if needed.
+ * Mount the secure-context iframe that holds embedded-wallet key material,
+ * and wire bidirectional message passing (per the core-js recipe).
  */
-export async function getPrivyClient() {
-  if (!isInitialized) await initPrivy();
-  return privyClient;
+function mountSecureContext(client) {
+  if (secureIframe) return;
+  secureIframe = document.createElement('iframe');
+  secureIframe.src = client.embeddedWallet.getURL();
+  secureIframe.style.display = 'none';
+  secureIframe.setAttribute('aria-hidden', 'true');
+  secureIframe.setAttribute('tabindex', '-1');
+  secureIframe.title = 'Privy secure context';
+  document.body.appendChild(secureIframe);
+
+  // Client -> iframe.
+  client.setMessagePoster(secureIframe.contentWindow);
+  // Iframe -> client.
+  messageListener = (e) => {
+    if (e.source !== secureIframe.contentWindow) return;
+    let data = e.data;
+    if (typeof data === 'string') {
+      try { data = JSON.parse(data); } catch { return; }
+    }
+    client.embeddedWallet.onMessage(data);
+  };
+  window.addEventListener('message', messageListener);
 }
 
 /**
- * Connect via Privy (email/social login -> embedded wallet).
- *
- * Returns an EIP-1193 provider that can be passed to wallet.js connect().
- * The result format matches wallet.js connect() for consistency:
- *   { ok: true, provider, account, chainId } 
- *   { ok: false, code, reason }
+ * Step 1 of login: send the 6-digit code to an email address.
+ * The game's dialog collects the address; this fires the Privy API call.
  */
-export async function connectPrivy() {
-  const client = await getPrivyClient();
+export async function sendPrivyEmailCode(email) {
+  const client = await initPrivy();
   if (!client) {
-    return {
-      ok: false,
-      code: 'not-configured',
-      reason: 'Privy not initialized (missing VITE_PRIVY_APP_ID)',
-    };
+    return { ok: false, code: 'not-configured', reason: 'Privy not configured (missing App ID)' };
   }
-
   try {
-    // Trigger Privy login flow. This opens the modal.
-    const { user } = await client.login();
+    mountSecureContext(client);
+    await client.auth.email.sendCode(email);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, code: 'send-failed', reason: String(err?.message || err) };
+  }
+}
 
+/**
+ * Step 2 of login: verify the OTP. On success, provisions (or restores)
+ * the embedded wallet and returns an EIP-1193 provider that plugs straight
+ * into wallet.js connect({ provider }).
+ */
+export async function loginPrivyWithCode(email, code) {
+  const client = await initPrivy();
+  if (!client) {
+    return { ok: false, code: 'not-configured', reason: 'Privy not configured (missing App ID)' };
+  }
+  try {
+    const session = await client.auth.email.loginWithCode(email, code);
+    const user = session?.user || null;
     if (!user) {
-      return {
-        ok: false,
-        code: 'rejected',
-        reason: 'Privy login was cancelled or failed',
-      };
+      return { ok: false, code: 'login-failed', reason: 'Privy returned no user' };
     }
 
-    // Get the embedded wallet provider (EIP-1193)
-    const provider = await user.getEthereumProvider();
-
+    mountSecureContext(client);
+    const wallet = getUserEmbeddedEthereumWallet(user);
+    if (!wallet) {
+      return { ok: false, code: 'no-wallet', reason: 'No embedded wallet on this account' };
+    }
+    const { entropyId, entropyIdVerifier } = getEntropyDetailsFromUser(user);
+    const provider = await client.embeddedWallet.getEthereumProvider({
+      wallet,
+      entropyId,
+      entropyIdVerifier,
+    });
     if (!provider || typeof provider.request !== 'function') {
-      return {
-        ok: false,
-        code: 'no-provider',
-        reason: 'Privy did not return a valid EIP-1193 provider',
-      };
+      return { ok: false, code: 'no-provider', reason: 'Privy did not return a valid EIP-1193 provider' };
     }
 
-    // Get the connected account
     const accounts = await provider.request({ method: 'eth_accounts' });
     if (!Array.isArray(accounts) || accounts.length === 0) {
-      return {
-        ok: false,
-        code: 'no-accounts',
-        reason: 'Privy wallet returned no accounts',
-      };
+      return { ok: false, code: 'no-accounts', reason: 'Embedded wallet returned no accounts' };
     }
-
-    // Get the chain ID
     const chainIdHex = await provider.request({ method: 'eth_chainId' });
-    const chainId = Number(BigInt(chainIdHex));
-
     return {
       ok: true,
       provider,
       account: accounts[0],
-      chainId,
+      chainId: Number(BigInt(chainIdHex)),
+      email: user.email?.address || null,
     };
   } catch (err) {
-    // Map Privy errors to our standard codes
     const msg = String(err?.message || err);
     if (msg.includes('User rejected') || msg.includes('cancelled') || msg.includes('dismissed')) {
       return { ok: false, code: 'rejected', reason: 'Privy login rejected' };
     }
-    if (msg.includes('network') || msg.includes('fetch')) {
-      return { ok: false, code: 'network-error', reason: 'Privy network error' };
+    if (msg.toLowerCase().includes('incorrect') || msg.toLowerCase().includes('invalid code')) {
+      return { ok: false, code: 'bad-code', reason: 'That code did not match. Check the email and try again.' };
     }
     return { ok: false, code: 'provider-error', reason: `Privy connect failed: ${msg}` };
   }
 }
 
 /**
- * Disconnect from Privy (clears local session).
- * Note: This does not delete the embedded wallet; it only logs out of the current session.
+ * Returning-user check for a future boot path: resolves the user if a valid
+ * Privy session is already stored, else null. Does not open any UI.
  */
-export async function disconnectPrivy() {
-  const client = await getPrivyClient();
-  if (!client) return { ok: true }; // Already not connected
-
+export async function getPrivySession() {
+  const client = await initPrivy();
+  if (!client) return null;
   try {
-    await client.logout();
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, code: 'provider-error', reason: String(err?.message || err) };
+    const { user } = await client.user.get();
+    return user || null;
+  } catch {
+    return null;
   }
 }
 
 /**
- * Check if user has an active Privy session.
+ * End the Privy session (called from the wallet-menu Disconnect item).
+ * Fire-and-forget by design: wallet.js owns the on-chain disconnect; this
+ * only clears the Privy auth session so the next connect re-prompts.
  */
-export async function getPrivyUser() {
-  const client = await getPrivyClient();
-  if (!client) return null;
-
+export async function disconnectPrivy() {
+  if (!privy) return { ok: true, note: 'no privy session' };
   try {
-    // client.user is set after login; null if not authenticated
-    return client.user || null;
-  } catch {
-    return null;
+    const { user } = await privy.user.get();
+    if (user) await privy.auth.logout({ userId: user.id });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, reason: String(err?.message || err) };
   }
 }
 
@@ -200,6 +204,6 @@ export async function getPrivyUser() {
  * Reset module state (for tests).
  */
 export function resetPrivy() {
-  privyClient = null;
-  isInitialized = false;
+  privy = null;
+  initPromise = null;
 }

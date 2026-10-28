@@ -246,6 +246,30 @@
     <!-- CAMP CARD: streak, daily quests, badges -- all derived from
          on-chain deltas (huntIndex / gemsOf / playerStats) so nothing here
          can be faked from storage. Opened by the Camp chip in the HUD. -->
+    <!-- Privy email login (wallet menu -> "Connect with Privy"). Two steps:
+         email address, then the 6-digit code Privy sends. Same panel
+         language as the Camp card; the secure iframe is invisible. -->
+    <div id="privy-card" class="camp-card hidden" role="dialog" aria-modal="true" aria-label="Sign in with email">
+      <div class="redeem-head">
+        <span class="redeem-title">Sign in with email</span>
+        <button type="button" class="reedem-x" id="privy-close" aria-label="Close">&#215;</button>
+      </div>
+      <div class="redeem-body">
+        <div id="privy-step1">
+          <div class="reedem-label">We'll email you a 6-digit code. No password, no seed phrase &#8212; Privy keeps the key in an isolated wallet for this game.</div>
+          <input class="redeem-input" id="privy-email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" />
+          <button type="button" class="redeem-btn" id="privy-send">Send code</button>
+        </div>
+        <div id="privy-step2" class="hidden">
+          <div class="reedem-label">Code sent to <b id="privy-sent-to"></b></div>
+          <input class="redeem-input" id="privy-code" type="text" inputmode="numeric" maxlength="6" placeholder="6-digit code" />
+          <button type="button" class="redeem-btn" id="privy-verify">Verify & connect</button>
+          <button type="button" class="privy-back" id="privy-back">&#8592; use a different email</button>
+        </div>
+        <div id="privy-err" class="privy-err" role="alert"></div>
+      </div>
+    </div>
+
     <div id="camp-card" class="camp-card hidden" role="dialog" aria-modal="true" aria-label="Camp: streak, daily quests, badges">
       <div class="redeem-head">
         <span class="redeem-title">Camp</span>
@@ -777,7 +801,7 @@
     // the client -- every write is handed to the wallet, which prompts the
     // user. See src/wallet.js.
     import { connect, disconnect, switchToGameChain, getState, onWallet, GAME_CHAIN_ID } from '/src/wallet.js';
-    import { connectPrivy } from '/src/privy.js';
+    import { sendPrivyEmailCode, loginPrivyWithCode, disconnectPrivy } from '/src/privy.js';
 
     const btn = document.getElementById('connect');
     const foot = document.getElementById('hint');
@@ -1032,32 +1056,14 @@
         });
       });
 
-      // Connect with Privy (email/social -> embedded wallet).
-      // Returns an EIP-1193 provider that we pass to wallet.js connect().
+      // Connect with Privy (email/social -> embedded wallet). The button
+      // opens the email dialog below; the dialog drives src/privy.js and
+      // hands the resulting EIP-1193 provider to wallet.js connect().
       walletMenu.querySelectorAll('.wm-privy').forEach((item) => {
-        item.addEventListener('click', async (e) => {
+        item.addEventListener('click', (e) => {
           e.stopPropagation();
           closeWalletMenu();
-          btn.disabled = true;
-          try {
-            const r = await connectPrivy();
-            if (!r.ok) {
-              setPending(r.code === 'rejected' ? 'Privy login rejected.'
-                : r.code === 'not-configured' ? 'Privy not configured (missing App ID).'
-                : 'Privy connect failed: ' + r.reason);
-              render();
-              return;
-            }
-            // Privy returned a provider; pass it to wallet.js connect() to
-            // complete the chain check / switch flow and wire up listeners.
-            const walletResult = await connect({ provider: r.provider });
-            if (!walletResult.ok) {
-              setPending('Wallet connect failed: ' + walletResult.reason);
-            }
-            render();
-          } finally {
-            btn.disabled = false;
-          }
+          openPrivyDialog();
         });
       });
 
@@ -1071,7 +1077,96 @@
           if (!r.ok) setPending('Disconnect failed: ' + (r.reason || 'unknown'));
           else if (r.revoked === false) setPending('Disconnected. The wallet may still remember this site -- clear it there too if you want a fresh prompt.');
           render();
+          // Also end the Privy email session (if any) so the next connect
+          // re-prompts instead of silently restoring the old wallet.
+          disconnectPrivy();
         });
+      });
+
+      // ---- Privy email-login dialog --------------------------------------
+      // Two steps in one .camp-card panel: email -> 6-digit OTP. src/privy.js
+      // does the Privy API calls and returns an EIP-1193 provider; this UI
+      // only collects the email and the code.
+      const privyCard = document.getElementById('privy-card');
+      const privyEmail = document.getElementById('privy-email');
+      const privyCode = document.getElementById('privy-code');
+      const privySend = document.getElementById('privy-send');
+      const privyVerify = document.getElementById('privy-verify');
+      const privyBack = document.getElementById('privy-back');
+      const privyErr = document.getElementById('privy-err');
+      const privyStep1 = document.getElementById('privy-step1');
+      const privyStep2 = document.getElementById('privy-step2');
+      const privySentTo = document.getElementById('privy-sent-to');
+      let privyAddress = '';
+
+      function closePrivyDialog() { privyCard.classList.add('hidden'); }
+      function privyError(m) { privyErr.textContent = m || ''; }
+      function openPrivyDialog() {
+        privyAddress = '';
+        privyEmail.value = ''; privyCode.value = '';
+        privyError(''); privySend.disabled = false; privyVerify.disabled = false;
+        privyStep1.classList.remove('hidden');
+        privyStep2.classList.add('hidden');
+        privyCard.classList.remove('hidden');
+        privyEmail.focus();
+      }
+
+      privyCard.querySelector('.reedem-x').addEventListener('click', closePrivyDialog);
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !privyCard.classList.contains('hidden')) closePrivyDialog();
+      });
+      privyEmail.addEventListener('keydown', (e) => { if (e.key === 'Enter') privySend.click(); });
+      privyCode.addEventListener('keydown', (e) => { if (e.key === 'Enter') privyVerify.click(); });
+
+      privySend.addEventListener('click', async () => {
+        const email = privyEmail.value.trim();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { privyError('Enter a valid email address.'); return; }
+        privySend.disabled = true; privyError('Sending code…');
+        const r = await sendPrivyEmailCode(email);
+        privySend.disabled = false;
+        if (!r.ok) {
+          privyError(r.reason || 'Could not send the code.');
+          if (r.code === 'not-configured') { setPending('Privy not configured (missing App ID).'); render(); }
+          return;
+        }
+        privyAddress = email;
+        privySentTo.textContent = email;
+        privyError(''); privyCode.value = '';
+        privyStep1.classList.add('hidden');
+        privyStep2.classList.remove('hidden');
+        privyCode.focus();
+      });
+
+      privyVerify.addEventListener('click', async () => {
+        const code = privyCode.value.trim();
+        if (!/^\d{6}$/.test(code)) { privyError('Enter the 6-digit code from the email.'); return; }
+        privyVerify.disabled = true; privyError('Signing you in…');
+        const r = await loginPrivyWithCode(privyAddress, code);
+        privyVerify.disabled = false;
+        if (!r.ok) {
+          privyError(r.reason || 'Login failed.');
+          if (r.code === 'not-configured') closePrivyDialog();
+          return;
+        }
+        closePrivyDialog();
+        btn.disabled = true;
+        try {
+          // Privy returned a provider; pass it to wallet.js connect() to
+          // complete the chain check / switch flow and wire up listeners.
+          const walletResult = await connect({ provider: r.provider });
+          if (!walletResult.ok) {
+            setPending('Wallet connect failed: ' + walletResult.reason);
+          }
+          render();
+        } finally {
+          btn.disabled = false;
+        }
+      });
+
+      privyBack.addEventListener('click', () => {
+        privyStep2.classList.add('hidden');
+        privyStep1.classList.remove('hidden');
+        privyError(''); privyEmail.focus();
       });
     }
 
