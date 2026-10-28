@@ -126,18 +126,32 @@ export async function loginPrivyWithCode(email, code) {
   try {
     // loginWithCode returns the AuthenticatedUser directly (SDK v0.79.1),
     // NOT wrapped in { session: { user } }.
-    const user = await client.auth.email.loginWithCode(email, code);
+    let user;
+    try {
+      user = await client.auth.email.loginWithCode(email, code);
+    } catch (loginErr) {
+      return { ok: false, code: 'login-error', reason: `Login failed: ${String(loginErr?.message || loginErr)}` };
+    }
     if (!user) {
       return { ok: false, code: 'login-failed', reason: 'Privy returned no user' };
     }
 
-    mountSecureContext(client);
+    try {
+      mountSecureContext(client);
+    } catch (iframeErr) {
+      return { ok: false, code: 'iframe-error', reason: `Secure context failed: ${String(iframeErr?.message || iframeErr)}` };
+    }
     // The core SDK does not auto-create embedded wallets at login
     // (no createOnLogin option): provision one on first sign-in. create()
     // may throw embedded_wallet_already_exists on re-login — that's fine,
     // just read the wallet off the current user.
     let walletUser = user;
-    let wallet = getUserEmbeddedEthereumWallet(user);
+    let wallet;
+    try {
+      wallet = getUserEmbeddedEthereumWallet(user);
+    } catch (walletErr) {
+      return { ok: false, code: 'wallet-read-error', reason: `Wallet read failed: ${String(walletErr?.message || walletErr)}` };
+    }
     if (!wallet) {
       try {
         const created = await client.embeddedWallet.create({});
@@ -208,7 +222,7 @@ export async function loginPrivyWithCode(email, code) {
     if (msg.toLowerCase().includes('incorrect') || msg.toLowerCase().includes('invalid code')) {
       return { ok: false, code: 'bad-code', reason: 'That code did not match. Check the email and try again.' };
     }
-    return { ok: false, code: 'provider-error', reason: `Privy connect failed: ${msg}` };
+    return { ok: false, code: 'unexpected-error', reason: msg };
   }
 }
 
