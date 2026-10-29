@@ -865,6 +865,42 @@
     const short = (a) => a ? a.slice(0, 6) + '…' + a.slice(-4) : '';
 
     /**
+     * Turn a switchToGameChain() failure into plain language, and SHOW THE
+     * WALLET'S OWN WORDS.
+     *
+     * This existed as `'Switch failed: ' + sw.reason`, which printed things
+     * like "Switch failed: Unrecognized chain ID" -- accurate and useless. The
+     * player cannot act on it, and it hid which branch ran: 4902 from the
+     * FIRST switch means "unknown chain, ask the wallet to add it"; the same
+     * 4902 from the RETRY after a successful add means the wallet refused the
+     * add. The provider text ("Method not found", "User rejected", the RPC
+     * URL it was handed) is the only thing that distinguishes them, so it is
+     * appended verbatim as `detail` -- a shaped object wallet.js attaches to
+     * its failure results, never a leaked private key or account string.
+     *
+     * @param {object} sw        switchToGameChain()'s { ok:false, ... } result
+     * @param {number|null} prevChain chain the wallet was on before the click
+     */
+    function switchReasonText(sw, prevChain) {
+      const detail = sw.detail || null;
+      const walletSaid = detail && detail.message ? ` Wallet said: "${detail.message}".` : '';
+      const onChain = prevChain === null || prevChain === undefined ? '' : ` Your wallet is still on chain ${prevChain}.`;
+      if (sw.code === 'chain-unknown') {
+        // The wallet has no entry for 46630. That is a WALLET problem to fix
+        // (add the network), not a game bug, so say what to do about it.
+        return `Your wallet does not know Robinhood Chain Testnet (chain ${GAME_CHAIN_ID}).` + onChain + walletSaid
+          + ' Add the network in your wallet: RPC ' + (window.__rpcUrl || 'https://rpc.testnet.chain.robinhood.com')
+          + ', chain ID ' + GAME_CHAIN_ID + ', symbol ETH.';
+      }
+      if (sw.code === 'wrong-chain') {
+        return `Your wallet stayed on chain ${sw.chainId} instead of moving to chain ${GAME_CHAIN_ID}.`
+          + ' An embedded wallet (Privy email login) often cannot switch to a custom testnet -- connect a browser-extension wallet instead.';
+      }
+      if (sw.code === 'rejected') return 'You dismissed the switch prompt in the wallet -- nothing changed.';
+      return (sw.reason || 'The wallet would not move to chain ' + GAME_CHAIN_ID + '.') + walletSaid;
+    }
+
+    /**
      * A message set by the last action, which render() must not clobber.
      *
      * noteWallet() was always followed by render(), and render() recomputes the
@@ -937,7 +973,7 @@
             return;
           }
           setPending('Connected, but could not switch to chain ' + GAME_CHAIN_ID
-            + ' (' + sw.reason + '). Switch it in your wallet, then press again.');
+            + ' (' + switchReasonText(sw, r.chainId) + ').');
           render();
           return;
         }
@@ -1181,14 +1217,23 @@
         e.stopPropagation();
         closeSwitchChainDialog();
         btn.disabled = true;
-        const sw = await switchToGameChain();
+        const prevChain = getState().chainId;
+        let sw;
+        try {
+          sw = await switchToGameChain();
+        } catch (err) {
+          btn.disabled = false;
+          openSwitchChainDialog();
+          switchErr.textContent = 'Switch failed: ' + String(err?.message || err);
+          return;
+        }
         btn.disabled = false;
         if (sw.ok) {
           setPending('Switched to Robinhood Testnet (' + GAME_CHAIN_ID + ').');
           render();
         } else {
-          switchErr.textContent = 'Switch failed: ' + sw.reason;
           openSwitchChainDialog();
+          switchErr.textContent = 'Switch failed: ' + switchReasonText(sw, prevChain);
         }
       });
 
@@ -1352,7 +1397,7 @@
               return;
             }
             setPending('Connected, but could not switch to chain ' + GAME_CHAIN_ID
-              + ' (' + sw.reason + '). Switch it in your wallet, then press again.');
+              + ' (' + switchReasonText(sw, walletResult.chainId) + ').');
             render();
             return;
           }

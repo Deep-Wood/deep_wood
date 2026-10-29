@@ -602,6 +602,21 @@ function errCode(e) {
   return "provider-error";
 }
 
+/**
+ * The raw provider rejection, surfaced so the UI can show the user what the
+ * wallet actually said instead of a generic "provider error". Wallets word
+ * failures differently and -32601 ("method not found") reads as meaningless to
+ * a player; errCode already classifies it, this only preserves the evidence.
+ */
+function errDetail(e) {
+  if (!e || typeof e !== "object") return null;
+  return {
+    code: e.code ?? null,
+    message: String(e.message ?? e).slice(0, 300),
+    data: e.data ?? null,
+  };
+}
+
 // --- connect ---------------------------------------------------------------
 
 /**
@@ -684,7 +699,8 @@ export async function connect({ provider, silent = false } = {}) {
  *
  * Uses config.rpcUrl for the add request. There is no API key on that endpoint
  * and none is needed; nothing secret may be put in a wallet-add URL, since the
- * user can read what the site asks their wallet to store.
+ * user can read what the site asks their wallet to store. The explorer URL is
+ * included for the wallet's own "view on explorer" affordance.
  */
 export async function switchToGameChain({ provider } = {}) {
   const p = getProvider(provider);
@@ -701,6 +717,7 @@ export async function switchToGameChain({ provider } = {}) {
     chainName: "Robinhood Chain Testnet",
     nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
     rpcUrls: [config.rpcUrl],
+    blockExplorerUrls: ["https://explorer.testnet.chain.robinhood.com"],
   };
 
   try {
@@ -718,6 +735,7 @@ export async function switchToGameChain({ provider } = {}) {
           code === "rejected"
             ? "chain switch rejected in the wallet"
             : String(e?.message || e),
+        detail: errDetail(e),
       };
     }
     try {
@@ -741,29 +759,51 @@ export async function switchToGameChain({ provider } = {}) {
           code === "rejected"
             ? "chain add rejected in the wallet"
             : String(e2?.message || e2),
+        detail: errDetail(e2),
       };
     }
   }
 
   // The provider is the authority on where the wallet ended up -- do not
   // assume the switch took, and do not assume our cached chain id is stale-free.
-  try {
-    const chainId = fromQuantity(await p.request({ method: "eth_chainId" }));
-    state.chainId = chainId;
-    const rightChain = chainId === GAME_CHAIN_ID;
-    if (state.account) emit("chain");
-    if (!rightChain) {
-      return {
-        ok: false,
-        code: "wrong-chain",
-        reason: `wallet reports chain ${chainId} after switching, expected ${GAME_CHAIN_ID}`,
-        chainId,
-      };
+  //
+  // POLL, do not read once. Privy's embedded-wallet provider resolves
+  // wallet_switchEthereumChain as soon as the request has been forwarded to
+  // the secure-context iframe, but the iframe's own chain state can trail that
+  // reply: a single eth_chainId read immediately after reports the OLD chain,
+  // the caller shows "wallet is on chain 1, game is on 46630" and the player
+  // is stuck -- on a switch that actually worked. That is the reported
+  // "still doesn't switch to the right chain" symptom. Every injected wallet
+  // settles within a second; 6s is a ceiling that costs one extra read on the
+  // happy path (the first eth_chainId below usually already returns 46630).
+  const readChainId = async () => {
+    const before = state.chainId;
+    const current = fromQuantity(await p.request({ method: "eth_chainId" }));
+    state.chainId = current;
+    // The wallet's own chainChanged listener updates this too; emit here only
+    // when we observed the change ourselves, so listeners fire exactly once.
+    if (current !== before && state.account) emit("chain");
+    return current;
+  };
+  const deadline = Date.now() + 6000;
+  let chainId = null;
+  while (true) {
+    try {
+      chainId = await readChainId();
+    } catch (e) {
+      return { ok: false, code: "bad-chain", reason: String(e?.message || e) };
     }
-    return { ok: true, chainId, ...getState() };
-  } catch (e) {
-    return { ok: false, code: "bad-chain", reason: String(e?.message || e) };
+    if (chainId === GAME_CHAIN_ID) return { ok: true, chainId, ...getState() };
+    if (Date.now() > deadline) break;
+    await new Promise((r) => setTimeout(r, 350));
   }
+  return {
+    ok: false,
+    code: "wrong-chain",
+    reason: `wallet reports chain ${chainId} after 6s, expected ${GAME_CHAIN_ID}`,
+    chainId,
+    wrongChain: chainId,
+  };
 }
 
 // --- write path ------------------------------------------------------------
