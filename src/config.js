@@ -87,6 +87,8 @@ export const config = {
   })(),
   chainId: Number(env.VITE_CHAIN_ID || DEFAULTS.chainId),
   tokenAddress: (env.VITE_TOKEN_ADDRESS || '').trim(),
+  poolManager: (env.VITE_POOL_MANAGER || '').trim(),
+  poolId: (env.VITE_POOL_ID || '').trim(),
 };
 
 /**

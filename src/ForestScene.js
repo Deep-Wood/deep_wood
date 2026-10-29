@@ -1653,6 +1653,21 @@ export class ForestScene extends Phaser.Scene {
           this.doBuyToolWithToken(nt);
         };
 
+        const optSwap = document.createElement('button');
+        optSwap.className = 'wm-item';
+        optSwap.type = 'button';
+        optSwap.textContent = 'Swap ETH → DeepWood';
+        optSwap.title = 'Swap ETH for $DeepWood tokens via Uniswap V4';
+        optSwap.onclick = (e) => {
+          e.stopPropagation(); closeBuyDropdown();
+          if (typeof window.openSwapDialog === 'function') {
+            window.openSwapDialog();
+          } else {
+            this.beltMsg('Swap not ready yet.', 'bad');
+          }
+        };
+        box.appendChild(optSwap);
+
         box.appendChild(mkRow(optEth, 'claim faucet', 'https://faucet.testnet.chain.robinhood.com', 'Get free Robinhood testnet ETH'));
         box.appendChild(mkRow(optToken, 'buy DeepWood', 'https://testnet.vibevibe.fun/token/0xF049d0076c2f25A763551beD760aB55e905ea831', 'Buy $DEEPWOOD on vibevibe.fun'));
         dd.appendChild(box);

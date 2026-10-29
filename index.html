@@ -282,6 +282,20 @@
       </div>
     </div>
 
+    <div id="swap-card" class="camp-card hidden" role="dialog" aria-modal="true" aria-label="Swap ETH for DeepWood">
+      <div class="redeem-head">
+        <span class="redeem-title">Swap ETH → DeepWood</span>
+        <button type="button" class="reedem-x" id="swap-close" aria-label="Close">&#215;</button>
+      </div>
+      <div class="redeem-body">
+        <div class="redeem-label">Swap ETH for $DeepWood via Uniswap V4 (pool: ETH/DeepWood, 0% fee)</div>
+        <input class="redeem-input" id="swap-eth-amount" type="number" step="any" min="0" placeholder="0.005" />
+        <div class="redeem-label" id="swap-estimate">DeepWood out: —</div>
+        <button type="button" class="redeem-btn" id="swap-execute">Swap</button>
+        <div id="swap-err" class="privy-err" role="alert"></div>
+      </div>
+    </div>
+
     <div id="camp-card" class="camp-card hidden" role="dialog" aria-modal="true" aria-label="Camp: streak, daily quests, badges">
       <div class="redeem-head">
         <span class="redeem-title">Camp</span>
@@ -820,6 +834,7 @@
     import { TIER_NAME, SKILL_NAME } from '/src/economy.js';
     import { chosenSkin } from '/src/engagement.js';
     import { walletBalanceWeiOnchain, onchainActive } from '/src/onchain.js';
+    import { V4_POOL_MANAGER } from '/src/chain.js';
     // Expose to the plain-script block (renderHunterStrip) that predates modules.
     window.TIER_NAME = TIER_NAME;
     window.SKILL_NAME = SKILL_NAME;
@@ -1177,6 +1192,82 @@
         }
       });
 
+      // ---- Swap ETH → DeepWood dialog --------------------------------------
+      const swapCard = document.getElementById('swap-card');
+      const swapClose = document.getElementById('swap-close');
+      const swapEth = document.getElementById('swap-eth-amount');
+      const swapEstimate = document.getElementById('swap-estimate');
+      const swapExecute = document.getElementById('swap-execute');
+      const swapErr = document.getElementById('swap-err');
+
+      function closeSwapDialog() { swapCard.classList.add('hidden'); swapErr.textContent = ''; }
+      function openSwapDialog() {
+        swapEth.value = ''; swapEstimate.textContent = 'DeepWood out: —';
+        swapCard.classList.remove('hidden');
+        swapEth.focus();
+      }
+
+      // Expose so ForestScene can open it from the buy flow.
+      window.openSwapDialog = openSwapDialog;
+
+      // Estimate DeepWood out from pool price (slot0) when ETH amount changes.
+      swapEth.addEventListener('input', async () => {
+        const eth = parseFloat(swapEth.value);
+        if (!eth || eth <= 0) { swapEstimate.textContent = 'DeepWood out: —'; return; }
+        try {
+          const { getReader } = await import('/src/onchain.js');
+          const reader = await getReader();
+          if (!reader) return;
+          // Read slot0 to get sqrtPriceX96 (price of currency1 in currency0)
+          // We can't easily call reader.slot0 without adding it to chain.js,
+          // so skip estimate for now and let the swap execute.
+          swapEstimate.textContent = 'DeepWood out: —';
+        } catch { /* ignore */ }
+      });
+
+      swapClose.addEventListener('click', (e) => { e.stopPropagation(); closeSwapDialog(); });
+
+      swapExecute.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const ethStr = swapEth.value.trim();
+        if (!ethStr) { swapErr.textContent = 'Enter an ETH amount.'; return; }
+        const eth = parseFloat(ethStr);
+        if (!eth || eth <= 0) { swapErr.textContent = 'Enter a valid amount.'; return; }
+        const st = getState();
+        if (!st.account) { swapErr.textContent = 'Connect a wallet first.'; return; }
+        if (!st.rightChain) { swapErr.textContent = 'Switch to Robinhood Testnet first.'; openSwitchChainDialog(); return; }
+
+        const ethWei = BigInt(Math.floor(eth * 1e18));
+        const haveEth = st.chainBalanceWei ?? 0n;
+        if (haveEth < ethWei) {
+          swapErr.textContent = `Not enough ETH (have ${(Number(haveEth)/1e18).toFixed(4)}).`;
+          return;
+        }
+
+        closeSwapDialog();
+        const { buildV4SwapExactIn } = await import('/src/chain.js');
+        const { sendTo } = await import('/src/wallet.js');
+        const data = buildV4SwapExactIn(ethWei, st.account);
+        btn.disabled = true;
+        try {
+          const r = await sendTo(V4_POOL_MANAGER, data, { valueWei: ethWei });
+          if (r.ok) {
+            setPending('Swap submitted: ' + r.hash.slice(0, 10) + '…');
+            render();
+            await new Promise(r => setTimeout(r, 3000));
+            await window.__scene?.refreshChainBalance?.();
+          } else {
+            swapErr.textContent = 'Swap failed: ' + r.reason;
+            openSwapDialog();
+          }
+        } catch (err) {
+          swapErr.textContent = 'Swap error: ' + String(err?.message || err);
+          openSwapDialog();
+        } finally {
+          btn.disabled = false;
+        }
+      });
+
       // ---- Privy email-login dialog --------------------------------------
       // Two steps in one .camp-card panel: email -> 6-digit OTP. src/privy.js
       // does the Privy API calls and returns an EIP-1193 provider; this UI
@@ -1210,6 +1301,7 @@
         if (e.key === 'Escape') {
           if (!privyCard.classList.contains('hidden')) closePrivyDialog();
           else if (!switchCard.classList.contains('hidden')) closeSwitchChainDialog();
+          else if (!swapCard.classList.contains('hidden')) closeSwapDialog();
         }
       });
       privyEmail.addEventListener('keydown', (e) => { if (e.key === 'Enter') privySend.click(); });

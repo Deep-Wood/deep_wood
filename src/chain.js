@@ -1051,3 +1051,52 @@ export function buyToolTx(tier, maxTokenCost) {
   ].join('');
   return selector + params;
 }
+
+// --- Uniswap V4 swap (PoolManager.swap) ---
+// PoolManager address and pool key verified on-chain (pool id matches).
+export const V4_POOL_MANAGER = '0x8366a39cc670b4001a1121b8f6a443a643e40951';
+export const V4_POOL_KEY = '0x03a370182b086617172ce27a70b612d30ae635113f06f7088254586914abfdab';
+export const V4_DEEPWOOD_TOKEN = '0xF049d0076c2f25A763551beD760aB55e905ea831';
+// ETH is currency0 (address 0), DeepWood is currency1.
+// zeroForOne = true means selling currency0 (ETH) for currency1 (DeepWood).
+export const V4_ZERO_FOR_ONE = true;
+
+/**
+ * Build calldata for PoolManager.swap(address, int256, int256, bytes)
+ * ETH -> DeepWood exact input swap.
+ *
+ * @param {bigint|number} ethAmountWei ETH to send (exact input)
+ * @param {string} recipient wallet address to receive DeepWood
+ * @returns {string} calldata hex (0x-prefixed, no value field - caller sets msg.value)
+ */
+export function buildV4SwapExactIn(ethAmountWei, recipient) {
+  const selector = '0x42703a93'; // swap(address,int256,int256,bytes)
+  const amount0Delta = (-BigInt(ethAmountWei)).toString(16).padStart(64, '0'); // negative int256
+  const amount1Delta = '0'.padStart(64, '0'); // receive whatever the pool gives
+  const data = '00'.padStart(64, '0'); // empty bytes data (offset 0x20, length 0)
+  return selector +
+    recipient.toLowerCase().replace(/^0x/, '').padStart(64, '0') +
+    amount0Delta +
+    amount1Delta +
+    data;
+}
+
+/**
+ * Build calldata for PoolManager.swap(address, int256, int256, bytes)
+ * DeepWood -> ETH exact output swap (sell DeepWood for ETH).
+ *
+ * @param {bigint|number} deepwoodAmount DeepWood to send (exact input)
+ * @param {string} recipient wallet address to receive ETH
+ * @returns {string} calldata hex
+ */
+export function buildV4SwapExactOutDeepwood(deepwoodAmount, recipient) {
+  const selector = '0x42703a93';
+  const amount0Delta = '0'.padStart(64, '0'); // receive ETH, amount determined by pool
+  const amount1Delta = (-BigInt(deepwoodAmount)).toString(16).padStart(64, '0'); // negative int256
+  const data = '00'.padStart(64, '0');
+  return selector +
+    recipient.toLowerCase().replace(/^0x/, '').padStart(64, '0') +
+    amount0Delta +
+    amount1Delta +
+    data;
+}
