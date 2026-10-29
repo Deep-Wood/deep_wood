@@ -1100,3 +1100,57 @@ export function buildV4SwapExactOutDeepwood(deepwoodAmount, recipient) {
     amount1Delta +
     data;
 }
+
+// --- V4 pool price (for the swap estimate) ---
+
+/**
+ * Read PoolManager slot0 for the DeepWood pool and convert the tick to an
+ * ETH-per-DeepWood price, so the swap card can show an estimate BEFORE the
+ * player signs.
+ *
+ * slot0(bytes32) returns (uint160 sqrtPriceX96, int24 tick, uint16 observationIndex,
+ * uint16 observationCardinality, uint16 observationCardinalityNext, uint8 feeProtocol, bool unlocked)
+ * -- 7 words. Only the first matters here.
+ */
+export async function poolSlot0(rpcUrl, fallbackRpcUrls, poolKeyHex) {
+  // slot0(bytes32) = 0xdf90153a
+  const selector = '0xdf90153a' + poolKeyHex.replace(/^0x/, '');
+  const hex = await rpcFirst(rpcUrl, fallbackRpcUrls, 'eth_call',
+    [{ to: V4_POOL_MANAGER, data: selector }, 'latest']);
+  const h = String(hex).replace(/^0x/, '');
+  if (h.length < 64) throw new Error(`slot0: short return ${hex}`);
+  const sqrtPriceX96 = BigInt('0x' + h.slice(0, 64));
+  const tickWord = BigInt('0x' + h.slice(64, 128));
+  // int24 is sign-extended in the low 3 bytes of the word.
+  const tick = tickWord & 0xffffffn;
+  const tickSigned = tick >= 0x800000n ? Number(tick - 0x1000000n) : Number(tick);
+  return { sqrtPriceX96, tick: tickSigned };
+}
+
+const Q96 = 2n ** 96n;
+
+/**
+ * Uniswap V4 price ratio in WEI: (amount1 wei) / (amount0 wei) for one unit.
+ * Both tokens are 18 decimals, so the wei ratio IS the token ratio and no
+ * decimal correction is needed.
+ *
+ * This is the spot price with NO slippage and NO hook fee. The hook takes a
+ * cut (a slice burned to 0xdead), so the real output is LOWER. The estimate
+ * says so rather than pretending otherwise.
+ */
+export function poolPriceRatio(slot0) {
+  // price = (sqrtPriceX96 / Q96)^2, computed in wei-scaled units:
+  //   price * 1e18 = (sqrtPriceX96^2 * 1e18) / (2^192)
+  const num = slot0.sqrtPriceX96 * slot0.sqrtPriceX96 * 10n ** 18n;
+  const den = Q96 * Q96;
+  return num / den;
+}
+
+/**
+ * Approximate DeepWood out (18-dec wei) for an ETH input. Spot price only --
+ * deliberately optimistic, and labelled as such by the caller.
+ */
+export function deepwoodOutFor(ethAmountWei, slot0) {
+  const price = poolPriceRatio(slot0); // DeepWood wei per ETH wei
+  return BigInt(ethAmountWei) * price / 10n ** 18n;
+}

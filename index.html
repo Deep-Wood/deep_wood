@@ -1255,19 +1255,33 @@
       // Expose so ForestScene can open it from the buy flow.
       window.openSwapDialog = openSwapDialog;
 
-      // Estimate DeepWood out from pool price (slot0) when ETH amount changes.
-      swapEth.addEventListener('input', async () => {
+      // Estimate DeepWood out from the pool's live spot price (PoolManager
+      // slot0). This handler was shipped as a STUB once — it read nothing and
+      // always wrote "DeepWood out: —", which the player correctly read as
+      // broken. Debounced so typing an amount does not fire an RPC per
+      // keystroke (the shared testnet RPC rate-limits bursts, and a 429 here
+      // would look like "estimate broken" when it is "estimate throttled").
+      let swapEstTimer = null;
+      const fmtDeep = (n) => n < 1 ? n.toFixed(4) : n < 1000 ? n.toFixed(2) : n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+      swapEth.addEventListener('input', () => {
+        clearTimeout(swapEstTimer);
         const eth = parseFloat(swapEth.value);
         if (!eth || eth <= 0) { swapEstimate.textContent = 'DeepWood out: —'; return; }
-        try {
-          const { getReader } = await import('/src/onchain.js');
-          const reader = await getReader();
-          if (!reader) return;
-          // Read slot0 to get sqrtPriceX96 (price of currency1 in currency0)
-          // We can't easily call reader.slot0 without adding it to chain.js,
-          // so skip estimate for now and let the swap execute.
-          swapEstimate.textContent = 'DeepWood out: —';
-        } catch { /* ignore */ }
+        swapEstimate.textContent = 'DeepWood out: …';
+        swapEstTimer = setTimeout(async () => {
+          try {
+            const { config } = await import('/src/config.js');
+            const { poolSlot0, deepwoodOutFor, V4_POOL_KEY } = await import('/src/chain.js');
+            const s = await poolSlot0(config.rpcUrl, config.fallbackRpcUrls, V4_POOL_KEY);
+            const out = deepwoodOutFor(BigInt(Math.floor(eth * 1e18)), s);
+            swapEstimate.textContent =
+              `DeepWood out: ≈${fmtDeep(Number(out) / 1e18)} $DeepWood`
+              + ' (spot price — the hook fee and slippage will make this lower)';
+          } catch (e) {
+            swapEstimate.textContent = 'DeepWood out: estimate unavailable — '
+              + String(e?.message || e).slice(0, 90);
+          }
+        }, 400);
       });
 
       swapClose.addEventListener('click', (e) => { e.stopPropagation(); closeSwapDialog(); });
