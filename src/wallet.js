@@ -448,7 +448,8 @@ const state = {
   provider: null,
   account: null,
   chainId: null,
-  listeners: new Set(),
+  chainBalanceWei: null,   // ETH balance on the current chain, wei. Kept in sync
+  listeners: new Set(),    // by index.html's sync() which reads it live on-chain.
   wired: false,
 };
 
@@ -457,7 +458,13 @@ export function resetWallet() {
   state.provider = null;
   state.account = null;
   state.chainId = null;
+  state.chainBalanceWei = null;
   state.wired = false;
+}
+
+/** Set the live ETH balance on the current chain (wei). Called by index.html's sync(). */
+export function setChainBalanceWei(wei) {
+  state.chainBalanceWei = BigInt(wei);
 }
 
 /** window.ethereum, or null. Safe under Node (no window at all). */
@@ -490,7 +497,7 @@ export function getState() {
   let reason = null;
   if (!account) reason = "not-connected";
   else if (!rightChain) reason = `wrong-chain:${chainId}`;
-  return { account, chainId, rightChain, connected, reason };
+  return { account, chainId, rightChain, connected, reason, chainBalanceWei: state.chainBalanceWei ?? null };
 }
 
 // --- listener API ----------------------------------------------------------

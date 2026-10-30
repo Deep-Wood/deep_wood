@@ -829,7 +829,7 @@
     // only place window.ethereum is touched. No private key exists anywhere in
     // the client -- every write is handed to the wallet, which prompts the
     // user. See src/wallet.js.
-    import { connect, disconnect, switchToGameChain, getState, onWallet, GAME_CHAIN_ID } from '/src/wallet.js';
+    import { connect, disconnect, switchToGameChain, getState, onWallet, GAME_CHAIN_ID, setChainBalanceWei } from '/src/wallet.js';
     import { sendPrivyEmailCode, loginPrivyWithCode, disconnectPrivy, restorePrivyProvider } from '/src/privy.js';
     import { TIER_NAME, SKILL_NAME } from '/src/economy.js';
     import { chosenSkin } from '/src/engagement.js';
@@ -1245,15 +1245,43 @@
       const swapExecute = document.getElementById('swap-execute');
       const swapErr = document.getElementById('swap-err');
 
-      function closeSwapDialog() { swapCard.classList.add('hidden'); swapErr.textContent = ''; }
+      function closeSwapDialog() { swapCard.classList.add('hidden'); swapErr.textContent = ''; swapEstimate.textContent = 'DeepWood out: —'; }
       function openSwapDialog() {
-        swapEth.value = ''; swapEstimate.textContent = 'DeepWood out: —';
+        const st = getState();
+        swapEth.value = ''; swapEstimate.textContent = 'DeepWood out: —'; swapErr.textContent = '';
+        swapEth.disabled = false; swapExecute.disabled = false;
         swapCard.classList.remove('hidden');
-        swapEth.focus();
+        if (st.account && !st.rightChain) {
+          // Wrong chain: the balance the user sees (0 ETH) is on chain 1,
+          // while their funds live on 46630. Switch first, then the swap
+          // works. Open the switch dialog automatically so they don't have to
+          // hunt for it, and disable the swap form until the chain matches.
+          swapEth.disabled = true; swapExecute.disabled = true;
+          swapEstimate.textContent = 'Switch to Robinhood Testnet first — your ETH is on chain ' + st.chainId + '.';
+          openSwitchChainDialog();
+        } else {
+          swapEth.focus();
+        }
       }
 
       // Expose so ForestScene can open it from the buy flow.
       window.openSwapDialog = openSwapDialog;
+
+      // Re-evaluate the swap dialog whenever the wallet state changes (e.g. a
+      // successful chain switch from the switch-dialog). This is what turns
+      // "Not enough ETH (have 0.0000)" into a real balance once the wallet is
+      // on 46630.
+      onWallet(() => {
+        if (swapCard.classList.contains('hidden')) return;
+        const st = getState();
+        if (st.account && !st.rightChain) {
+          swapEth.disabled = true; swapExecute.disabled = true;
+          swapEstimate.textContent = 'Switch to Robinhood Testnet first — your ETH is on chain ' + st.chainId + '.';
+        } else {
+          swapEth.disabled = false; swapExecute.disabled = false;
+          if (!swapEth.value) swapEstimate.textContent = 'DeepWood out: —';
+        }
+      });
 
       // Estimate DeepWood out from the pool's live spot price (PoolManager
       // slot0). This handler was shipped as a STUB once — it read nothing and
@@ -1490,6 +1518,7 @@
       window.__scene?.checkV9Migration?.();
       const b = await walletBalanceWeiOnchain();
       window.__scene?.setChainBalance?.(b);
+      setChainBalanceWei(b);
       render();
     };
     window.__syncBalance = sync;
