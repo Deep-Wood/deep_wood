@@ -1104,27 +1104,45 @@ export function buildV4SwapExactOutDeepwood(deepwoodAmount, recipient) {
 // --- V4 pool price (for the swap estimate) ---
 
 /**
- * Read PoolManager slot0 for the DeepWood pool and convert the tick to an
- * ETH-per-DeepWood price, so the swap card can show an estimate BEFORE the
- * player signs.
+ * Read the pool's Slot0 word from the PoolManager and convert it to a price.
  *
- * slot0(bytes32) returns (uint160 sqrtPriceX96, int24 tick, uint16 observationIndex,
- * uint16 observationCardinality, uint16 observationCardinalityNext, uint8 feeProtocol, bool unlocked)
- * -- 7 words. Only the first matters here.
+ * WHY extsload AND NOT slot0(): this PoolManager has NO named state getter.
+ * `slot0(bytes32)` (0xdf90153a) and `getSlot0(bytes32)` (0xc815641c) both
+ * revert — verified from two independent IPs. Real v4-core exposes pool state
+ * only through `extsload(bytes32)` at raw storage keys. The pool state mapping
+ * lives at slot 6 of PoolManager: brute-forcing keccak256(poolId ++ N) over
+ * N=0..59 found exactly one nonzero key, and its word is self-consistent —
+ * sqrtPriceX96² = 1.0001^tick — so it IS the packed Slot0:
+ * sqrtPriceX96(160b) | tick(24b) | fees | unlocked.
+ *
+ * TRAP that cost a wrong key once: probing with `extsload(bytes32[])` returns
+ * `bytes memory`, whose ABI encoding puts an OFFSET word and a LENGTH word in
+ * front of the data — so data word i sits at response index i+2. Reading the
+ * response without that +2 made the hit look like mapping slot 8; the
+ * single-key call then read ZERO and exposed the error. Always confirm a
+ * brute-forced slot with a single-key extsload before baking it in.
+ *
+ * The key below is DERIVED from two constants fixed for the life of this pool
+ * (POOL_ID, read back from the game contract, and mapping slot 6). If the game
+ * repoints at a different pool, POOL_ID() changes and this key MUST be
+ * recomputed — extsload then reads 0 and the estimate says "unavailable"
+ * instead of quoting a fake price.
  */
-export async function poolSlot0(rpcUrl, fallbackRpcUrls, poolKeyHex) {
-  // slot0(bytes32) = 0xdf90153a
-  const selector = '0xdf90153a' + poolKeyHex.replace(/^0x/, '');
+const V4_POOL_SLOT0_KEY = '0xde87009fb3abd635aa88b9c288a290f0e1984711ad556b42518c40d11edb5eb2';
+const SEL_EXTSLOAD = '0x1e2eaeaf'; // extsload(bytes32)
+
+export async function poolSlot0(rpcUrl, fallbackRpcUrls, _poolKeyHex) {
   const hex = await rpcFirst(rpcUrl, fallbackRpcUrls, 'eth_call',
-    [{ to: V4_POOL_MANAGER, data: selector }, 'latest']);
+    [{ to: V4_POOL_MANAGER, data: SEL_EXTSLOAD + V4_POOL_SLOT0_KEY.slice(2) }, 'latest']);
   const h = String(hex).replace(/^0x/, '');
-  if (h.length < 64) throw new Error(`slot0: short return ${hex}`);
-  const sqrtPriceX96 = BigInt('0x' + h.slice(0, 64));
-  const tickWord = BigInt('0x' + h.slice(64, 128));
-  // int24 is sign-extended in the low 3 bytes of the word.
-  const tick = tickWord & 0xffffffn;
-  const tickSigned = tick >= 0x800000n ? Number(tick - 0x1000000n) : Number(tick);
-  return { sqrtPriceX96, tick: tickSigned };
+  if (h.length < 64) throw new Error(`extsload: short return ${hex}`);
+  const word = BigInt('0x' + h.slice(0, 64));
+  if (word === 0n) throw new Error('pool Slot0 is zero — pool not initialised or the storage key is stale');
+  const sqrtPriceX96 = word & ((1n << 160n) - 1n);
+  const low24 = (word >> 160n) & 0xffffffn;
+  const tick = Number(low24 >= 0x800000n ? low24 - 0x1000000n : low24);
+  if (sqrtPriceX96 === 0n) throw new Error('pool has no price (sqrtPriceX96 = 0)');
+  return { sqrtPriceX96, tick };
 }
 
 const Q96 = 2n ** 96n;
