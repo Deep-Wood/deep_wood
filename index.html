@@ -1260,7 +1260,10 @@
           swapEstimate.textContent = 'Switch to Robinhood Testnet first — your ETH is on chain ' + st.chainId + '.';
           openSwitchChainDialog();
         } else {
+          // Right chain: refresh the live ETH balance so the "Not enough ETH"
+          // check uses the real number, not a stale 0 from before the switch.
           swapEth.focus();
+          sync();
         }
       }
 
@@ -1324,8 +1327,15 @@
         if (!st.account) { swapErr.textContent = 'Connect a wallet first.'; return; }
         if (!st.rightChain) { swapErr.textContent = 'Switch to Robinhood Testnet first.'; openSwitchChainDialog(); return; }
 
+        // Re-read the live ETH balance right before the check. sync() was
+        // fired when the dialog opened but is async; reading again avoids the
+        // stale-0 balance that made every swap fail with "have 0.0000".
+        const liveBal = await walletBalanceWeiOnchain();
+        setChainBalanceWei(liveBal);
+        const st2 = getState();
+
         const ethWei = BigInt(Math.floor(eth * 1e18));
-        const haveEth = st.chainBalanceWei ?? 0n;
+        const haveEth = st2.chainBalanceWei ?? 0n;
         if (haveEth < ethWei) {
           swapErr.textContent = `Not enough ETH (have ${(Number(haveEth)/1e18).toFixed(4)}).`;
           return;
