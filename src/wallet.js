@@ -886,11 +886,12 @@ async function send(data, { valueWei } = {}) {
 }
 
 /** eth_sendTransaction to an arbitrary contract (e.g. the token for approve). */
-export async function sendTo(to, data, { valueWei } = {}) {
+export async function sendTo(to, data, { valueWei, gasLimit } = {}) {
   const blocked = notReady();
   if (blocked) return blocked;
   const tx = { from: state.account, to, data: data.startsWith("0x") ? data : "0x" + data };
   if (valueWei !== undefined) tx.value = toQuantity(valueWei);
+  if (gasLimit !== undefined) tx.gas = toQuantity(gasLimit);
   // Show the centred "Confirm in wallet" flash for the WHOLE time the wallet is
   // open (signature request -> user approves -> hash back). It is hidden in the
   // finally block so a rejection or a throw never leaves it stuck on screen.

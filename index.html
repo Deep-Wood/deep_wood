@@ -1347,7 +1347,12 @@
         const data = buildV4SwapExactIn(ethWei, st.account);
         btn.disabled = true;
         try {
-          const r = await sendTo(V4_POOL_MANAGER, data, { valueWei: ethWei });
+          // Fixed gas limit (200k) so Privy doesn't overestimate gas for the
+          // PoolManager.swap call it can't simulate. Without this, Privy's
+          // estimate can push gas * price + value over the account balance and
+          // the wallet rejects with "insufficient funds" before ever showing a
+          // confirmation popup.
+          const r = await sendTo(V4_POOL_MANAGER, data, { valueWei: ethWei, gasLimit: 200000 });
           if (r.ok) {
             setPending('Swap submitted: ' + r.hash.slice(0, 10) + '…');
             render();
