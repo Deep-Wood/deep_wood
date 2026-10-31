@@ -604,7 +604,7 @@ export function installListeners(provider) {
 /** Map a provider rejection to a stable code. EIP-1193 code 4001 = user. */
 function errCode(e) {
   if (e && e.code === 4001) return "rejected";
-  if (e && e.code === 4902) return "chain-unknown";
+  if (e && (e.code === 4901 || e.code === 4902)) return "chain-unknown";
   if (e && e.code === -32002) return "request-pending";
   return "provider-error";
 }

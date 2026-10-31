@@ -830,7 +830,7 @@
     // the client -- every write is handed to the wallet, which prompts the
     // user. See src/wallet.js.
     import { connect, disconnect, switchToGameChain, getState, onWallet, GAME_CHAIN_ID, setChainBalanceWei } from '/src/wallet.js';
-    import { sendPrivyEmailCode, loginPrivyWithCode, disconnectPrivy, restorePrivyProvider } from '/src/privy.js';
+    import { sendPrivyEmailCode, loginPrivyWithCode, disconnectPrivy, restorePrivyProvider, reinitialize, getStoredPrivyProvider, switchChain } from '/src/privy.js';
     import { TIER_NAME, SKILL_NAME } from '/src/economy.js';
     import { chosenSkin } from '/src/engagement.js';
     import { walletBalanceWeiOnchain, onchainActive } from '/src/onchain.js';
@@ -1439,12 +1439,38 @@
           if (r.code === 'not-configured') closePrivyDialog();
           return;
         }
+
+        // loginPrivyWithCode auto-switched to 46630. If it reports
+        // switchChainError, the chain isn't in Privy's supported chains yet
+        // (dashboard change after client init). Re-initialize the client to
+        // pick up dashboard changes, get a fresh provider, and retry.
+        let provider = r.provider;
+        if (r.switchChainError) {
+          privyError('Switching to Robinhood Testnet…');
+          const ri = await reinitialize();
+          if (!ri) {
+            privyError('Could not re-initialize Privy. Check your App ID.');
+            return;
+          }
+          const restored = await restorePrivyProvider();
+          if (!restored) {
+            privyError('Could not restore the wallet session. Log in again.');
+            return;
+          }
+          provider = restored.provider;
+          const sw = await switchChain(46630);
+          if (!sw.ok) {
+            privyError('Chain switch failed: ' + sw.reason + '. Make sure 46630 is in your Privy dashboard supported chains.');
+            return;
+          }
+        }
+
         closePrivyDialog();
         btn.disabled = true;
         try {
           // Privy returned a provider; pass it to wallet.js connect() to
           // complete the chain check / switch flow and wire up listeners.
-          const walletResult = await connect({ provider: r.provider });
+          const walletResult = await connect({ provider });
           if (!walletResult.ok && walletResult.code === 'wrong-chain') {
             // Wallet is real but on the wrong network -- switch to the game
             // chain, same as the regular wallet connect flow.

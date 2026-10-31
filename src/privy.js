@@ -21,6 +21,9 @@ let privy = null;        // single client instance (SDK requirement)
 let initPromise = null;   // in-flight initialize()
 let secureIframe = null;  // hidden secure-context iframe
 let messageListener = null;
+let privyProvider = null; // the EIP-1193 provider from the last successful login, used for switchChain
+let privyWallet = null;   // the LinkedAccountEthereumEmbeddedWallet from the last login
+let privyEntropy = null;  // { entropyId, entropyIdVerifier } from the last login
 
 function resolveAppId() {
   // Vite injects import.meta.env at build time; VITE_PRIVY_APP_ID is baked
@@ -56,6 +59,9 @@ async function initPrivy() {
     }
     const client = new Privy(config);
     // Establishes the backend connection and restores any stored session.
+    // This also fetches the app's supported chains from the Privy backend —
+    // if you add Robinhood Testnet (46630) to the dashboard AFTER this call,
+    // the chain won't be visible until you call reinitialize().
     await client.initialize();
     privy = client;
     return client;
@@ -68,9 +74,61 @@ async function initPrivy() {
 }
 
 /**
- * Mount the secure-context iframe that holds embedded-wallet key material,
- * and wire bidirectional message passing (per the core-js recipe).
+ * Re-initialize the Privy client so it picks up chain configuration changes
+ * made in the Privy dashboard (e.g. adding Robinhood Testnet 46630 to
+ * supported chains). The client caches chains from `initialize()`, so a
+ * dashboard change made after the first login won't be visible to the
+ * existing provider until we re-initialize.
+ *
+ * Call this before `loginPrivyWithCode()` or `restorePrivyProvider()` when
+ * the chain switch fails with "Unsupported chainId".
  */
+export async function reinitialize() {
+  privy = null;
+  initPromise = null;
+  return initPrivy();
+}
+
+/**
+ * Return the stored Privy EIP-1193 provider from the last login, or null.
+ * wallet.js's connect() uses this directly.
+ */
+export function getStoredPrivyProvider() {
+  return privyProvider;
+}
+
+/**
+ * Switch the Privy embedded wallet to a chain by calling
+ * `wallet_switchEthereumChain` on the stored provider. This updates Privy's
+ * internal `_chainId` so subsequent transactions are signed on the right
+ * chain — the vanilla-SDK equivalent of `wallet.switchChain(chainId)` from
+ * @privy-io/react-auth.
+ *
+ * Returns { ok: true } or { ok: false, code, reason }.
+ */
+export async function switchChain(chainId) {
+  const p = privyProvider;
+  if (!p || typeof p.request !== "function") {
+    return { ok: false, code: "no-provider", reason: "no Privy provider stored — log in first" };
+  }
+  const target = "0x" + Number(chainId).toString(16);
+  try {
+    await p.request({ method: "wallet_switchEthereumChain", params: [{ chainId: target }] });
+    return { ok: true, chainId };
+  } catch (e) {
+    const code = e?.code;
+    // 4901 = "Unsupported chainId" from Privy's EmbeddedWalletProvider — the
+    // chain is not in the provider's _chains (dashboard config not yet
+    // picked up). Treat it like chain-unknown so callers can re-init.
+    if (code === 4901 || code === 4902) {
+      return { ok: false, code: "chain-unknown", reason: `chain ${chainId} not in Privy's supported chains — re-initialize and retry` };
+    }
+    if (code === 4001) return { ok: false, code: "rejected", reason: "chain switch rejected in the wallet" };
+    return { ok: false, code: "provider-error", reason: String(e?.message || e) };
+  }
+}
+
+/** Mount the secure-context iframe that holds embedded-wallet key material, * and wire bidirectional message passing (per the core-js recipe). */
 function mountSecureContext(client) {
   if (secureIframe) return;
   secureIframe = document.createElement('iframe');
@@ -117,6 +175,11 @@ export async function sendPrivyEmailCode(email) {
  * Step 2 of login: verify the OTP. On success, provisions (or restores)
  * the embedded wallet and returns an EIP-1193 provider that plugs straight
  * into wallet.js connect({ provider }).
+ *
+ * After a successful login we store the provider, wallet, and entropy so
+ * that switchChain() can call wallet_switchEthereumChain on it later. We
+ * also immediately switch to the game chain (46630) so the wallet starts
+ * on the right chain instead of chain 1.
  */
 export async function loginPrivyWithCode(email, code) {
   const client = await initPrivy();
@@ -226,11 +289,37 @@ export async function loginPrivyWithCode(email, code) {
     } catch (chainErr) {
       return { ok: false, code: 'chain-error', reason: `eth_chainId failed: ${String(chainErr?.message || chainErr)}` };
     }
+
+    // Store references so switchChain() can use the provider later.
+    privyProvider = provider;
+    privyWallet = wallet;
+    privyEntropy = { entropyId, entropyIdVerifier };
+
+    // Immediately switch to the game chain (46630) so the wallet starts on
+    // the right chain instead of chain 1. If the chain isn't in Privy's
+    // supported chains yet, we report chain-unknown and let the caller
+    // re-initialize + retry.
+    if (Number(BigInt(chainIdHex)) !== 46630) {
+      const sw = await switchChain(46630);
+      if (!sw.ok) {
+        // Return success for the login but flag the chain issue so the UI
+        // can offer a re-init + retry path.
+        return {
+          ok: true,
+          provider,
+          account: accounts[0],
+          chainId: Number(BigInt(chainIdHex)),
+          email: user.email?.address || null,
+          switchChainError: sw.reason,
+        };
+      }
+    }
+
     return {
       ok: true,
       provider,
       account: accounts[0],
-      chainId: Number(BigInt(chainIdHex)),
+      chainId: 46630,
       email: user.email?.address || null,
     };
   } catch (err) {
@@ -290,6 +379,12 @@ export async function restorePrivyProvider() {
     if (!provider || typeof provider.request !== 'function') return null;
     const accounts = await provider.request({ method: 'eth_accounts' });
     if (!Array.isArray(accounts) || accounts.length === 0) return null;
+
+    // Store references so switchChain() can use the provider later.
+    privyProvider = provider;
+    privyWallet = wallet;
+    privyEntropy = { entropyId, entropyIdVerifier };
+
     return { provider, account: accounts[0], email: user.email?.address || null };
   } catch {
     return null;
@@ -318,4 +413,7 @@ export async function disconnectPrivy() {
 export function resetPrivy() {
   privy = null;
   initPromise = null;
+  privyProvider = null;
+  privyWallet = null;
+  privyEntropy = null;
 }
