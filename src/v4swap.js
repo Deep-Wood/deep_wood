@@ -47,14 +47,15 @@ function encodeBytes(hexData) {
 function encodeBytesArray(items) {
   const offsets = [];
   let cursor = 32 + items.length * 32;
-  const parts = [argUint(items.length)];
+  const dataParts = [];
   for (const item of items) {
     offsets.push(argUint(cursor));
     const encoded = encodeBytes(item);
-    parts.push(encoded);
+    dataParts.push(encoded);
     cursor += encoded.length / 2;
   }
-  return offsets.join('') + parts.join('');
+  // Correct ABI order for bytes[]: [array length][offsets...][item data...]
+  return argUint(items.length) + offsets.join('') + dataParts.join('');
 }
 function encodeSwapExactInSingle(poolKeyHex, zeroForOne, amountIn, amountOutMinimum, hookData = '') {
   const hook = hookData.replace(/^0x/, '');
