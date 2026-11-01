@@ -57,15 +57,9 @@ function encodeBytesArray(items) {
   // Correct ABI order for bytes[]: [array length][offsets...][item data...]
   return argUint(items.length) + offsets.join('') + dataParts.join('');
 }
-function encodeSwapExactInSingle(poolKeyHex, zeroForOne, amountIn, amountOutMinimum, hookData = '') {
-  const hook = hookData.replace(/^0x/, '');
-  return poolKeyHex + argUint(zeroForOne ? 1 : 0) + argUint(amountIn) + argUint(amountOutMinimum) + encodeBytes(hook);
-}
-function encodeSettleAll(currency, maxAmount) {
-  return argAddr(currency) + argUint(maxAmount);
-}
-function encodeTakeAll(currency, minAmount) {
-  return argAddr(currency) + argUint(minAmount);
+function toInt256(n) {
+  const tc = n < 0n ? (1n << 256n) + n : n;
+  return tc.toString(16).padStart(64, '0');
 }
 
 // ---------------------------------------------------------------------------
@@ -75,9 +69,6 @@ function encodeTakeAll(currency, minAmount) {
 /**
  * Read Slot0 from StateView for the known pool.
  * Returns { sqrtPriceX96, tick, protocolFee, lpFee } or null on failure.
- *
- * Note: fee and tickSpacing are part of the PoolKey and are not in Slot0.
- * They must be confirmed separately (see DEFAULT_POOL_PARAMS below).
  */
 export async function readPoolSlot0(rpcUrl, fallbackRpcUrls = []) {
   const SEL_GET_SLOT0 = '0xdf90153a'; // getSlot0(bytes32)
@@ -135,7 +126,9 @@ export async function resolvePoolParams(_rpcUrl, _fallbacks = []) {
 
 /**
  * Build Universal Router execute calldata for exact-in ETH → DeepWood.
- * Uses DEEPWOOD_POOL for currency0/currency1/fee/tickSpacing/hooks.
+ *
+ * The V4_SWAP command (0x10) input is ABI-encoded as:
+ *   (bytes32 poolKey, int256 amount0Delta, int256 amount1Delta, bytes data)
  *
  * @param {bigint} ethInWei
  * @param {bigint} minDeepwood
@@ -149,28 +142,30 @@ export function buildURV4SwapEthToDeepwood(
   recipient,
   deadline = Math.floor(Date.now() / 1000) + 600,
 ) {
-  const poolKey = encodePoolKey(
-    DEEPWOOD_POOL.currency0,
-    DEEPWOOD_POOL.currency1,
-    DEEPWOOD_POOL.fee,
-    DEEPWOOD_POOL.tickSpacing,
-    DEEPWOOD_POOL.hooks,
-  );
+  // V4_POOL_KEY is the 32-byte pool ID (verified on-chain).
+  const poolKey = V4_POOL_KEY.slice(2);                        // 64 hex chars
+  // amount0Delta < 0: sending ETH (currency0) to the pool.
+  // amount1Delta > 0: minimum DeepWood (currency1) to receive — slippage floor.
+  const amount0Delta = toInt256(-ethInWei);                    // 64 hex chars
+  const amount1Delta = toInt256(minDeepwood);                  // 64 hex chars
 
-  const actions = packActions([SWAP_EXACT_IN_SINGLE, SETTLE_ALL, TAKE_ALL]);
-  const params = [
-    encodeSwapExactInSingle(poolKey, true, ethInWei, minDeepwood),
-    encodeSettleAll(ADDRESS_ZERO, ethInWei),
-    encodeTakeAll(V4_DEEPWOOD_TOKEN, minDeepwood),
-  ];
+  // ABI encode (bytes32, int256, int256, bytes) for V4_SWAP command input.
+  // Head: poolKey, amount0Delta, amount1Delta, offset_to_bytes_data.
+  // Tail: bytes length (0), bytes data (empty — no hook data).
+  const offsetToBytesData = 4 * 32;                            // 128 = 0x80
+  const swapInput =
+    poolKey +                                                  // word 0: bytes32 poolKey
+    amount0Delta +                                             // word 1: int256 amount0Delta
+    amount1Delta +                                             // word 2: int256 amount1Delta
+    offsetToBytesData.toString(16).padStart(64, '0') +         // word 3: offset to bytes data
+    '0'.repeat(64);                                            // tail: bytes length = 0
 
-  const unlockData = encodeBytes(actions) + encodeBytesArray(params);
-  const commands = packActions([V4_SWAP]);
-  const inputs = [unlockData];
+  const commands = encodeBytes('10');                          // V4_SWAP command byte
+  const inputs = encodeBytesArray([swapInput]);
 
   const selector = '0x3593564c';
-  const commandsEncoded = encodeBytes(commands);
-  const inputsEncoded = encodeBytesArray(inputs);
+  const commandsEncoded = commands;
+  const inputsEncoded = inputs;
   const commandsOffset = 32 * 3;
   const inputsOffset = commandsOffset + commandsEncoded.length / 2;
 
