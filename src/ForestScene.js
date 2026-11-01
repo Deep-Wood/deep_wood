@@ -1659,12 +1659,22 @@ export class ForestScene extends Phaser.Scene {
         optSwap.type = 'button';
         optSwap.textContent = 'Swap ETH → DeepWood';
         optSwap.title = 'Swap ETH for $DeepWood tokens via Uniswap V4';
-        optSwap.onclick = (e) => {
+        optSwap.onclick = async (e) => {
           e.stopPropagation(); closeBuyDropdown();
-          if (typeof window.openSwapDialog === 'function') {
+          // Wait up to ~5s for the deferred module to expose openSwapDialog.
+          // On reload the module may not have run yet; polling keeps the
+          // swap working instead of a dead-end "not ready" message.
+          let ready = typeof window.openSwapDialog === 'function';
+          let waited = 0;
+          while (!ready && waited < 5000) {
+            await new Promise(r => setTimeout(r, 100));
+            ready = typeof window.openSwapDialog === 'function';
+            waited += 100;
+          }
+          if (ready) {
             window.openSwapDialog();
           } else {
-            this.beltMsg('Swap not ready yet.', 'bad');
+            this.beltMsg('Swap dialog not loaded. Reload the page and try again.', 'bad');
           }
         };
         box.appendChild(optSwap);
