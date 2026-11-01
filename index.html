@@ -302,14 +302,32 @@
     // player clicks "Swap ETH → DeepWood" in the buy flow. Without this stub,
     // the scene can see `undefined` during the module's loading window and
     // show "Swap not ready yet." instead of opening the dialog.
+    //
+    // The stub survives the module's async load window: if clicked before
+    // __openSwapDialogImpl is set, it polls for up to 10s and calls it as soon
+    // as it appears. Errors are surfaced via beltMsg so the player isn't left
+    // wondering why nothing happened.
     (function() {
       var pending = false;
+      var timer = null;
       window.openSwapDialog = function() {
         if (typeof window.__openSwapDialogImpl === 'function') {
-          window.__openSwapDialogImpl();
+          try { window.__openSwapDialogImpl(); } catch (e) {
+            var m = document.getElementById('belt-msg');
+            if (m) { m.textContent = 'Swap failed to open: ' + String(e?.message || e); m.style.color = '#ff9d7a'; }
+          }
           pending = false;
         } else {
           pending = true;
+          if (!timer) {
+            timer = setInterval(function() {
+              if (typeof window.__openSwapDialogImpl === 'function') {
+                clearInterval(timer); timer = null;
+                if (pending) { window.openSwapDialog(); pending = false; }
+              }
+            }, 100);
+            setTimeout(function() { clearInterval(timer); timer = null; pending = false; }, 10000);
+          }
         }
       };
       window._openSwapDialogPending = function() { return pending; };
@@ -1278,23 +1296,22 @@
 
       function closeSwapDialog() { swapCard.classList.add('hidden'); swapErr.textContent = ''; swapEstimate.textContent = 'DeepWood out: —'; }
       function openSwapDialog() {
-        const st = getState();
-        swapEth.value = ''; swapEstimate.textContent = 'DeepWood out: —'; swapErr.textContent = '';
-        swapEth.disabled = false; swapExecute.disabled = false;
-        swapCard.classList.remove('hidden');
-        if (st.account && !st.rightChain) {
-          // Wrong chain: the balance the user sees (0 ETH) is on chain 1,
-          // while their funds live on 46630. Switch first, then the swap
-          // works. Open the switch dialog automatically so they don't have to
-          // hunt for it, and disable the swap form until the chain matches.
-          swapEth.disabled = true; swapExecute.disabled = true;
-          swapEstimate.textContent = 'Switch to Robinhood Testnet first — your ETH is on chain ' + st.chainId + '.';
-          openSwitchChainDialog();
-        } else {
-          // Right chain: refresh the live ETH balance so the "Not enough ETH"
-          // check uses the real number, not a stale 0 from before the switch.
-          swapEth.focus();
-          sync();
+        try {
+          const st = getState();
+          swapEth.value = ''; swapEstimate.textContent = 'DeepWood out: —'; swapErr.textContent = '';
+          swapEth.disabled = false; swapExecute.disabled = false;
+          swapCard.classList.remove('hidden');
+          if (st.account && !st.rightChain) {
+            swapEth.disabled = true; swapExecute.disabled = true;
+            swapEstimate.textContent = 'Switch to Robinhood Testnet first — your ETH is on chain ' + st.chainId + '.';
+            openSwitchChainDialog();
+          } else {
+            swapEth.focus();
+            sync();
+          }
+        } catch (err) {
+          var m = document.getElementById('belt-msg');
+          if (m) { m.textContent = 'Swap failed to open: ' + String(err?.message || err); m.className = 'belt-msg has-text bad'; }
         }
       }
 
