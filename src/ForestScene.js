@@ -1661,14 +1661,10 @@ export class ForestScene extends Phaser.Scene {
         optSwap.title = 'Swap ETH for $DeepWood tokens via Uniswap V4';
         optSwap.onclick = (e) => {
           e.stopPropagation(); closeBuyDropdown();
-          try {
-            if (typeof window.openSwapDialog === 'function') {
-              window.openSwapDialog();
-            } else {
-              this.beltMsg('Swap not ready yet.', 'bad');
-            }
-          } catch (err) {
-            this.beltMsg('Swap failed to open: ' + String(err?.message || err), 'bad');
+          if (typeof window.openSwapDialog === 'function') {
+            window.openSwapDialog();
+          } else {
+            this.beltMsg('Swap not ready yet.', 'bad');
           }
         };
         box.appendChild(optSwap);

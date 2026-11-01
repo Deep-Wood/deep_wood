@@ -296,44 +296,6 @@
       </div>
     </div>
 
-    <script>
-    // Swap dialog opener exposed before the deferred module script loads.
-    // ForestScene checks `typeof window.openSwapDialog === 'function'` when the
-    // player clicks "Swap ETH → DeepWood" in the buy flow. Without this stub,
-    // the scene can see `undefined` during the module's loading window and
-    // show "Swap not ready yet." instead of opening the dialog.
-    //
-    // The stub survives the module's async load window: if clicked before
-    // __openSwapDialogImpl is set, it polls for up to 10s and calls it as soon
-    // as it appears. Errors are surfaced via beltMsg so the player isn't left
-    // wondering why nothing happened.
-    (function() {
-      var pending = false;
-      var timer = null;
-      window.openSwapDialog = function() {
-        if (typeof window.__openSwapDialogImpl === 'function') {
-          try { window.__openSwapDialogImpl(); } catch (e) {
-            var m = document.getElementById('belt-msg');
-            if (m) { m.textContent = 'Swap failed to open: ' + String(e?.message || e); m.style.color = '#ff9d7a'; }
-          }
-          pending = false;
-        } else {
-          pending = true;
-          if (!timer) {
-            timer = setInterval(function() {
-              if (typeof window.__openSwapDialogImpl === 'function') {
-                clearInterval(timer); timer = null;
-                if (pending) { window.openSwapDialog(); pending = false; }
-              }
-            }, 100);
-            setTimeout(function() { clearInterval(timer); timer = null; pending = false; }, 10000);
-          }
-        }
-      };
-      window._openSwapDialogPending = function() { return pending; };
-    })();
-    </script>
-
     <div id="camp-card" class="camp-card hidden" role="dialog" aria-modal="true" aria-label="Camp: streak, daily quests, badges">
       <div class="redeem-head">
         <span class="redeem-title">Camp</span>
@@ -1296,31 +1258,22 @@
 
       function closeSwapDialog() { swapCard.classList.add('hidden'); swapErr.textContent = ''; swapEstimate.textContent = 'DeepWood out: —'; }
       function openSwapDialog() {
-        try {
-          const st = getState();
-          swapEth.value = ''; swapEstimate.textContent = 'DeepWood out: —'; swapErr.textContent = '';
-          swapEth.disabled = false; swapExecute.disabled = false;
-          swapCard.classList.remove('hidden');
-          if (st.account && !st.rightChain) {
-            swapEth.disabled = true; swapExecute.disabled = true;
-            swapEstimate.textContent = 'Switch to Robinhood Testnet first — your ETH is on chain ' + st.chainId + '.';
-            openSwitchChainDialog();
-          } else {
-            swapEth.focus();
-            sync();
-          }
-        } catch (err) {
-          var m = document.getElementById('belt-msg');
-          if (m) { m.textContent = 'Swap failed to open: ' + String(err?.message || err); m.className = 'belt-msg has-text bad'; }
+        const st = getState();
+        swapEth.value = ''; swapEstimate.textContent = 'DeepWood out: —'; swapErr.textContent = '';
+        swapEth.disabled = false; swapExecute.disabled = false;
+        swapCard.classList.remove('hidden');
+        if (st.account && !st.rightChain) {
+          swapEth.disabled = true; swapExecute.disabled = true;
+          swapEstimate.textContent = 'Switch to Robinhood Testnet first — your ETH is on chain ' + st.chainId + '.';
+          openSwitchChainDialog();
+        } else {
+          swapEth.focus();
+          sync();
         }
       }
 
       // Expose so ForestScene can open it from the buy flow.
-      window.__openSwapDialogImpl = openSwapDialog;
       window.openSwapDialog = openSwapDialog;
-      if (window._openSwapDialogPending && window._openSwapDialogPending()) {
-        openSwapDialog();
-      }
 
       // Re-evaluate the swap dialog whenever the wallet state changes (e.g. a
       // successful chain switch from the switch-dialog). This is what turns
