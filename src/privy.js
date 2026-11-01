@@ -57,6 +57,9 @@ async function initPrivy() {
     if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_PRIVY_CLIENT_ID) {
       config.clientId = import.meta.env.VITE_PRIVY_CLIENT_ID;
     }
+    // Auto-create embedded wallets for users who don't have one yet,
+    // so getEthereumProvider() always has a wallet to work with.
+    config.embeddedWallets = { ethereum: { createOnLogin: 'users-without-wallets' } };
     const client = new Privy(config);
     // Establishes the backend connection and restores any stored session.
     // This also fetches the app's supported chains from the Privy backend —
@@ -236,6 +239,10 @@ export async function loginPrivyWithCode(email, code) {
         const msg = String(createErr?.message || createErr);
         if (!msg.includes('already_exists')) throw createErr;
       }
+      // Re-fetch the user AFTER creation so wallet and entropy details are
+      // consistent with the newly created embedded wallet. Using a stale
+      // walletUser here causes getEthereumProvider to throw
+      // "Embedded wallet proxy not initialized".
       try {
         const { user: refreshed } = await client.user.get();
         if (refreshed) walletUser = refreshed;
@@ -249,6 +256,9 @@ export async function loginPrivyWithCode(email, code) {
     if (!wallet) {
       return { ok: false, code: 'no-wallet', reason: 'Privy did not return an embedded wallet' };
     }
+    // Re-resolve entropy details from the FINAL walletUser (post-create),
+    // not the pre-create snapshot. Stale entropy causes the same
+    // "proxy not initialized" error.
     let entropyId, entropyIdVerifier;
     try {
       const ent = getEntropyDetailsFromUser(walletUser);
@@ -261,14 +271,25 @@ export async function loginPrivyWithCode(email, code) {
       return { ok: false, code: 'entropy-error', reason: `Entropy resolution failed: ${String(entErr?.message || entErr)}` };
     }
     let provider;
-    try {
-      provider = await client.embeddedWallet.getEthereumProvider({
-        wallet,
-        entropyId,
-        entropyIdVerifier,
-      });
-    } catch (provErr) {
-      return { ok: false, code: 'provider-error', reason: `getEthereumProvider failed: ${String(provErr?.message || provErr)}` };
+    // Retry getEthereumProvider: the embedded-wallet proxy may need a moment
+    // to initialize after wallet creation. "Embedded wallet proxy not
+    // initialized" is the transient failure we retry on.
+    let lastProvErr = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        provider = await client.embeddedWallet.getEthereumProvider({
+          wallet,
+          entropyId,
+          entropyIdVerifier,
+        });
+        break;
+      } catch (provErr) {
+        lastProvErr = provErr;
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 500));
+      }
+    }
+    if (!provider) {
+      return { ok: false, code: 'provider-error', reason: `getEthereumProvider failed: ${String(lastProvErr?.message || lastProvErr)}` };
     }
     if (!provider || typeof provider.request !== 'function') {
       return { ok: false, code: 'no-provider', reason: 'Privy did not return a valid EIP-1193 provider' };
