@@ -46,7 +46,8 @@ function encodeBytes(hexData) {
 }
 function encodeBytesArray(items) {
   const offsets = [];
-  let cursor = 32 + items.length * 32;
+  // Offsets are relative to the word AFTER the array length word.
+  let cursor = items.length * 32;
   const dataParts = [];
   for (const item of items) {
     offsets.push(argUint(cursor));
@@ -127,12 +128,26 @@ export async function resolvePoolParams(_rpcUrl, _fallbacks = []) {
 /**
  * Build Universal Router execute calldata for exact-in ETH → DeepWood.
  *
- * The V4_SWAP command (0x10) input is ABI-encoded as:
- *   (bytes32 poolKey, int256 amount0Delta, int256 amount1Delta, bytes data)
+ * Verified byte-for-byte against successful on-chain UR txs (e.g.
+ * 0x5e7b0881feec65cbd905bca3d6645feaee0beb0e63444dd3de455e70e98f04b0) and
+ * confirmed with eth_call against the live pool:
+ *
+ *   execute(
+ *     commands = 0x10,                       // V4_SWAP only
+ *     inputs   = [ abi.encode(bytes actions=0x060c0f, bytes[] params) ],
+ *     deadline
+ *   )
+ *
+ * where params = [ swapParams, settleAll, takeAll ]:
+ *   swapParams  = dynamic tuple (PoolKey, bool zeroForOne, uint128 amountIn,
+ *                                uint128 amountOutMin, uint256 minHopPriceX36,
+ *                                bytes hookData) — Robinhood V4 extension field
+ *   settleAll   = (address currency0=ETH, uint256 amount)   // pays msg.value in
+ *   takeAll     = (address currency1=token, uint256 minOut) // receives token
  *
  * @param {bigint} ethInWei
  * @param {bigint} minDeepwood
- * @param {string} recipient
+ * @param {string} recipient (unused — TAKE_ALL sends to msg.sender)
  * @param {number} [deadline]
  * @returns {string} 0x-prefixed calldata
  */
@@ -142,36 +157,54 @@ export function buildURV4SwapEthToDeepwood(
   recipient,
   deadline = Math.floor(Date.now() / 1000) + 600,
 ) {
-  // V4_POOL_KEY is the 32-byte pool ID (verified on-chain).
-  const poolKey = V4_POOL_KEY.slice(2);                        // 64 hex chars
-  // amount0Delta < 0: sending ETH (currency0) to the pool.
-  // amount1Delta > 0: minimum DeepWood (currency1) to receive — slippage floor.
-  const amount0Delta = toInt256(-ethInWei);                    // 64 hex chars
-  const amount1Delta = toInt256(minDeepwood);                  // 64 hex chars
+  void recipient;
+  const p = DEEPWOOD_POOL;
 
-  // ABI encode (bytes32, int256, int256, bytes) for V4_SWAP command input.
-  // Head: poolKey, amount0Delta, amount1Delta, offset_to_bytes_data.
-  // Tail: bytes length (0), bytes data (empty — no hook data).
-  const offsetToBytesData = 4 * 32;                            // 128 = 0x80
-  const swapInput =
-    poolKey +                                                  // word 0: bytes32 poolKey
-    amount0Delta +                                             // word 1: int256 amount0Delta
-    amount1Delta +                                             // word 2: int256 amount1Delta
-    offsetToBytesData.toString(16).padStart(64, '0') +         // word 3: offset to bytes data
-    '0'.repeat(64);                                            // tail: bytes length = 0
+  // --- swapParams: dynamic tuple with 0x20 offset pointer ---------------
+  // tuple head (10 words): poolKey(5) + zeroForOne + amountIn + amountOutMin
+  //                       + minHopPriceX36 + hookDataOffset
+  const hookData = ''; // empty — the game hook accepts plain swaps
+  const hookDataOffset = 10 * 32; // 0x140 — right after the 10-word head
+  const swapParams =
+    argUint(0x20) +                       // offset to tuple content
+    argAddr(p.currency0) +                // tuple: currency0 (ETH = 0x0)
+    argAddr(p.currency1) +                // tuple: currency1 (DeepWood)
+    argUint(p.fee) +                      // tuple: fee
+    argUint(p.tickSpacing) +              // tuple: tickSpacing (int24, positive)
+    argAddr(p.hooks) +                    // tuple: hooks
+    argUint(1) +                          // zeroForOne = true (ETH -> token)
+    argUint(ethInWei) +                   // amountIn (uint128)
+    argUint(minDeepwood) +                // amountOutMinimum (uint128)
+    argUint(0) +                          // minHopPriceX36 = 0 (no hop constraint)
+    argUint(hookDataOffset) +             // offset to hookData within tuple
+    argUint(hookData.length / 2);         // hookData length = 0
 
-  const commandsBytes32 = '10'.padStart(64, '0'); // V4_SWAP command byte as bytes32
-  const headSize = 96; // 3 words * 32 bytes: commands + inputs offset + deadline
-  const inputsOffset = headSize; // tail starts right after head
+  // --- settleAll / takeAll: static (address, uint256) pairs -------------
+  const settleAll = argAddr(p.currency0) + argUint(ethInWei);
+  const takeAll = argAddr(p.currency1) + argUint(minDeepwood);
 
-  const inputs = encodeBytesArray([swapInput]);
+  // --- V4_SWAP input: abi.encode(bytes actions, bytes[] params) ---------
+  const actions = '060c0f'; // SWAP_EXACT_IN_SINGLE, SETTLE_ALL, TAKE_ALL
+  const encActions = encodeBytes(actions);
+  const encParams = encodeBytesArray([swapParams, settleAll, takeAll]);
+  const actionsOffset = 2 * 32;                    // 0x40
+  const paramsOffset = actionsOffset + encActions.length / 2; // 0x80
+  const v4swapInput =
+    argUint(actionsOffset) + argUint(paramsOffset) + encActions + encParams;
 
-  const selector = '0x3593564c';
+  // --- execute(bytes commands, bytes[] inputs, uint256 deadline) --------
+  const commands = '10'; // V4_SWAP
+  const encCommands = encodeBytes(commands);
+  const encInputs = encodeBytesArray([v4swapInput]);
+  const commandsOffset = 3 * 32;                   // 0x60
+  const inputsOffset = commandsOffset + encCommands.length / 2;
+
   return (
-    selector +
-    commandsBytes32 +
+    '0x3593564c' +
+    argUint(commandsOffset) +
     argUint(inputsOffset) +
     argUint(deadline) +
-    inputs
+    encCommands +
+    encInputs
   );
 }
