@@ -160,21 +160,18 @@ export function buildURV4SwapEthToDeepwood(
     offsetToBytesData.toString(16).padStart(64, '0') +         // word 3: offset to bytes data
     '0'.repeat(64);                                            // tail: bytes length = 0
 
-  const commands = encodeBytes('10');                          // V4_SWAP command byte
+  const commandsBytes32 = '10'.padStart(64, '0'); // V4_SWAP command byte as bytes32
+  const headSize = 96; // 3 words * 32 bytes: commands + inputs offset + deadline
+  const inputsOffset = headSize; // tail starts right after head
+
   const inputs = encodeBytesArray([swapInput]);
 
   const selector = '0x3593564c';
-  const commandsEncoded = commands;
-  const inputsEncoded = inputs;
-  const commandsOffset = 32 * 3;
-  const inputsOffset = commandsOffset + commandsEncoded.length / 2;
-
   return (
     selector +
-    argUint(commandsOffset) +
+    commandsBytes32 +
     argUint(inputsOffset) +
     argUint(deadline) +
-    commandsEncoded +
-    inputsEncoded
+    inputs
   );
 }
