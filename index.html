@@ -246,7 +246,7 @@
     <!-- CAMP CARD: streak, daily quests, badges -- all derived from
          on-chain deltas (huntIndex / gemsOf / playerStats) so nothing here
          can be faked from storage. Opened by the Camp chip in the HUD. -->
-    <!-- Privy email login (wallet menu -> "Connect with Privy"). Two steps:
+    <!-- Privy email login (wallet menu -> "Email Login"). Two steps:
          email address, then the 6-digit code Privy sends. Same panel
          language as the Camp card; the secure iframe is invisible. -->
     <div id="privy-card" class="camp-card hidden" role="dialog" aria-modal="true" aria-label="Sign in with email">
@@ -1052,8 +1052,8 @@
         // The bottom section flips with the session.
         (s.connected
           ? '<button class="wm-item wm-disconnect" type="button">Disconnect</button>'
-          : '<button class="wm-item wm-connect" type="button">Connect wallet (EIP-1193)</button>' +
-            '<button class="wm-item wm-privy" type="button">Connect with Privy (email/social)</button>');
+          : '<button class="wm-item wm-connect" type="button">Connect Wallet</button>' +
+            '<button class="wm-item wm-privy" type="button">Email Login</button>');
       // Append the menu to the button and DO NOT touch its position.
       //
       // The button is already `position: absolute` (top-right corner, from
