@@ -1734,9 +1734,11 @@ button.chip { position: relative; }
   height: 14px;
   filter: drop-shadow(0 1px 0 rgba(0,0,0,.25));
 }
+/* Skill portrait shares the tool's 14x14 box; object-fit: cover crops the
+   portrait inside the square instead of shrinking the whole icon. */
 .gs-skillline .gs-avatar {
-  width: 12px;
-  height: 20px;   /* stretched vertically so the character isn't stunted */
+  width: 14px;
+  height: 14px;
 }
 .gs-avatar img,
 .gs-avatar svg { width: 100%; height: 100%; display: block; object-fit: cover; }
