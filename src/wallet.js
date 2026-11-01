@@ -918,6 +918,24 @@ export async function sendTo(to, data, { valueWei, gasLimit } = {}) {
 }
 
 /**
+ * Estimate gas for a would-be transaction via eth_estimateGas, with a 25%
+ * buffer. Never hardcode a gas limit for contract calls: the V4 swap needs
+ * ~285k gas and a hardcoded 200k silently OOG-reverted every swap
+ * (tx 0xd73295e7...). Returns { ok, gas } / { ok: false, reason }.
+ */
+export async function estimateTxGas(to, data, { valueWei } = {}) {
+  const tx = { from: state.account, to, data: data.startsWith("0x") ? data : "0x" + data };
+  if (valueWei !== undefined) tx.value = toQuantity(valueWei);
+  try {
+    const est = await getProvider().request({ method: "eth_estimateGas", params: [tx] });
+    const gas = (BigInt(est) * 125n) / 100n;
+    return { ok: true, gas };
+  } catch (e) {
+    return { ok: false, reason: String(e?.message || e) };
+  }
+}
+
+/**
  * Buy the ONE tool, or upgrade it to the next tier. Costs DEEPWOOD tokens.
  *
  * V6: buyTool(uint8,uint256) is NOT payable. It pulls DEEPWOOD via

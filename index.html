@@ -1486,7 +1486,7 @@
       }
 
       closeSwapDialog();
-      const { sendTo } = await import('/src/wallet.js');
+      const { sendTo, estimateTxGas } = await import('/src/wallet.js');
       const { poolSlot0, deepwoodOutFor, V4_POOL_KEY } = await import('/src/chain.js');
       const { config } = await import('/src/config.js');
 
@@ -1503,12 +1503,13 @@
       const data = buildURV4SwapEthToDeepwood(ethWei, minDeepwood, st.account);
       btn.disabled = true;
       try {
-        // Fixed gas limit (200k) so Privy doesn't overestimate gas for the
-        // Universal Router call it can't simulate. Without this, Privy's
-        // estimate can push gas * price + value over the account balance and
-        // the wallet rejects with "insufficient funds" before ever showing a
-        // confirmation popup.
-        const r = await sendTo(V4_UNIVERSAL_ROUTER, data, { valueWei: ethWei, gasLimit: 200000 });
+        // Estimate gas via eth_estimateGas (+25% buffer). A hardcoded limit
+        // OOG-reverted every swap: the real cost is ~285k, the old fixed 200k
+        // died at the gas cap (tx 0xd73295e7...). Fallback 400k if the wallet
+        // provider cannot estimate (Privy forwards estimateGas to the RPC).
+        const est = await estimateTxGas(V4_UNIVERSAL_ROUTER, data, { valueWei: ethWei });
+        const gasLimit = est.ok ? Number(est.gas) : 400000;
+        const r = await sendTo(V4_UNIVERSAL_ROUTER, data, { valueWei: ethWei, gasLimit });
         if (r.ok) {
           setPending('Swap submitted: ' + r.hash.slice(0, 10) + '…');
           render();
