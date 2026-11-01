@@ -391,12 +391,36 @@ export async function restorePrivyProvider() {
       wallet = null;
     }
     if (!wallet) return null;
-    const { entropyId, entropyIdVerifier } = getEntropyDetailsFromUser(user);
-    const provider = await client.embeddedWallet.getEthereumProvider({
-      wallet,
-      entropyId,
-      entropyIdVerifier,
-    });
+    // Entropy details can throw on a freshly linked user; guard it.
+    let entropyId, entropyIdVerifier;
+    try {
+      const ent = getEntropyDetailsFromUser(user);
+      if (!ent) return null;
+      entropyId = ent.entropyId;
+      entropyIdVerifier = ent.entropyIdVerifier;
+    } catch {
+      return null;
+    }
+    // Retry getEthereumProvider: the embedded-wallet proxy may need a moment
+    // to initialize. "Embedded wallet proxy not initialized" is transient.
+    let provider, lastProvErr = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        provider = await client.embeddedWallet.getEthereumProvider({
+          wallet,
+          entropyId,
+          entropyIdVerifier,
+        });
+        break;
+      } catch (provErr) {
+        lastProvErr = provErr;
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 500));
+      }
+    }
+    if (!provider) {
+      console.error('[Privy] restore failed: getEthereumProvider', lastProvErr);
+      return null;
+    }
     if (!provider || typeof provider.request !== 'function') return null;
     const accounts = await provider.request({ method: 'eth_accounts' });
     if (!Array.isArray(accounts) || accounts.length === 0) return null;
@@ -407,7 +431,8 @@ export async function restorePrivyProvider() {
     privyEntropy = { entropyId, entropyIdVerifier };
 
     return { provider, account: accounts[0], email: user.email?.address || null };
-  } catch {
+  } catch (err) {
+    console.error('[Privy] restorePrivyProvider failed:', err?.message || err);
     return null;
   }
 }
