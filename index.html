@@ -844,7 +844,7 @@
     import { TIER_NAME, SKILL_NAME } from '/src/economy.js';
     import { chosenSkin } from '/src/engagement.js';
     import { walletBalanceWeiOnchain, onchainActive } from '/src/onchain.js';
-    import { V4_POOL_MANAGER } from '/src/chain.js';
+    import { V4_UNIVERSAL_ROUTER, buildURV4SwapEthToDeepwood, resolvePoolParams } from '/src/v4swap.js';
     import { showConnectedToast } from '/src/toasts.js';
     // Expose to the plain-script block (renderHunterStrip) that predates modules.
     window.TIER_NAME = TIER_NAME;
@@ -1353,17 +1353,29 @@
         }
 
         closeSwapDialog();
-        const { buildV4SwapExactIn } = await import('/src/chain.js');
         const { sendTo } = await import('/src/wallet.js');
-        const data = buildV4SwapExactIn(ethWei, st.account);
+        const { poolSlot0, deepwoodOutFor, V4_POOL_KEY } = await import('/src/chain.js');
+        const { config } = await import('/src/config.js');
+
+        // Spot-price estimate for slippage protection (minOut).
+        let minDeepwood = 0n;
+        try {
+          const s = await poolSlot0(config.rpcUrl, config.fallbackRpcUrls, V4_POOL_KEY);
+          const est = deepwoodOutFor(ethWei, s);
+          // 50% slippage buffer on testnet thin pools.
+          minDeepwood = est * 50n / 100n;
+        } catch { /* minDeepwood stays 0 */ }
+
+        const poolParams = await resolvePoolParams(config.rpcUrl, config.fallbackRpcUrls);
+        const data = buildURV4SwapEthToDeepwood(ethWei, minDeepwood, st.account, undefined, poolParams);
         btn.disabled = true;
         try {
           // Fixed gas limit (200k) so Privy doesn't overestimate gas for the
-          // PoolManager.swap call it can't simulate. Without this, Privy's
+          // Universal Router call it can't simulate. Without this, Privy's
           // estimate can push gas * price + value over the account balance and
           // the wallet rejects with "insufficient funds" before ever showing a
           // confirmation popup.
-          const r = await sendTo(V4_POOL_MANAGER, data, { valueWei: ethWei, gasLimit: 200000 });
+          const r = await sendTo(V4_UNIVERSAL_ROUTER, data, { valueWei: ethWei, gasLimit: 200000 });
           if (r.ok) {
             setPending('Swap submitted: ' + r.hash.slice(0, 10) + '…');
             render();
