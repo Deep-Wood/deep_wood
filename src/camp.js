@@ -47,7 +47,8 @@ export function createCamp({ readEngagement, readBadges, onOpen }) {
   const elDescendPreview = q('camp-descend-preview');
 
   function render() {
-    const { streak, quests, deltas } = readEngagement() ?? {};
+    const eng = readEngagement() ?? {};
+    const { streak, quests, deltas } = eng;
     if (streak == null) return;
 
     const tier = streakTier(streak);
