@@ -83,7 +83,7 @@
        opinion about the splash at all. -->
   <script>
     (function () {
-      var MIN_SHOW_MS = 1500;   // once decoded, stay up this long
+      var MIN_SHOW_MS = 800;   // once decoded, stay up this long
       var CEILING_MS  = 5000;   // absolute, from this script running
 
       var boot = document.getElementById('boot');
@@ -830,7 +830,15 @@
     // the client -- every write is handed to the wallet, which prompts the
     // user. See src/wallet.js.
     import { connect, disconnect, switchToGameChain, getState, onWallet, GAME_CHAIN_ID, setChainBalanceWei } from '/src/wallet.js';
-    import { sendPrivyEmailCode, loginPrivyWithCode, disconnectPrivy, restorePrivyProvider, reinitialize, getStoredPrivyProvider, switchChain } from '/src/privy.js';
+    // Privy SDK is code-split: only loaded when the Privy dialog is actually
+    // opened (email send / OTP verify / disconnect). Keeps the cold-start
+    // bundle small for players who connect with a non-Privy wallet or never
+    // open the email-login flow.
+    let privyMod = null;
+    async function privy() {
+      if (!privyMod) privyMod = await import('/src/privy.js');
+      return privyMod;
+    }
     import { TIER_NAME, SKILL_NAME } from '/src/economy.js';
     import { chosenSkin } from '/src/engagement.js';
     import { walletBalanceWeiOnchain, onchainActive } from '/src/onchain.js';
@@ -1158,7 +1166,7 @@
           if (!r.ok) setPending('Disconnect failed: ' + (r.reason || 'unknown'));
           else if (r.revoked === false) setPending('Disconnected. The wallet may still remember this site -- clear it there too if you want a fresh prompt.');
           render();
-          disconnectPrivy();
+          await (await privy()).disconnectPrivy();
         });
       });
 
@@ -1413,7 +1421,7 @@
         const email = privyEmail.value.trim();
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { privyError('Enter a valid email address.'); return; }
         privySend.disabled = true; privyError('Sending code…');
-        const r = await sendPrivyEmailCode(email);
+        const r = await (await privy()).sendPrivyEmailCode(email);
         privySend.disabled = false;
         if (!r.ok) {
           privyError(r.reason || 'Could not send the code.');
@@ -1432,7 +1440,7 @@
         const code = privyCode.value.trim();
         if (!/^\d{6}$/.test(code)) { privyError('Enter the 6-digit code from the email.'); return; }
         privyVerify.disabled = true; privyError('Signing you in…');
-        const r = await loginPrivyWithCode(privyAddress, code);
+        const r = await (await privy()).loginPrivyWithCode(privyAddress, code);
         privyVerify.disabled = false;
         if (!r.ok) {
           privyError(r.reason || 'Login failed.');
@@ -1447,18 +1455,18 @@
         let provider = r.provider;
         if (r.switchChainError) {
           privyError('Switching to Robinhood Testnet…');
-          const ri = await reinitialize();
+          const ri = await (await privy()).reinitialize();
           if (!ri) {
             privyError('Could not re-initialize Privy. Check your App ID.');
             return;
           }
-          const restored = await restorePrivyProvider();
+          const restored = await (await privy()).restorePrivyProvider();
           if (!restored) {
             privyError('Could not restore the wallet session. Log in again.');
             return;
           }
           provider = restored.provider;
-          const sw = await switchChain(46630);
+          const sw = await (await privy()).switchChain(46630);
           if (!sw.ok) {
             privyError('Chain switch failed: ' + sw.reason + '. Make sure 46630 is in your Privy dashboard supported chains.');
             return;
@@ -1533,9 +1541,9 @@
     //
     // Deferred with setTimeout so Privy SDK initialization (client.init +
     // secure-context iframe) doesn't compete with the initial page load.
-    setTimeout(() => {
-      Promise.resolve()
-        .then(restorePrivyProvider)
+    setTimeout(async () => {
+      const pm = await privy();
+      pm.restorePrivyProvider()
         .then((r) => r ? connect({ provider: r.provider }) : null)
         .then((r) => { if (r && r.ok) render(); })
         .catch(() => {});
