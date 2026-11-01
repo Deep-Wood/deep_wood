@@ -844,7 +844,7 @@
     import { TIER_NAME, SKILL_NAME } from '/src/economy.js';
     import { chosenSkin } from '/src/engagement.js';
     import { walletBalanceWeiOnchain, onchainActive } from '/src/onchain.js';
-    import { V4_UNIVERSAL_ROUTER, buildURV4SwapEthToDeepwood, resolvePoolParams } from '/src/v4swap.js';
+    import { V4_UNIVERSAL_ROUTER, buildURV4SwapEthToDeepwood } from '/src/v4swap.js';
     import { showConnectedToast } from '/src/toasts.js';
     // Expose to the plain-script block (renderHunterStrip) that predates modules.
     window.TIER_NAME = TIER_NAME;
@@ -1366,8 +1366,8 @@
           minDeepwood = est * 50n / 100n;
         } catch { /* minDeepwood stays 0 */ }
 
-        const poolParams = await resolvePoolParams(config.rpcUrl, config.fallbackRpcUrls);
-        const data = buildURV4SwapEthToDeepwood(ethWei, minDeepwood, st.account, undefined, poolParams);
+        // Pool params come from DEEPWOOD_POOL (verified hooks/fee/tickSpacing).
+        const data = buildURV4SwapEthToDeepwood(ethWei, minDeepwood, st.account);
         btn.disabled = true;
         try {
           // Fixed gas limit (200k) so Privy doesn't overestimate gas for the

@@ -7,6 +7,13 @@ import { V4_DEEPWOOD_TOKEN, V4_POOL_KEY, V4_POOL_MANAGER, argAddr, argUint } fro
 
 export const V4_UNIVERSAL_ROUTER = '0x8876789976decbfcbbbe364623c63652db8c0904';
 export const V4_STATE_VIEW      = '0xf3334192d15450cdd385c8b70e03f9a6bd9e673b';
+export const DEEPWOOD_POOL = {
+  currency0: '0x0000000000000000000000000000000000000000',
+  currency1: '0xF049d0076c2f25A763551beD760aB55e905ea831',
+  fee: 0,
+  tickSpacing: 60,
+  hooks: '0xa5e27e3e54739162fe52c2c48e55b6dd6572e8ec',
+};
 
 // v4-periphery Actions.sol
 const SWAP_EXACT_IN_SINGLE = 0x06;
@@ -101,11 +108,7 @@ export async function readPoolSlot0(rpcUrl, fallbackRpcUrls = []) {
   return null;
 }
 
-/**
- * Documented defaults for the ETH/DeepWood pool.
- * Confirm these against the pool initialization event or a StateView helper
- * before relying on them in production.
- */
+/** Unused now that DEEPWOOD_POOL carries the verified pool key params. Kept for reference only. */
 export const DEFAULT_POOL_PARAMS = {
   fee: 0,
   tickSpacing: 60,
@@ -113,13 +116,16 @@ export const DEFAULT_POOL_PARAMS = {
 };
 
 /**
- * Resolve pool params. Currently returns the documented defaults.
- * Extend this to parse an Initialize event or a dedicated getter if one exists.
+ * Resolve pool params. Returns the verified DEEPWOOD_POOL params.
+ * Slot0 does not contain fee/tickSpacing/hooks, so those are hardcoded here
+ * from the live pool's Initialize event.
  */
 export async function resolvePoolParams(_rpcUrl, _fallbacks = []) {
-  // Slot0 is useful for pricing but does not contain fee or tick spacing.
-  // For now we return the verified defaults; swap them out if the pool differs.
-  return DEFAULT_POOL_PARAMS;
+  return {
+    fee: DEEPWOOD_POOL.fee,
+    tickSpacing: DEEPWOOD_POOL.tickSpacing,
+    hooks: DEEPWOOD_POOL.hooks,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -128,12 +134,12 @@ export async function resolvePoolParams(_rpcUrl, _fallbacks = []) {
 
 /**
  * Build Universal Router execute calldata for exact-in ETH → DeepWood.
+ * Uses DEEPWOOD_POOL for currency0/currency1/fee/tickSpacing/hooks.
  *
  * @param {bigint} ethInWei
  * @param {bigint} minDeepwood
  * @param {string} recipient
  * @param {number} [deadline]
- * @param {{fee:number,tickSpacing:number,hooks:string}} [poolParams]
  * @returns {string} 0x-prefixed calldata
  */
 export function buildURV4SwapEthToDeepwood(
@@ -141,14 +147,13 @@ export function buildURV4SwapEthToDeepwood(
   minDeepwood,
   recipient,
   deadline = Math.floor(Date.now() / 1000) + 600,
-  poolParams = DEFAULT_POOL_PARAMS,
 ) {
   const poolKey = encodePoolKey(
-    ADDRESS_ZERO,
-    V4_DEEPWOOD_TOKEN,
-    poolParams.fee,
-    poolParams.tickSpacing,
-    poolParams.hooks,
+    DEEPWOOD_POOL.currency0,
+    DEEPWOOD_POOL.currency1,
+    DEEPWOOD_POOL.fee,
+    DEEPWOOD_POOL.tickSpacing,
+    DEEPWOOD_POOL.hooks,
   );
 
   const actions = packActions([SWAP_EXACT_IN_SINGLE, SETTLE_ALL, TAKE_ALL]);
