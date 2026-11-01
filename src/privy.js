@@ -16,6 +16,25 @@ import Privy, {
   getUserEmbeddedEthereumWallet,
   getEntropyDetailsFromUser,
 } from '@privy-io/js-sdk-core';
+import { defineChain } from 'viem';
+
+// Client-side chain definition so the EmbeddedWalletProvider knows about
+// 46630 even before/without a dashboard sync. Still add the same chain in
+// the Privy dashboard (custom network) for full compatibility.
+export const robinhoodTestnet = defineChain({
+  id: 46630,
+  name: 'Robinhood Chain Testnet',
+  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+  rpcUrls: {
+    default: { http: ['https://rpc.testnet.chain.robinhood.com'] },
+  },
+  blockExplorers: {
+    default: { name: 'Explorer', url: 'https://explorer.testnet.chain.robinhood.com' },
+  },
+  testnet: true,
+});
+
+const GAME_CHAIN_ID = 46630;
 
 let privy = null;        // single client instance (SDK requirement)
 let initPromise = null;   // in-flight initialize()
@@ -53,7 +72,13 @@ async function initPrivy() {
   }
 
   initPromise = (async () => {
-    const config = { appId, storage: new LocalStorage() };
+    const config = {
+      appId,
+      storage: new LocalStorage(),
+      // Critical: give the embedded wallet provider the chain definition
+      // so wallet_switchEthereumChain(46630) does not fail with 4901.
+      supportedChains: [robinhoodTestnet],
+    };
     if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_PRIVY_CLIENT_ID) {
       config.clientId = import.meta.env.VITE_PRIVY_CLIENT_ID;
     }
@@ -117,7 +142,19 @@ export async function switchChain(chainId) {
   const target = "0x" + Number(chainId).toString(16);
   try {
     await p.request({ method: "wallet_switchEthereumChain", params: [{ chainId: target }] });
-    return { ok: true, chainId };
+
+    // Verify the provider actually updated its internal chain
+    const currentHex = await p.request({ method: "eth_chainId" });
+    const current = Number(BigInt(currentHex));
+    if (current !== Number(chainId)) {
+      return {
+        ok: false,
+        code: "switch-failed",
+        reason: `switch reported success but eth_chainId is still ${current}`,
+      };
+    }
+
+    return { ok: true, chainId: current };
   } catch (e) {
     const code = e?.code;
     // 4901 = "Unsupported chainId" from Privy's EmbeddedWalletProvider — the
@@ -320,8 +357,9 @@ export async function loginPrivyWithCode(email, code) {
     // the right chain instead of chain 1. If the chain isn't in Privy's
     // supported chains yet, we report chain-unknown and let the caller
     // re-initialize + retry.
-    if (Number(BigInt(chainIdHex)) !== 46630) {
-      const sw = await switchChain(46630);
+    const currentChain = Number(BigInt(chainIdHex));
+    if (currentChain !== GAME_CHAIN_ID) {
+      const sw = await switchChain(GAME_CHAIN_ID);
       if (!sw.ok) {
         // Return success for the login but flag the chain issue so the UI
         // can offer a re-init + retry path.
@@ -329,7 +367,7 @@ export async function loginPrivyWithCode(email, code) {
           ok: true,
           provider,
           account: accounts[0],
-          chainId: Number(BigInt(chainIdHex)),
+          chainId: currentChain,
           email: user.email?.address || null,
           switchChainError: sw.reason,
         };
@@ -340,7 +378,7 @@ export async function loginPrivyWithCode(email, code) {
       ok: true,
       provider,
       account: accounts[0],
-      chainId: 46630,
+      chainId: GAME_CHAIN_ID,
       email: user.email?.address || null,
     };
   } catch (err) {
@@ -430,7 +468,35 @@ export async function restorePrivyProvider() {
     privyWallet = wallet;
     privyEntropy = { entropyId, entropyIdVerifier };
 
-    return { provider, account: accounts[0], email: user.email?.address || null };
+    // Ensure we are on the game chain for returning users as well.
+    let chainIdHex;
+    try {
+      chainIdHex = await provider.request({ method: 'eth_chainId' });
+    } catch {
+      chainIdHex = null;
+    }
+    const currentChain = chainIdHex ? Number(BigInt(chainIdHex)) : null;
+    if (currentChain !== GAME_CHAIN_ID) {
+      const sw = await switchChain(GAME_CHAIN_ID);
+      if (!sw.ok) {
+        console.warn('[Privy] restore: chain switch failed', sw.reason);
+        // Still return the provider so the caller can decide what to do
+        return {
+          provider,
+          account: accounts[0],
+          email: user.email?.address || null,
+          chainId: currentChain,
+          switchChainError: sw.reason,
+        };
+      }
+    }
+
+    return {
+      provider,
+      account: accounts[0],
+      email: user.email?.address || null,
+      chainId: GAME_CHAIN_ID,
+    };
   } catch (err) {
     console.error('[Privy] restorePrivyProvider failed:', err?.message || err);
     return null;

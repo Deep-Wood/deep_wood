@@ -1468,7 +1468,7 @@
           provider = restored.provider;
           const sw = await (await privy()).switchChain(46630);
           if (!sw.ok) {
-            privyError('Chain switch failed: ' + sw.reason + '. Make sure 46630 is in your Privy dashboard supported chains.');
+            privyError('Chain switch failed: ' + sw.reason + '. Make sure 46630 is in your Privy dashboard supported chains and that supportedChains is passed to the client.');
             return;
           }
         }
@@ -1544,7 +1544,11 @@
     setTimeout(async () => {
       const pm = await privy();
       pm.restorePrivyProvider()
-        .then((r) => r ? connect({ provider: r.provider }) : null)
+        .then((r) => {
+          if (!r) return null;
+          // restorePrivyProvider now attempts the switch itself
+          return connect({ provider: r.provider });
+        })
         .then((r) => { if (r && r.ok) render(); })
         .catch(() => {});
     }, 0);
