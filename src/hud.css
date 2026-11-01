@@ -1730,15 +1730,15 @@ button.chip { position: relative; }
 }
 .gs-avatar {
   display: inline-flex;
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   filter: drop-shadow(0 1px 0 rgba(0,0,0,.25));
 }
-/* Skill portrait gets the same 22x22 box as the tool avatar; object-fit: cover
+/* Skill portrait gets the same 26x26 box as the tool avatar; object-fit: cover
    fills the square without distorting or shrinking the portrait. */
 .gs-skillline .gs-avatar {
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
 }
 .gs-avatar img,
 .gs-avatar svg { width: 100%; height: 100%; display: block; object-fit: cover; }
