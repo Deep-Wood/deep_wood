@@ -296,6 +296,26 @@
       </div>
     </div>
 
+    <script>
+    // Swap dialog opener exposed before the deferred module script loads.
+    // ForestScene checks `typeof window.openSwapDialog === 'function'` when the
+    // player clicks "Swap ETH → DeepWood" in the buy flow. Without this stub,
+    // the scene can see `undefined` during the module's loading window and
+    // show "Swap not ready yet." instead of opening the dialog.
+    (function() {
+      var pending = false;
+      window.openSwapDialog = function() {
+        if (typeof window.__openSwapDialogImpl === 'function') {
+          window.__openSwapDialogImpl();
+          pending = false;
+        } else {
+          pending = true;
+        }
+      };
+      window._openSwapDialogPending = function() { return pending; };
+    })();
+    </script>
+
     <div id="camp-card" class="camp-card hidden" role="dialog" aria-modal="true" aria-label="Camp: streak, daily quests, badges">
       <div class="redeem-head">
         <span class="redeem-title">Camp</span>
@@ -1279,7 +1299,11 @@
       }
 
       // Expose so ForestScene can open it from the buy flow.
+      window.__openSwapDialogImpl = openSwapDialog;
       window.openSwapDialog = openSwapDialog;
+      if (window._openSwapDialogPending && window._openSwapDialogPending()) {
+        openSwapDialog();
+      }
 
       // Re-evaluate the swap dialog whenever the wallet state changes (e.g. a
       // successful chain switch from the switch-dialog). This is what turns
