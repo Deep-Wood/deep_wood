@@ -8,6 +8,7 @@ import {
   STREAK_TIERS, streakTier, nextTierAt, BADGES, SKINS, chooseSkin,
 } from './engagement.js';
 import { toolAvatarSkinned } from './economy.js';
+import { haptic } from './toasts.js';
 
 const GEM_COLORS = ['#cfd6dd', '#d9a441', '#3a6fd8', '#d83a5a', '#8a3ad8'];
 const GEM_NAMES = ['Quartz', 'Amber', 'Sapphire', 'Ruby', 'Diamond'];
@@ -43,6 +44,7 @@ export function createCamp({ readEngagement, readBadges, onOpen }) {
   const elBadgeCount = q('camp-badge-count');
   const elSkins = q('camp-skins');
   const elClose = q('camp-close');
+  const elDescendPreview = q('camp-descend-preview');
 
   function render() {
     const { streak, quests, deltas } = readEngagement() ?? {};
@@ -82,6 +84,15 @@ export function createCamp({ readEngagement, readBadges, onOpen }) {
       </div>`;
     }).join('');
     elBadgeCount.textContent = `${unlocked.length}/${BADGES.length}`;
+    // Descend preview: client estimate of the next Descend's find-weight bonus.
+    const leq = eng.leq ?? 0;
+    const bps = Math.min(30000, 10000 + 2500 * Math.sqrt(leq));
+    const pct = ((bps - 10000) / 100).toFixed(0);
+    if (elDescendPreview) {
+      elDescendPreview.textContent = leq > 0
+        ? `You have ${leq} leq — next Descend would give ~+${pct}% find weight.`
+        : 'Find a legendary gem to unlock Descend.';
+    }
     void deltas;
   }
 
@@ -185,8 +196,10 @@ export function celebrateLuckyStrike(haul) {
     <div class="strike-sub">the vein splits and the rock sings</div>
   </div>`;
   overlay.classList.remove('hidden');
-  const kill = () => { overlay.classList.add('hidden'); overlay.innerHTML = ''; };
-  setTimeout(kill, 2600);
+  overlay.classList.add('flash');
+  haptic([30, 40, 30]);
+  const kill = () => { overlay.classList.add('hidden'); overlay.classList.remove('flash'); overlay.innerHTML = ''; };
+  setTimeout(kill, 2800);
   overlay.addEventListener('click', kill, { once: true });
   return rar;
 }
@@ -223,6 +236,13 @@ export function veinTease(rarity) {
     4: 'The next vein is unnaturally bright. A diamond sleeps there.',
   }[rarity];
   const hint = q('hint');
-  if (hint) { hint.textContent = line; hint.classList.add('gold'); setTimeout(() => hint.classList.remove('gold'), 6000); }
+  if (hint) {
+    hint.textContent = line;
+    hint.classList.add('gold', 'vein-pulse');
+    setTimeout(() => hint.classList.remove('gold', 'vein-pulse'), 6000);
+  }
+  document.getElementById('game')?.classList.add('vein-glow');
+  setTimeout(() => document.getElementById('game')?.classList.remove('vein-glow'), 5000);
+  haptic(20);
   return line;
 }

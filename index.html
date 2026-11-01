@@ -323,6 +323,7 @@
              (leq, current multiplier, what resets vs keeps). -->
         <div class="redeem-label">Descend <span class="camp-utc" id="descend-mult">--</span></div>
         <div class="camp-v10" id="camp-descend"></div>
+        <div id="camp-descend-preview" class="camp-note"></div>
 
         <!-- V10 research: luck. One perk, costs double per level. -->
         <div class="redeem-label">Research <span class="camp-utc" id="research-luck">--</span></div>
@@ -639,6 +640,7 @@
       + '<div class="gem-ic" id="gs-skill">'
       + '<span class="gs-label">Current<br>Skill:</span>'
       + '<span class="gc" id="gs-skill-name">--</span></div>'
+      + `<div class="gem-ic dig-streak-cell"><span id="dig-streak" class="dig-streak" title="Digs this session">0</span></div>`
       + `</div>`;
       // Deferred — module scripts set window.TIER_NAME / window.SKILL_NAME after
       // this plain-script block executes. Defers the first render until then.
@@ -843,6 +845,7 @@
     import { chosenSkin } from '/src/engagement.js';
     import { walletBalanceWeiOnchain, onchainActive } from '/src/onchain.js';
     import { V4_POOL_MANAGER } from '/src/chain.js';
+    import { showConnectedToast } from '/src/toasts.js';
     // Expose to the plain-script block (renderHunterStrip) that predates modules.
     window.TIER_NAME = TIER_NAME;
     window.SKILL_NAME = SKILL_NAME;
@@ -1496,6 +1499,13 @@
             setPending('Wallet connect failed: ' + walletResult.reason);
           }
           render();
+          if (walletResult.ok) {
+            // Post-login toast: account + balance + faucet link.
+            try {
+              const bal = await window.walletBalanceWeiOnchain?.();
+              showConnectedToast({ account: walletResult.account, ethBalance: bal, chainId: walletResult.chainId });
+            } catch { showConnectedToast({ account: walletResult.account, ethBalance: null, chainId: walletResult.chainId }); }
+          }
         } finally {
           btn.disabled = false;
         }

@@ -2096,3 +2096,49 @@ button.chip { position: relative; }
 }
 .migrate-chip:hover { background: rgba(123, 216, 138, 0.22); }
 .migrate-chip.hidden { display: none; }
+
+/* ---- client-side juice: dig streak counter ---- */
+.dig-streak {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 22px; height: 22px; padding: 0 6px;
+  background: rgba(0,0,0,.5); border-radius: 11px;
+  font-size: 12px; font-weight: 700; color: var(--gold);
+}
+.dig-streak.pulse { transform: scale(1.2); transition: transform .15s; }
+
+/* ---- Lucky Strike flash ---- */
+.strike-overlay.flash { animation: strikeFlash .4s ease-out; }
+@keyframes strikeFlash {
+  0% { background: rgba(255,220,100,.4); }
+  100% { background: transparent; }
+}
+
+/* ---- Vein tease pulse ---- */
+.vein-pulse { animation: veinPulse 1.2s ease-in-out infinite; }
+@keyframes veinPulse { 50% { text-shadow: 0 0 12px var(--gold); } }
+#game.vein-glow { filter: drop-shadow(0 0 8px rgba(217,164,65,.4)); }
+
+/* ---- Recovery card + Connected toast ---- */
+.recovery-card, .connected-toast {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  background: var(--panel-solid); border: 1px solid var(--edge);
+  border-radius: 12px; padding: 14px 18px; z-index: 100;
+  max-width: 90vw; text-align: center; box-shadow: var(--shadow);
+}
+.recovery-card button, .connected-toast a { margin-top: 8px; }
+
+.camp-note {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--muted, #8a9a88);
+  text-align: center;
+  line-height: 1.4;
+}
+
+/* ---- Mobile ---- */
+@media (max-width: 480px) {
+  #gemstrip { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .rail-action-item.order-buy, .rail-action-item.settle-right {
+    min-height: 48px; padding: 10px 16px;
+  }
+}

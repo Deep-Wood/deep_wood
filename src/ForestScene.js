@@ -11,6 +11,7 @@ import { buildAllTextures, PAL, rng } from './art.js';
 import { createAmbience } from './ambience.js';
 import { retireWalletFoot } from './hud-idle.js';
 import { config } from './config.js';
+import { bumpDigStreak, resetDigStreak, showSettleRecovery } from './toasts.js';
 
 // Bisect switch for the ambience layers. The 2bf3694 deploy added ~730 display
 // objects (205 canopy, 376 undergrowth, 152 shadows) and the character stopped
@@ -2924,6 +2925,7 @@ export class ForestScene extends Phaser.Scene {
     if (!r.ok) {
       this.beltMsg(r.reason || 'Settlement failed.', 'bad');
       this.flash(r.reason || 'Could not settle the batch.');
+      showSettleRecovery(r.reason || 'Settlement failed.');
       // A stale queue is the likeliest cause: the chain moved (another
       // device, a season flip). Re-sync so the next dig starts clean.
       await this.refreshChainTool();
@@ -2965,6 +2967,7 @@ export class ForestScene extends Phaser.Scene {
     // belt shows stale values until the next dig/buy/repair happens to trigger it.
     this.refreshBelt();
     this.updateHud();
+    resetDigStreak();
 
     // Engagement pack: celebrate rare finds, then re-derive streak/quests
     // from the moved huntIndex. The tease reads the NEXT dig's pre-roll --
@@ -4632,6 +4635,7 @@ export class ForestScene extends Phaser.Scene {
         return false;
       }
       this.queue.push(preview.counts, preview.bestSingleWei ?? 0n);
+      bumpDigStreak();
       // Night digs: mirror every queued hunt to storage the moment it is dug.
       // False = storage unavailable (private mode): the unload warning then
       // keeps its old "they are lost" teeth.
