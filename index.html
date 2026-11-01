@@ -1189,203 +1189,6 @@
         });
       });
 
-      // ---- Switch network popup (screen modal, replaces inline button) ----
-      const switchCard = document.getElementById('switch-chain-card');
-      const switchClose = document.getElementById('switch-chain-close');
-      const switchBtn = document.getElementById('switch-chain-btn');
-      const switchCurrent = document.getElementById('switch-chain-current');
-      const switchTarget = document.getElementById('switch-chain-target');
-      const switchErr = document.getElementById('switch-chain-err');
-
-      function openSwitchChainDialog() {
-        const st = getState();
-        if (!st.account || st.rightChain) return;
-        switchCurrent.textContent = st.chainId;
-        switchTarget.textContent = GAME_CHAIN_ID;
-        switchErr.textContent = '';
-        switchCard.classList.remove('hidden');
-      }
-
-      function closeSwitchChainDialog() {
-        switchCard.classList.add('hidden');
-      }
-
-      // Expose so ForestScene can open it from the buy flow when the wallet
-      // is on the wrong chain.
-      window.openSwitchChainDialog = openSwitchChainDialog;
-
-      // Open the popup when the wallet is on the wrong chain (after menu renders).
-      if (s.account && !s.rightChain) {
-        setTimeout(openSwitchChainDialog, 0);
-      }
-
-      switchClose.addEventListener('click', (e) => {
-        e.stopPropagation();
-        closeSwitchChainDialog();
-      });
-
-      switchBtn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        closeSwitchChainDialog();
-        btn.disabled = true;
-        const prevChain = getState().chainId;
-        let sw;
-        try {
-          sw = await switchToGameChain();
-        } catch (err) {
-          btn.disabled = false;
-          openSwitchChainDialog();
-          switchErr.textContent = 'Switch failed: ' + String(err?.message || err);
-          return;
-        }
-        btn.disabled = false;
-        if (sw.ok) {
-          setPending('Switched to Robinhood Testnet (' + GAME_CHAIN_ID + ').');
-          render();
-        } else {
-          openSwitchChainDialog();
-          switchErr.textContent = 'Switch failed: ' + switchReasonText(sw, prevChain);
-        }
-      });
-
-      // ---- Swap ETH → DeepWood dialog --------------------------------------
-      const swapCard = document.getElementById('swap-card');
-      const swapClose = document.getElementById('swap-close');
-      const swapEth = document.getElementById('swap-eth-amount');
-      const swapEstimate = document.getElementById('swap-estimate');
-      const swapExecute = document.getElementById('swap-execute');
-      const swapErr = document.getElementById('swap-err');
-
-      function closeSwapDialog() { swapCard.classList.add('hidden'); swapErr.textContent = ''; swapEstimate.textContent = 'DeepWood out: —'; }
-      function openSwapDialog() {
-        const st = getState();
-        swapEth.value = ''; swapEstimate.textContent = 'DeepWood out: —'; swapErr.textContent = '';
-        swapEth.disabled = false; swapExecute.disabled = false;
-        swapCard.classList.remove('hidden');
-        if (st.account && !st.rightChain) {
-          swapEth.disabled = true; swapExecute.disabled = true;
-          swapEstimate.textContent = 'Switch to Robinhood Testnet first — your ETH is on chain ' + st.chainId + '.';
-          openSwitchChainDialog();
-        } else {
-          swapEth.focus();
-          sync();
-        }
-      }
-
-      // Expose so ForestScene can open it from the buy flow.
-      window.openSwapDialog = openSwapDialog;
-
-      // Re-evaluate the swap dialog whenever the wallet state changes (e.g. a
-      // successful chain switch from the switch-dialog). This is what turns
-      // "Not enough ETH (have 0.0000)" into a real balance once the wallet is
-      // on 46630.
-      onWallet(() => {
-        if (swapCard.classList.contains('hidden')) return;
-        const st = getState();
-        if (st.account && !st.rightChain) {
-          swapEth.disabled = true; swapExecute.disabled = true;
-          swapEstimate.textContent = 'Switch to Robinhood Testnet first — your ETH is on chain ' + st.chainId + '.';
-        } else {
-          swapEth.disabled = false; swapExecute.disabled = false;
-          if (!swapEth.value) swapEstimate.textContent = 'DeepWood out: —';
-        }
-      });
-
-      // Estimate DeepWood out from the pool's live spot price (PoolManager
-      // slot0). This handler was shipped as a STUB once — it read nothing and
-      // always wrote "DeepWood out: —", which the player correctly read as
-      // broken. Debounced so typing an amount does not fire an RPC per
-      // keystroke (the shared testnet RPC rate-limits bursts, and a 429 here
-      // would look like "estimate broken" when it is "estimate throttled").
-      let swapEstTimer = null;
-      const fmtDeep = (n) => n < 1 ? n.toFixed(4) : n < 1000 ? n.toFixed(2) : n.toLocaleString(undefined, { maximumFractionDigits: 0 });
-      swapEth.addEventListener('input', () => {
-        clearTimeout(swapEstTimer);
-        const eth = parseFloat(swapEth.value);
-        if (!eth || eth <= 0) { swapEstimate.textContent = 'DeepWood out: —'; return; }
-        swapEstimate.textContent = 'DeepWood out: …';
-        swapEstTimer = setTimeout(async () => {
-          try {
-            const { config } = await import('/src/config.js');
-            const { poolSlot0, deepwoodOutFor, V4_POOL_KEY } = await import('/src/chain.js');
-            const s = await poolSlot0(config.rpcUrl, config.fallbackRpcUrls, V4_POOL_KEY);
-            const out = deepwoodOutFor(BigInt(Math.floor(eth * 1e18)), s);
-            swapEstimate.textContent =
-              `DeepWood out: ≈${fmtDeep(Number(out) / 1e18)} $DeepWood`
-              + ' (spot price — the hook fee and slippage will make this lower)';
-          } catch (e) {
-            swapEstimate.textContent = 'DeepWood out: estimate unavailable — '
-              + String(e?.message || e).slice(0, 90);
-          }
-        }, 400);
-      });
-
-      swapClose.addEventListener('click', (e) => { e.stopPropagation(); closeSwapDialog(); });
-
-      swapExecute.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        const ethStr = swapEth.value.trim();
-        if (!ethStr) { swapErr.textContent = 'Enter an ETH amount.'; return; }
-        const eth = parseFloat(ethStr);
-        if (!eth || eth <= 0) { swapErr.textContent = 'Enter a valid amount.'; return; }
-        const st = getState();
-        if (!st.account) { swapErr.textContent = 'Connect a wallet first.'; return; }
-        if (!st.rightChain) { swapErr.textContent = 'Switch to Robinhood Testnet first.'; openSwitchChainDialog(); return; }
-
-        // Re-read the live ETH balance right before the check. sync() was
-        // fired when the dialog opened but is async; reading again avoids the
-        // stale-0 balance that made every swap fail with "have 0.0000".
-        const liveBal = await walletBalanceWeiOnchain();
-        setChainBalanceWei(liveBal);
-        const st2 = getState();
-
-        const ethWei = BigInt(Math.floor(eth * 1e18));
-        const haveEth = st2.chainBalanceWei ?? 0n;
-        if (haveEth < ethWei) {
-          swapErr.textContent = `Not enough ETH (have ${(Number(haveEth)/1e18).toFixed(4)}).`;
-          return;
-        }
-
-        closeSwapDialog();
-        const { sendTo } = await import('/src/wallet.js');
-        const { poolSlot0, deepwoodOutFor, V4_POOL_KEY } = await import('/src/chain.js');
-        const { config } = await import('/src/config.js');
-
-        // Spot-price estimate for slippage protection (minOut).
-        let minDeepwood = 0n;
-        try {
-          const s = await poolSlot0(config.rpcUrl, config.fallbackRpcUrls, V4_POOL_KEY);
-          const est = deepwoodOutFor(ethWei, s);
-          // 50% slippage buffer on testnet thin pools.
-          minDeepwood = est * 50n / 100n;
-        } catch { /* minDeepwood stays 0 */ }
-
-        // Pool params come from DEEPWOOD_POOL (verified hooks/fee/tickSpacing).
-        const data = buildURV4SwapEthToDeepwood(ethWei, minDeepwood, st.account);
-        btn.disabled = true;
-        try {
-          // Fixed gas limit (200k) so Privy doesn't overestimate gas for the
-          // Universal Router call it can't simulate. Without this, Privy's
-          // estimate can push gas * price + value over the account balance and
-          // the wallet rejects with "insufficient funds" before ever showing a
-          // confirmation popup.
-          const r = await sendTo(V4_UNIVERSAL_ROUTER, data, { valueWei: ethWei, gasLimit: 200000 });
-          if (r.ok) {
-            setPending('Swap submitted: ' + r.hash.slice(0, 10) + '…');
-            render();
-            await new Promise(r => setTimeout(r, 3000));
-            await window.__scene?.refreshChainBalance?.();
-          } else {
-            swapErr.textContent = 'Swap failed: ' + r.reason;
-            openSwapDialog();
-          }
-        } catch (err) {
-          swapErr.textContent = 'Swap error: ' + String(err?.message || err);
-          openSwapDialog();
-        } finally {
-          btn.disabled = false;
-        }
-      });
 
       // ---- Privy email-login dialog --------------------------------------
       // Two steps in one .camp-card panel: email -> 6-digit OTP. src/privy.js
@@ -1523,6 +1326,205 @@
         privyError(''); privyEmail.focus();
       });
     }
+
+
+    // ---- Switch network popup (screen modal, replaces inline button) ----
+    const switchCard = document.getElementById('switch-chain-card');
+    const switchClose = document.getElementById('switch-chain-close');
+    const switchBtn = document.getElementById('switch-chain-btn');
+    const switchCurrent = document.getElementById('switch-chain-current');
+    const switchTarget = document.getElementById('switch-chain-target');
+    const switchErr = document.getElementById('switch-chain-err');
+
+    function openSwitchChainDialog() {
+      const st = getState();
+      if (!st.account || st.rightChain) return;
+      switchCurrent.textContent = st.chainId;
+      switchTarget.textContent = GAME_CHAIN_ID;
+      switchErr.textContent = '';
+      switchCard.classList.remove('hidden');
+    }
+
+    function closeSwitchChainDialog() {
+      switchCard.classList.add('hidden');
+    }
+
+    // Expose so ForestScene can open it from the buy flow when the wallet
+    // is on the wrong chain.
+    window.openSwitchChainDialog = openSwitchChainDialog;
+
+    // Open the popup when the wallet is on the wrong chain (after menu renders).
+    if (getState().account && !getState().rightChain) {
+      setTimeout(openSwitchChainDialog, 0);
+    }
+
+    switchClose.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeSwitchChainDialog();
+    });
+
+    switchBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      closeSwitchChainDialog();
+      btn.disabled = true;
+      const prevChain = getState().chainId;
+      let sw;
+      try {
+        sw = await switchToGameChain();
+      } catch (err) {
+        btn.disabled = false;
+        openSwitchChainDialog();
+        switchErr.textContent = 'Switch failed: ' + String(err?.message || err);
+        return;
+      }
+      btn.disabled = false;
+      if (sw.ok) {
+        setPending('Switched to Robinhood Testnet (' + GAME_CHAIN_ID + ').');
+        render();
+      } else {
+        openSwitchChainDialog();
+        switchErr.textContent = 'Switch failed: ' + switchReasonText(sw, prevChain);
+      }
+    });
+
+    // ---- Swap ETH → DeepWood dialog --------------------------------------
+    const swapCard = document.getElementById('swap-card');
+    const swapClose = document.getElementById('swap-close');
+    const swapEth = document.getElementById('swap-eth-amount');
+    const swapEstimate = document.getElementById('swap-estimate');
+    const swapExecute = document.getElementById('swap-execute');
+    const swapErr = document.getElementById('swap-err');
+
+    function closeSwapDialog() { swapCard.classList.add('hidden'); swapErr.textContent = ''; swapEstimate.textContent = 'DeepWood out: —'; }
+    function openSwapDialog() {
+      const st = getState();
+      swapEth.value = ''; swapEstimate.textContent = 'DeepWood out: —'; swapErr.textContent = '';
+      swapEth.disabled = false; swapExecute.disabled = false;
+      swapCard.classList.remove('hidden');
+      if (st.account && !st.rightChain) {
+        swapEth.disabled = true; swapExecute.disabled = true;
+        swapEstimate.textContent = 'Switch to Robinhood Testnet first — your ETH is on chain ' + st.chainId + '.';
+        openSwitchChainDialog();
+      } else {
+        swapEth.focus();
+        sync();
+      }
+    }
+
+    // Expose so ForestScene can open it from the buy flow.
+    window.openSwapDialog = openSwapDialog;
+
+    // Re-evaluate the swap dialog whenever the wallet state changes (e.g. a
+    // successful chain switch from the switch-dialog). This is what turns
+    // "Not enough ETH (have 0.0000)" into a real balance once the wallet is
+    // on 46630.
+    onWallet(() => {
+      if (swapCard.classList.contains('hidden')) return;
+      const st = getState();
+      if (st.account && !st.rightChain) {
+        swapEth.disabled = true; swapExecute.disabled = true;
+        swapEstimate.textContent = 'Switch to Robinhood Testnet first — your ETH is on chain ' + st.chainId + '.';
+      } else {
+        swapEth.disabled = false; swapExecute.disabled = false;
+        if (!swapEth.value) swapEstimate.textContent = 'DeepWood out: —';
+      }
+    });
+
+    // Estimate DeepWood out from the pool's live spot price (PoolManager
+    // slot0). This handler was shipped as a STUB once — it read nothing and
+    // always wrote "DeepWood out: —", which the player correctly read as
+    // broken. Debounced so typing an amount does not fire an RPC per
+    // keystroke (the shared testnet RPC rate-limits bursts, and a 429 here
+    // would look like "estimate broken" when it is "estimate throttled").
+    let swapEstTimer = null;
+    const fmtDeep = (n) => n < 1 ? n.toFixed(4) : n < 1000 ? n.toFixed(2) : n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+    swapEth.addEventListener('input', () => {
+      clearTimeout(swapEstTimer);
+      const eth = parseFloat(swapEth.value);
+      if (!eth || eth <= 0) { swapEstimate.textContent = 'DeepWood out: —'; return; }
+      swapEstimate.textContent = 'DeepWood out: …';
+      swapEstTimer = setTimeout(async () => {
+        try {
+          const { config } = await import('/src/config.js');
+          const { poolSlot0, deepwoodOutFor, V4_POOL_KEY } = await import('/src/chain.js');
+          const s = await poolSlot0(config.rpcUrl, config.fallbackRpcUrls, V4_POOL_KEY);
+          const out = deepwoodOutFor(BigInt(Math.floor(eth * 1e18)), s);
+          swapEstimate.textContent =
+            `DeepWood out: ≈${fmtDeep(Number(out) / 1e18)} $DeepWood`
+            + ' (spot price — the hook fee and slippage will make this lower)';
+        } catch (e) {
+          swapEstimate.textContent = 'DeepWood out: estimate unavailable — '
+            + String(e?.message || e).slice(0, 90);
+        }
+      }, 400);
+    });
+
+    swapClose.addEventListener('click', (e) => { e.stopPropagation(); closeSwapDialog(); });
+
+    swapExecute.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const ethStr = swapEth.value.trim();
+      if (!ethStr) { swapErr.textContent = 'Enter an ETH amount.'; return; }
+      const eth = parseFloat(ethStr);
+      if (!eth || eth <= 0) { swapErr.textContent = 'Enter a valid amount.'; return; }
+      const st = getState();
+      if (!st.account) { swapErr.textContent = 'Connect a wallet first.'; return; }
+      if (!st.rightChain) { swapErr.textContent = 'Switch to Robinhood Testnet first.'; openSwitchChainDialog(); return; }
+
+      // Re-read the live ETH balance right before the check. sync() was
+      // fired when the dialog opened but is async; reading again avoids the
+      // stale-0 balance that made every swap fail with "have 0.0000".
+      const liveBal = await walletBalanceWeiOnchain();
+      setChainBalanceWei(liveBal);
+      const st2 = getState();
+
+      const ethWei = BigInt(Math.floor(eth * 1e18));
+      const haveEth = st2.chainBalanceWei ?? 0n;
+      if (haveEth < ethWei) {
+        swapErr.textContent = `Not enough ETH (have ${(Number(haveEth)/1e18).toFixed(4)}).`;
+        return;
+      }
+
+      closeSwapDialog();
+      const { sendTo } = await import('/src/wallet.js');
+      const { poolSlot0, deepwoodOutFor, V4_POOL_KEY } = await import('/src/chain.js');
+      const { config } = await import('/src/config.js');
+
+      // Spot-price estimate for slippage protection (minOut).
+      let minDeepwood = 0n;
+      try {
+        const s = await poolSlot0(config.rpcUrl, config.fallbackRpcUrls, V4_POOL_KEY);
+        const est = deepwoodOutFor(ethWei, s);
+        // 50% slippage buffer on testnet thin pools.
+        minDeepwood = est * 50n / 100n;
+      } catch { /* minDeepwood stays 0 */ }
+
+      // Pool params come from DEEPWOOD_POOL (verified hooks/fee/tickSpacing).
+      const data = buildURV4SwapEthToDeepwood(ethWei, minDeepwood, st.account);
+      btn.disabled = true;
+      try {
+        // Fixed gas limit (200k) so Privy doesn't overestimate gas for the
+        // Universal Router call it can't simulate. Without this, Privy's
+        // estimate can push gas * price + value over the account balance and
+        // the wallet rejects with "insufficient funds" before ever showing a
+        // confirmation popup.
+        const r = await sendTo(V4_UNIVERSAL_ROUTER, data, { valueWei: ethWei, gasLimit: 200000 });
+        if (r.ok) {
+          setPending('Swap submitted: ' + r.hash.slice(0, 10) + '…');
+          render();
+          await new Promise(r => setTimeout(r, 3000));
+          await window.__scene?.refreshChainBalance?.();
+        } else {
+          swapErr.textContent = 'Swap failed: ' + r.reason;
+          openSwapDialog();
+        }
+      } catch (err) {
+        swapErr.textContent = 'Swap error: ' + String(err?.message || err);
+        openSwapDialog();
+      } finally {
+        btn.disabled = false;
+      }
+    });
 
     // Provider events (accountsChanged / chainChanged / disconnect) keep the
     // button honest without a reload.
