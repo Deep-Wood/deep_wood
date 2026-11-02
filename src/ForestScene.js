@@ -1480,8 +1480,17 @@ export class ForestScene extends Phaser.Scene {
   }
 
   toggleLeaderboard() {
-    if (this.leaderboardOpen) this.closeLeaderboard();
-    else {
+    if (this.leaderboardOpen) { this.closeLeaderboard(); return; }
+    // Leaderboard is for logged-in players only: a visitor tapping the button
+    // gets a flash, not the panel. Check the LIVE wallet state from getState(),
+    // not this.wallet -- the Phaser-side copy lags the real connection.
+    void (async () => {
+      const { getState } = await import('./wallet.js');
+      const st = getState();
+      if (!st.connected || !st.account) {
+        this.flash('Log in to view leaderboard');
+        return;
+      }
       this.closeBelt();
       // openLeaderboard() is async: the chain scan can take several seconds,
       // and the player can tap L again (or the close control) while it is
@@ -1490,7 +1499,7 @@ export class ForestScene extends Phaser.Scene {
       // stale overlay on screen after the flag is already false.
       const gen = (this.lbGen = (this.lbGen ?? 0) + 1);
       void this.openLeaderboard(gen);
-    }
+    })();
   }
 
   /* ---------------- toolbelt panel ---------------- */
