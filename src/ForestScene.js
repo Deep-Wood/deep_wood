@@ -3527,7 +3527,12 @@ export class ForestScene extends Phaser.Scene {
     if (text && text.length > 60) {
       const short = text.slice(0, 57).trimEnd() + '…';
       if (typeof window.deepwoodFlash === 'function') window.deepwoodFlash(short);
-      text = '';
+      // Long messages appear ONLY in the centre flash — clear the belt row
+      // (no empty has-text row left open) and stop here.
+      const el0 = document.getElementById('belt-msg');
+      if (el0) { el0.textContent = ''; el0.className = 'belt-msg'; }
+      clearTimeout(this._beltMsgTimer);
+      return;
     }
     const el = document.getElementById('belt-msg');
     if (!el) return;
