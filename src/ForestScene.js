@@ -1632,7 +1632,7 @@ export class ForestScene extends Phaser.Scene {
           const ethBalance = this.simBalance;
           const ethCost = toolPrice(nt);
           if (ethBalance < ethCost) {
-            this.beltMsg(`Not enough ETH (need ${(Number(ethCost)/1e18).toFixed(2)}, have ${(Number(ethBalance)/1e18).toFixed(2)})`, 'bad');
+            window.deepwoodFlash?.(`Not enough ETH (have ${(Number(ethBalance)/1e18).toFixed(4)})`);
             return;
           }
           this.doBuyToolWithEth(nt);
@@ -1652,7 +1652,7 @@ export class ForestScene extends Phaser.Scene {
           const dwBalance = this._deepwoodBalance ?? 0n;
           const dwCost = this.estimateTokenCost(nt);
           if (dwBalance < dwCost) {
-            this.beltMsg(`Not enough $DEEPWOOD (need ${(Number(dwCost)/1e18).toFixed(2)}, have ${(Number(dwBalance)/1e18).toFixed(2)})`, 'bad');
+            window.deepwoodFlash?.(`Not enough $DEEPWOOD (have ${(Number(dwBalance)/1e18).toFixed(2)})`);
             return;
           }
           this.doBuyToolWithToken(nt);
@@ -1795,7 +1795,7 @@ export class ForestScene extends Phaser.Scene {
       }
       skill.onclick = () => {
         if (!affordable) {
-          this.beltMsg(`Not enough Quartz (need ${cost}, have ${have})`, 'bad');
+          window.deepwoodFlash?.(`Not enough Quartz (have ${have})`);
           return;
         }
         this.doUpgradeSkill(nextLevel, curSkill);
@@ -2361,7 +2361,7 @@ export class ForestScene extends Phaser.Scene {
       return;
     }
     if (tokenBalance < tokenCost) {
-      this.beltMsg(`Not enough $DEEPWOOD (need ${(Number(tokenCost)/1e18).toFixed(2)}, have ${(Number(tokenBalance)/1e18).toFixed(2)})`, 'bad');
+      window.deepwoodFlash?.(`Not enough $DEEPWOOD (have ${(Number(tokenBalance)/1e18).toFixed(2)})`);
       return;
     }
 
@@ -2538,10 +2538,7 @@ export class ForestScene extends Phaser.Scene {
     // Guard: don't send a tx the wallet can't cover.
     const haveEth = this.chainBalanceWei ?? 0n;
     if (haveEth < ethValue) {
-      this.beltMsg(
-        `Not enough ETH (need 0.005, have ${(Number(haveEth) / 1e18).toFixed(4)}). Use 'Claim faucet' in the wallet menu, or pay with $DEEPWOOD tokens instead.`,
-        'bad',
-      );
+      window.deepwoodFlash?.(`Not enough ETH (have ${(Number(haveEth) / 1e18).toFixed(4)}) — claim faucet or use $DEEPWOOD`);
       return;
     }
 
