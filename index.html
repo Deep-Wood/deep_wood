@@ -1490,13 +1490,15 @@
       const { poolSlot0, deepwoodOutFor, V4_POOL_KEY } = await import('/src/chain.js');
       const { config } = await import('/src/config.js');
 
-      // Spot-price estimate for slippage protection (minOut).
+      // Spot-price estimate for slippage protection (minOut) and for the
+      // confirmation toast shown after the swap lands.
       let minDeepwood = 0n;
+      let estOut = null;
       try {
         const s = await poolSlot0(config.rpcUrl, config.fallbackRpcUrls, V4_POOL_KEY);
-        const est = deepwoodOutFor(ethWei, s);
+        estOut = deepwoodOutFor(ethWei, s);
         // 50% slippage buffer on testnet thin pools.
-        minDeepwood = est * 50n / 100n;
+        minDeepwood = estOut * 50n / 100n;
       } catch { /* minDeepwood stays 0 */ }
 
       // Pool params come from DEEPWOOD_POOL (verified hooks/fee/tickSpacing).
@@ -1513,6 +1515,13 @@
         if (r.ok) {
           setPending('Swap submitted: ' + r.hash.slice(0, 10) + '…');
           render();
+          // Onscreen confirmation after every swap: toast with ETH in,
+          // expected DEEPWOOD out and the explorer link.
+          try {
+            const { showSwapToast } = await import('/src/toasts.js');
+            showSwapToast({ ethInWei: ethWei, estOutWei: estOut, hash: r.hash });
+          } catch { /* toast is best-effort */ }
+          window.deepwoodFlash?.(`Swapped ${(Number(ethWei) / 1e18).toFixed(4)} ETH → $DEEPWOOD`);
           await new Promise(r => setTimeout(r, 3000));
           await window.__scene?.refreshChainBalance?.();
         } else {

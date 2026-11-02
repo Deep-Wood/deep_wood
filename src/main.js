@@ -170,13 +170,25 @@ game.events.once('ready', () => {
       import('./audio.js').then((m) => { window.__audioDebug = m.audioDebug; });
     }
 
-    // SOUND button: now lives in .rail-actions alongside settle, stacked
-    // vertically in normal flow. No runtime positioning needed -- CSS handles
-    // the layout. This replaces the old absolute-positioned placeSound that
-    // measured settle's rect and set sound.style.top/right.
+    // Bar buttons (buy/upgrade + settle) ride ON the satchel band, pinned so
+    // their labels end flush with the band's bottom edge. The band's height is
+    // content-driven (the tool/skill avatars live inside it), so the CSS
+    // hardcoded `top: 80px` drifts whenever the band grows -- the 14->26px
+    // avatar change moved the band bottom 148 -> 157 and left the buttons
+    // floating 9px above the edge. Measure the live band instead.
+    // syncActionDom recreates the buttons on every HUD sync, so this must
+    // re-run after each one (wired below) plus on resize and late layout.
     const placeSound = () => {
-      // No-op: CSS flexbox in .rail-actions handles the layout.
+      const band = document.getElementById('gemstrip');
+      if (!band) return;
+      const bottom = band.getBoundingClientRect().bottom;
+      for (const sel of ['#belt-actions .order-buy', '.rail-actions .settle-right']) {
+        const el = document.querySelector(sel);
+        if (!el) continue;
+        el.style.top = Math.max(0, Math.round(bottom - el.offsetHeight)) + 'px';
+      }
     };
+    window.addEventListener('resize', placeSound);
     // Settle is (re)created by syncActionDom, so re-run after each render.
     // The scene emits 'ready' once, but syncActionDom runs on every HUD sync.
     // NOTE: uses the OUTER `s` (the scene) -- do not shadow it here; a local

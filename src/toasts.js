@@ -73,3 +73,26 @@ export function showSettleRecovery(reason) {
   document.body.appendChild(el);
   setTimeout(() => el.remove(), 10000);
 }
+
+/**
+ * Onscreen confirmation after every swap is submitted on-chain.
+ * Shows the ETH in, the expected $DEEPWOOD out (spot estimate), and a link
+ * to the tx on the Robinhood explorer. Auto-dismisses after 10s.
+ */
+export function showSwapToast({ ethInWei, estOutWei, hash }) {
+  const wrap = document.getElementById('badge-toasts') || document.body;
+  const el = document.createElement('div');
+  el.className = 'badge-toast swap-toast';
+  const fmt = (n) => (n < 1 ? n.toFixed(4) : n < 1000 ? n.toFixed(2) : n.toLocaleString(undefined, { maximumFractionDigits: 0 }));
+  const eth = Number(ethInWei) / 1e18;
+  const out = estOutWei != null ? Number(estOutWei) / 1e18 : null;
+  el.innerHTML = `
+    <div class="bt-text">
+      <b>Swap confirmed ✓</b>
+      <span>${fmt(eth)} ETH → ${out != null ? '≈' + fmt(out) + ' $DEEPWOOD' : '$DEEPWOOD'}</span>
+      ${hash ? `<a href="https://explorer.testnet.chain.robinhood.com/tx/${hash}" target="_blank" rel="noopener" style="color:var(--gold);text-decoration:underline">View tx →</a>` : ''}
+    </div>`;
+  wrap.appendChild(el);
+  haptic(60);
+  setTimeout(() => { el.classList.add('gone'); setTimeout(() => el.remove(), 600); }, 10000);
+}

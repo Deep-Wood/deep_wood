@@ -2027,6 +2027,8 @@ button.chip { position: relative; }
 .bt-text b { display: block; font-size: 10.5px; color: var(--ink); }
 .bt-text span { font-size: 9px; color: var(--dim); }
 .badge-toast.streak { border-color: rgba(232,132,44,.45); }
+.badge-toast.swap-toast { border-color: rgba(120,220,140,.55); box-shadow: 0 10px 30px rgba(0,0,0,.55), 0 0 18px rgba(120,220,140,.15); }
+.badge-toast.swap-toast .bt-text b { color: #9fe8b4; }
 @keyframes toast-in { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
 
 
