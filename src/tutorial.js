@@ -66,13 +66,13 @@ const STEPS = [
   },
   {
     title: "Wallet, Swap & Camp",
-    body: "Wallet chip, top-right corner: tap to open the menu — it works with or without a wallet connected. From here you can Swap ETH ↔ $DEEPWOOD in-game (Uniswap V4, with a confirmation after every swap) and Claim faucet testnet ETH, plus view the Leaderboard, open your Camp (daily streak, two rotating quests a day plus the Weekend Big Dig, 15 trophies, and the shelf where your pickaxe tries on earned skins), Redeem gems for $DEEPWOOD, and Connect or Disconnect your wallet.",
+    body: "Wallet chip, top-right corner: tap to open the menu. From here you can Swap ETH ↔ $DEEPWOOD in-game, Claim faucet testnet ETH, view the Leaderboard, open your Camp (daily streak, two rotating quests a day plus the Weekend Big Dig, 15 trophies, and the shelf where your pickaxe tries on earned skins), Redeem gems for $DEEPWOOD, and Connect or Disconnect your wallet.",
     target: "#connect",
     pos: "below",
   },
   {
     title: "Sound",
-    body: "Speaker icon on the right rail: sound on / off. No wallet needed.",
+    body: "Speaker icon on the right rail: sound on / off.",
     target: "#sound-toggle",
     pos: "left",
   },
