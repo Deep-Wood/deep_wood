@@ -170,52 +170,10 @@ game.events.once('ready', () => {
       import('./audio.js').then((m) => { window.__audioDebug = m.audioDebug; });
     }
 
-    // Bar buttons (buy/upgrade + settle) ride ON the satchel band, pinned so
-    // their labels end flush with the band's bottom edge. The band's height is
-    // content-driven (the tool/skill avatars live inside it), so the CSS
-    // hardcoded `top: 80px` drifts whenever the band grows -- the 14->26px
-    // avatar change moved the band bottom 148 -> 157 and left the buttons
-    // floating 9px above the edge. Measure the live band instead.
-    // syncActionDom recreates the buttons on every HUD sync, so this must
-    // re-run after each one (wired below) plus on resize and late layout.
-    const placeSound = () => {
-      const band = document.getElementById('gemstrip');
-      if (!band) return;
-      const bottom = band.getBoundingClientRect().bottom;
-      for (const sel of ['#belt-actions .order-buy', '.rail-actions .settle-right']) {
-        const el = document.querySelector(sel);
-        if (!el) continue;
-        el.style.top = Math.max(0, Math.round(bottom - el.offsetHeight)) + 'px';
-      }
-    };
-    window.addEventListener('resize', placeSound);
-    // Settle is (re)created by syncActionDom, so re-run after each render.
-    // The scene emits 'ready' once, but syncActionDom runs on every HUD sync.
-    // NOTE: uses the OUTER `s` (the scene) -- do not shadow it here; a local
-    // `const s = window.__scene` inside publish() would throw TDZ and kill
-    // the whole boot path (this exact bug shipped once already).
-    const origSync = s.syncActionDom?.bind(s);
-    if (origSync) s.syncActionDom = () => { origSync(); placeSound(); };
-    // Initial placement + a settle re-check once fonts/layout settle.
-    placeSound();
-    setTimeout(placeSound, 500);
-    setTimeout(placeSound, 2000);
-    // Bulletproof against ANY later button recreation (HUD syncs, wallet
-    // events, responsive rebuilds): re-pin on a short interval, but only
-    // write when the value actually changed so we don't fight CSS layout.
-    setInterval(() => {
-      const band = document.getElementById('gemstrip');
-      if (!band) return;
-      const bottom = band.getBoundingClientRect().bottom;
-      for (const sel of ['#belt-actions .order-buy', '.rail-actions .settle-right']) {
-        const el = document.querySelector(sel);
-        if (!el || !el.offsetHeight) continue;
-        const want = Math.max(0, Math.round(bottom - el.offsetHeight)) + 'px';
-        if (el.style.top !== want) el.style.top = want;
-      }
-    }, 400);
-    // A wallet sync that ran while the scene was unpublished skipped it, so
-    // re-run it now that the chain's tool/gems/balance can be applied.
+    // Bar buttons (buy/upgrade + settle) keep their CSS-defined positions
+    // (top: 80px desktop / 64px phone, set in hud.css) -- no JS pinning. The
+    // runtime pin that used to override these was removed per user request:
+    // the buttons stay exactly where they have always been.
     window.__syncBalance?.();
   };
   if (s.sys.settings.status >= Phaser.Scenes.RUNNING) publish();
