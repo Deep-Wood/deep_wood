@@ -1317,11 +1317,8 @@ button.chip { position: relative; }
 .lb-table {
   width: 100%;
   border-collapse: collapse;
-  border: 2px solid #7c3aed;
-  /* Inner edge of the 3D card: slightly softened so the hard table frame
-     does not fight the 18px panel radius. */
-  border-radius: 10px;
-  overflow: hidden;
+  /* The frame lives on .lb-table-wrap now, so the table itself stays
+     borderless -- otherwise the 2px frame would double. */
   font-size: 12px;
   color: #e8f0e0;
   table-layout: fixed;
@@ -1356,35 +1353,30 @@ button.chip { position: relative; }
 .lb-table th:nth-child(1), .lb-table td:nth-child(1) { width: 5ch; text-align: center; }
 .lb-table th:nth-child(3), .lb-table td:nth-child(3) { width: 10ch; text-align: right; }
 .lb-table th:nth-child(4), .lb-table td:nth-child(4) { width: 9ch; text-align: right; }
-/* Scrolling tbody: keep the header pinned while the rows scroll inside the
-   centered 75vh card. Rows budget = card height minus head/footer chrome. */
-.lb-table tbody { display: block; overflow-y: auto; max-height: calc(75vh - 190px); }
-.lb-table thead, .lb-table tbody tr { display: table; width: 100%; table-layout: fixed; }
-/* The only scrolling region. Rows are fixed-height so the grid stays legible
-   and the column frame is never pushed past the viewport. */
-.lb-rows {
+/* The whole table scrolls inside ONE wrapper, so thead and tbody share a
+   single column grid and can never drift apart. The old hack
+   (tbody{display:block} + tr{display:table}) made every row compute its own
+   column widths, so the header and the cells zigzagged -- it read as a card
+   list, not a table. */
+.lb-table-wrap {
   overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-height: 0;
+  max-height: calc(75vh - 190px);
+  border: 2px solid #7c3aed;
+  border-radius: 10px;
 }
 .lb-row {
   font-size: 12px;
   color: #e8f0e0;
-  padding: 5px 4px;
-  border-left: 3px solid transparent;
-  border-radius: 0;
 }
-.lb-row:nth-child(odd) { background: rgba(124, 58, 237, 0.07); }
-.lb-row:hover { background: rgba(124, 58, 237, 0.14); }
-.lb-row.me {
+.lb-row:nth-child(odd) td { background: rgba(124, 58, 237, 0.07); }
+.lb-row:hover td { background: rgba(124, 58, 237, 0.14); }
+.lb-row.me td {
   color: #fbbf24;
-  border-left-color: #fbbf24;
   background: rgba(251, 191, 36, 0.1);
   font-weight: 600;
 }
-.lb-row.off { color: var(--faint); }
+.lb-row.me td:first-child { box-shadow: inset 3px 0 0 #fbbf24; }
+.lb-row.off td { color: var(--faint); }
 .lb-rank-cell { text-align: center; }
 .lb-rank { color: #8b7fb8; font-weight: 600; }
 .lb-medal { font-size: 16px; line-height: 1; display: inline-block; }

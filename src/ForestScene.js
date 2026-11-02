@@ -1398,7 +1398,17 @@ export class ForestScene extends Phaser.Scene {
 
     const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
     const short = (a) => a === '0xplayer' ? 'you (not connected)' : `${a.slice(0, 6)}…${a.slice(-4)}`;
-    const roiTxt = (r) => r.onBoard ? r.roi.toLocaleString('en-US') + 'x' : '--';
+    const roiTxt = (r) => {
+      if (!r.onBoard) return '--';
+      // roi is 1e18 fixed point straight from the contract's roi() -- format
+      // the multiple, not the raw integer (0n used to render as "0x").
+      const v = Number(r.roi) / 1e18;
+      if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}Mx`;
+      if (v >= 10_000) return `${(v / 1_000).toFixed(1)}Kx`;
+      if (v >= 1000) return `${v.toFixed(0)}x`;
+      if (v >= 10) return `${v.toFixed(1)}x`;
+      return `${v.toFixed(2)}x`;
+    };
     const bestTxt = (r) => seasonEth(r.bestWei);
     const shortAddr = (a) => a === '0xplayer' ? 'YOU' : `${a.slice(0, 6)}…${a.slice(-4)}`;
     const medal = (rank) => {
@@ -1431,14 +1441,16 @@ export class ForestScene extends Phaser.Scene {
           <span class="lb-title">${phaseLabel ?? 'Season'} Leaderboard</span>
           <button class="lb-close" type="button" aria-label="Close">✕</button>
         </div>
+        <div class="lb-table-wrap">
         <table class="lb-table">
           <thead>
-            <tr><th>#</th><th>Hunter</th><th>Gems / ETH</th><th>Best find</th></tr>
+            <tr><th>#</th><th>Hunter</th><th>ROI</th><th>Best find</th></tr>
           </thead>
           <tbody class="lb-rows-t">
             ${top10.length ? top10.map(rowHtml).join('') : '<tr><td colspan="4" class="lb-empty">No one has settled a hunt yet. Be the first.</td></tr>'}
          </tbody>
         </table>
+        </div>
         ${statsFoot}
         </div>`;
     document.body.appendChild(el);
