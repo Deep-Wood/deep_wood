@@ -3114,7 +3114,19 @@ export class ForestScene extends Phaser.Scene {
               <tr><td>Gold</td><td>50,000,000</td><td>35 hunts</td></tr>
               <tr><td>Mithril</td><td>150,000,000</td><td>40 hunts</td></tr>
             </table>
-            <p class="about-note">Repair tools with gems — no ETH repair path.</p>
+            <p class="about-note">Pay with ETH or $DEEPWOOD (10% off). You always see the
+               total cost and tap <strong>Accept</strong> before anything is sent on-chain.
+               Repair tools with gems — no ETH repair path.</p>
+          </div>
+          <div class="about-section">
+            <h3>Swapping ETH ↔ $DEEPWOOD</h3>
+            <p>Open the wallet menu (top-right) → <strong>Swap</strong>. Buy $DEEPWOOD
+               with ETH, or sell $DEEPWOOD back to ETH, through the in-game
+               <strong>Uniswap V4</strong> pool (0% fee). The dialog shows your
+               available balance for the direction you pick, and every swap ends
+               with an on-screen confirmation and a link to the transaction.
+               The first sell asks for two one-time approvals, handled for you.
+               Need testnet ETH first? <strong>Claim faucet</strong> is in the same menu.</p>
           </div>
           <div class="about-section">
             <h3>Skills</h3>

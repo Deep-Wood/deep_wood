@@ -11,8 +11,8 @@
  *     when the tool is fine; clicking when not broken flashes
  *     "Tool not broken. Continue hunting."
  *
- * Storage: localStorage 'dw-tutorial-v4'. Bumped from v3 because the whole
- * step list changed shape.
+ * Storage: localStorage 'dw-tutorial-v5'. Bumped from v4 because the wallet-menu
+ * features moved (Swap + Claim faucet now live there, not beside pay options).
  *
  * Pure DOM overlay -- no Phaser -- so it works before the scene is ready
  * and never touches gameplay state. The card positions itself next to the
@@ -20,7 +20,7 @@
  * viewport, so steps stay put if the HUD itself rebuilds.
  */
 
-const KEY = "dw-tutorial-v4";
+const KEY = "dw-tutorial-v5";
 
 /**
  * `target` is the CSS selector for the element to point at. `pos` is the
@@ -30,7 +30,7 @@ const KEY = "dw-tutorial-v4";
 const STEPS = [
   {
     title: "Welcome to DeepWood",
-    body: "Hunt gems in a procedurally generated forest. Every dig is settled on-chain from a published season seed — your finds are real, verifiable state, not a server's promise. Build a daily streak, clear quests, earn trophies, and redeem your gems for $DEEPWOOD. Tap the card to continue.",
+    body: "Hunt gems in a procedurally generated forest. Every dig is settled on-chain from a published season seed — your finds are real, verifiable state, not a server's promise. Build a daily streak, clear quests, earn trophies, and redeem your gems for $DEEPWOOD. Short on ETH or $DEEPWOOD? Swap between them in-game from the wallet menu (top-right). Tap the card to continue.",
     target: null,
   },
   {
@@ -41,7 +41,7 @@ const STEPS = [
   },
   {
     title: "Buy / upgrade tool",
-    body: "Double-chevron icon on the left rail: buy your first tool, or upgrade to the next tier. Tap it and choose ETH or $DEEPWOOD (10% off). Next to each pay option there's a link for the testnet faucet or for buying $DEEPWOOD if you're short.",
+    body: "Double-chevron icon on the left rail: buy your first tool, or upgrade to the next tier. Tap it and choose ETH or $DEEPWOOD (10% off) — you see the total cost and tap Accept before anything goes on-chain. Short on funds? Use Swap or Claim faucet in the wallet menu (top-right).",
     target: "#belt-buy",
     pos: "right",
   },
@@ -65,8 +65,8 @@ const STEPS = [
     pos: "left",
   },
   {
-    title: "Wallet, Camp & redeem",
-    body: "Wallet chip, top-right corner: tap to open the menu — it works with or without a wallet connected. From here you can view the Leaderboard, open your Camp (daily streak, two rotating quests a day plus the Weekend Big Dig, 15 trophies, and the shelf where your pickaxe tries on earned skins), Redeem gems for $DEEPWOOD, and Connect or Disconnect your wallet.",
+    title: "Wallet, Swap & Camp",
+    body: "Wallet chip, top-right corner: tap to open the menu — it works with or without a wallet connected. From here you can Swap ETH ↔ $DEEPWOOD in-game (Uniswap V4, with a confirmation after every swap) and Claim faucet testnet ETH, plus view the Leaderboard, open your Camp (daily streak, two rotating quests a day plus the Weekend Big Dig, 15 trophies, and the shelf where your pickaxe tries on earned skins), Redeem gems for $DEEPWOOD, and Connect or Disconnect your wallet.",
     target: "#connect",
     pos: "below",
   },
