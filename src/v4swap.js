@@ -208,3 +208,101 @@ export function buildURV4SwapEthToDeepwood(
     encInputs
   );
 }
+
+// ---------------------------------------------------------------------------
+// SELL: DeepWood -> ETH through the same Universal Router V4_SWAP path.
+// Encoding mirrors the proven SELL txs (sell_all_graduated): same actions
+// 0x060c0f, but zeroForOne=false, SETTLE_ALL on the token (ERC20, pulled via
+// Permit2), TAKE_ALL on ETH. The BUY function above is intentionally left
+// byte-identical — do not refactor it into a shared helper without re-running
+// src/v4swap.test.mjs.
+// ---------------------------------------------------------------------------
+
+export const V4_PERMIT2 = '0x000000000022D473030F116dDEE9F6B43aC78BA3';
+// Permit2 amounts/expirations are uint160/uint48 — NOT uint256. Encoding a
+// maxUint256 here garbles the calldata (ABI field is uint160; viem does not
+// truncate, so the tx lands but the allowance stays unchanged).
+export const MAX_UINT160 = (1n << 160n) - 1n;
+export const MAX_UINT256 = (1n << 256n) - 1n;
+
+/**
+ * Build Universal Router execute calldata for exact-in DeepWood -> ETH.
+ * Same structure as the buy; verified against sell_all_graduated.mjs's
+ * viem encoding (encodeSell) and proven with eth_call + a live tx.
+ *
+ * @param {bigint} deepwoodIn  token amount in wei (18 decimals)
+ * @param {bigint} minEthWei   minimum ETH out (wei)
+ * @param {string} recipient (unused — TAKE_ALL sends to msg.sender)
+ * @param {number} [deadline]
+ */
+export function buildURV4SwapDeepwoodToEth(
+  deepwoodIn,
+  minEthWei,
+  recipient,
+  deadline = Math.floor(Date.now() / 1000) + 600,
+) {
+  void recipient;
+  const p = DEEPWOOD_POOL;
+
+  const hookData = '';
+  const hookDataOffset = 10 * 32; // 0x140
+  const swapParams =
+    argUint(0x20) +
+    argAddr(p.currency0) +                // currency0 = ETH
+    argAddr(p.currency1) +                // currency1 = DeepWood
+    argUint(p.fee) +
+    argUint(p.tickSpacing) +
+    argAddr(p.hooks) +
+    argUint(0) +                          // zeroForOne = FALSE (token -> ETH)
+    argUint(deepwoodIn) +                 // amountIn (uint128)
+    argUint(minEthWei) +                  // amountOutMinimum (uint128)
+    argUint(0) +                          // minHopPriceX36 = 0
+    argUint(hookDataOffset) +
+    argUint(hookData.length / 2);         // hookData length = 0
+
+  // SELL: settle the TOKEN input, take ETH out.
+  const settleAll = argAddr(p.currency1) + argUint(deepwoodIn);
+  const takeAll = argAddr(p.currency0) + argUint(minEthWei);
+
+  const actions = '060c0f';
+  const encActions = encodeBytes(actions);
+  const encParams = encodeBytesArray([swapParams, settleAll, takeAll]);
+  const actionsOffset = 2 * 32;                    // 0x40
+  const paramsOffset = actionsOffset + encActions.length / 2; // 0x80
+  const v4swapInput =
+    argUint(actionsOffset) + argUint(paramsOffset) + encActions + encParams;
+
+  const commands = '10';
+  const encCommands = encodeBytes(commands);
+  const encInputs = encodeBytesArray([v4swapInput]);
+  const commandsOffset = 3 * 32;                   // 0x60
+  const inputsOffset = commandsOffset + encCommands.length / 2;
+
+  return (
+    '0x3593564c' +
+    argUint(commandsOffset) +
+    argUint(inputsOffset) +
+    argUint(deadline) +
+    encCommands +
+    encInputs
+  );
+}
+
+/** ERC20 approve(address spender, uint256 amount) — selector 0x095ea7b3. */
+export function buildErc20ApproveCalldata(spender, amount) {
+  return '0x095ea7b3' + argAddr(spender) + argUint(amount);
+}
+
+/**
+ * Permit2 approve(address token, address spender, uint160 amount, uint48
+ * expiration) — selector 0x87517c45. uint160/uint48 fields still occupy full
+ * 32-byte words in the ABI encoding.
+ */
+export function buildPermit2ApproveCalldata(token, spender, amount, expiration) {
+  return '0x87517c45' + argAddr(token) + argAddr(spender) + argUint(amount) + argUint(expiration);
+}
+
+// Read selectors (eth_call, no signing needed)
+export const SEL_BALANCE_OF = '0x70a08231';   // balanceOf(address)
+export const SEL_ERC20_ALLOWANCE = '0xdd62ed3e'; // allowance(address,address)
+export const SEL_PERMIT2_ALLOWANCE = '0x927da105'; // allowance(address,address,address) -> (uint160,uint48)

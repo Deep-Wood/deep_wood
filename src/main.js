@@ -200,6 +200,20 @@ game.events.once('ready', () => {
     placeSound();
     setTimeout(placeSound, 500);
     setTimeout(placeSound, 2000);
+    // Bulletproof against ANY later button recreation (HUD syncs, wallet
+    // events, responsive rebuilds): re-pin on a short interval, but only
+    // write when the value actually changed so we don't fight CSS layout.
+    setInterval(() => {
+      const band = document.getElementById('gemstrip');
+      if (!band) return;
+      const bottom = band.getBoundingClientRect().bottom;
+      for (const sel of ['#belt-actions .order-buy', '.rail-actions .settle-right']) {
+        const el = document.querySelector(sel);
+        if (!el || !el.offsetHeight) continue;
+        const want = Math.max(0, Math.round(bottom - el.offsetHeight)) + 'px';
+        if (el.style.top !== want) el.style.top = want;
+      }
+    }, 400);
     // A wallet sync that ran while the scene was unpublished skipped it, so
     // re-run it now that the chain's tool/gems/balance can be applied.
     window.__syncBalance?.();

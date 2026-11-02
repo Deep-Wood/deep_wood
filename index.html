@@ -284,11 +284,15 @@
 
     <div id="swap-card" class="camp-card hidden" role="dialog" aria-modal="true" aria-label="Swap ETH for DeepWood">
       <div class="redeem-head">
-        <span class="redeem-title">Swap ETH → DeepWood</span>
+        <span class="redeem-title" id="swap-title">Swap ETH → DeepWood</span>
         <button type="button" class="reedem-x" id="swap-close" aria-label="Close">&#215;</button>
       </div>
       <div class="redeem-body">
-        <div class="redeem-label">Swap ETH for $DeepWood via Uniswap V4 (pool: ETH/DeepWood, 0% fee)</div>
+        <div class="swap-dir" role="tablist">
+          <button type="button" class="swap-dir-btn active" id="swap-dir-buy" role="tab" aria-selected="true">Buy $DeepWood</button>
+          <button type="button" class="swap-dir-btn" id="swap-dir-sell" role="tab" aria-selected="false">Sell $DeepWood</button>
+        </div>
+        <div class="redeem-label" id="swap-input-label">Swap ETH for $DeepWood via Uniswap V4 (pool: ETH/DeepWood, 0% fee)</div>
         <input class="redeem-input" id="swap-eth-amount" type="number" step="any" min="0" placeholder="0.005" />
         <div class="redeem-label" id="swap-estimate">DeepWood out: —</div>
         <button type="button" class="redeem-btn" id="swap-execute">Swap</button>
@@ -844,7 +848,19 @@
     import { TIER_NAME, SKILL_NAME } from '/src/economy.js';
     import { chosenSkin } from '/src/engagement.js';
     import { walletBalanceWeiOnchain, onchainActive } from '/src/onchain.js';
-    import { V4_UNIVERSAL_ROUTER, buildURV4SwapEthToDeepwood } from '/src/v4swap.js';
+    import {
+      V4_UNIVERSAL_ROUTER,
+      V4_PERMIT2,
+      MAX_UINT160,
+      MAX_UINT256,
+      buildURV4SwapEthToDeepwood,
+      buildURV4SwapDeepwoodToEth,
+      buildErc20ApproveCalldata,
+      buildPermit2ApproveCalldata,
+      SEL_BALANCE_OF,
+      SEL_ERC20_ALLOWANCE,
+      SEL_PERMIT2_ALLOWANCE,
+    } from '/src/v4swap.js';
     import { showConnectedToast } from '/src/toasts.js';
     // Expose to the plain-script block (renderHunterStrip) that predates modules.
     window.TIER_NAME = TIER_NAME;
@@ -1387,18 +1403,40 @@
       }
     });
 
-    // ---- Swap ETH → DeepWood dialog --------------------------------------
+    // ---- Swap dialog (BUY ETH → DeepWood / SELL DeepWood → ETH) ----------
     const swapCard = document.getElementById('swap-card');
     const swapClose = document.getElementById('swap-close');
     const swapEth = document.getElementById('swap-eth-amount');
     const swapEstimate = document.getElementById('swap-estimate');
     const swapExecute = document.getElementById('swap-execute');
     const swapErr = document.getElementById('swap-err');
+    const swapTitle = document.getElementById('swap-title');
+    const swapInputLabel = document.getElementById('swap-input-label');
+    const swapDirBuy = document.getElementById('swap-dir-buy');
+    const swapDirSell = document.getElementById('swap-dir-sell');
+    let swapDir = 'buy'; // 'buy' = ETH -> DeepWood, 'sell' = DeepWood -> ETH
 
-    function closeSwapDialog() { swapCard.classList.add('hidden'); swapErr.textContent = ''; swapEstimate.textContent = 'DeepWood out: —'; }
+    const estPlaceholder = () => (swapDir === 'buy' ? 'DeepWood out: —' : 'ETH out: —');
+    function setSwapDir(dir) {
+      swapDir = dir;
+      swapDirBuy.classList.toggle('active', dir === 'buy');
+      swapDirSell.classList.toggle('active', dir === 'sell');
+      swapDirBuy.setAttribute('aria-selected', String(dir === 'buy'));
+      swapDirSell.setAttribute('aria-selected', String(dir === 'sell'));
+      swapTitle.textContent = dir === 'buy' ? 'Swap ETH → DeepWood' : 'Swap DeepWood → ETH';
+      swapInputLabel.textContent = dir === 'buy'
+        ? 'Swap ETH for $DeepWood via Uniswap V4 (pool: ETH/DeepWood, 0% fee)'
+        : 'Swap $DeepWood for ETH via Uniswap V4 (pool: ETH/DeepWood, 0% fee)';
+      swapEth.placeholder = dir === 'buy' ? '0.005' : '10';
+      swapEstimate.textContent = estPlaceholder();
+    }
+    swapDirBuy.addEventListener('click', (e) => { e.stopPropagation(); setSwapDir('buy'); });
+    swapDirSell.addEventListener('click', (e) => { e.stopPropagation(); setSwapDir('sell'); });
+
+    function closeSwapDialog() { swapCard.classList.add('hidden'); swapErr.textContent = ''; swapEstimate.textContent = estPlaceholder(); }
     function openSwapDialog() {
       const st = getState();
-      swapEth.value = ''; swapEstimate.textContent = 'DeepWood out: —'; swapErr.textContent = '';
+      swapEth.value = ''; swapEstimate.textContent = estPlaceholder(); swapErr.textContent = '';
       swapEth.disabled = false; swapExecute.disabled = false;
       swapCard.classList.remove('hidden');
       if (st.account && !st.rightChain) {
@@ -1426,7 +1464,7 @@
         swapEstimate.textContent = 'Switch to Robinhood Testnet first — your ETH is on chain ' + st.chainId + '.';
       } else {
         swapEth.disabled = false; swapExecute.disabled = false;
-        if (!swapEth.value) swapEstimate.textContent = 'DeepWood out: —';
+        if (!swapEth.value) swapEstimate.textContent = estPlaceholder();
       }
     });
 
@@ -1440,37 +1478,61 @@
     const fmtDeep = (n) => n < 1 ? n.toFixed(4) : n < 1000 ? n.toFixed(2) : n.toLocaleString(undefined, { maximumFractionDigits: 0 });
     swapEth.addEventListener('input', () => {
       clearTimeout(swapEstTimer);
-      const eth = parseFloat(swapEth.value);
-      if (!eth || eth <= 0) { swapEstimate.textContent = 'DeepWood out: —'; return; }
-      swapEstimate.textContent = 'DeepWood out: …';
-      swapEstTimer = setTimeout(async () => {
-        try {
-          const { config } = await import('/src/config.js');
-          const { poolSlot0, deepwoodOutFor, V4_POOL_KEY } = await import('/src/chain.js');
-          const s = await poolSlot0(config.rpcUrl, config.fallbackRpcUrls, V4_POOL_KEY);
-          const out = deepwoodOutFor(BigInt(Math.floor(eth * 1e18)), s);
-          swapEstimate.textContent =
-            `DeepWood out: ≈${fmtDeep(Number(out) / 1e18)} $DeepWood`
-            + ' (spot price — the hook fee and slippage will make this lower)';
-        } catch (e) {
-          swapEstimate.textContent = 'DeepWood out: estimate unavailable — '
-            + String(e?.message || e).slice(0, 90);
-        }
-      }, 400);
+      const amt = parseFloat(swapEth.value);
+      if (!amt || amt <= 0) { swapEstimate.textContent = estPlaceholder(); return; }
+      if (swapDir === 'buy') {
+        swapEstimate.textContent = 'DeepWood out: …';
+        swapEstTimer = setTimeout(async () => {
+          try {
+            const { config } = await import('/src/config.js');
+            const { poolSlot0, deepwoodOutFor, V4_POOL_KEY } = await import('/src/chain.js');
+            const s = await poolSlot0(config.rpcUrl, config.fallbackRpcUrls, V4_POOL_KEY);
+            const out = deepwoodOutFor(BigInt(Math.floor(amt * 1e18)), s);
+            swapEstimate.textContent =
+              `DeepWood out: ≈${fmtDeep(Number(out) / 1e18)} $DeepWood`
+              + ' (spot price — the hook fee and slippage will make this lower)';
+          } catch (e) {
+            swapEstimate.textContent = 'DeepWood out: estimate unavailable — '
+              + String(e?.message || e).slice(0, 90);
+          }
+        }, 400);
+      } else {
+        swapEstimate.textContent = 'ETH out: …';
+        swapEstTimer = setTimeout(async () => {
+          try {
+            const { config } = await import('/src/config.js');
+            const { poolSlot0, ethOutFor, V4_POOL_KEY } = await import('/src/chain.js');
+            const s = await poolSlot0(config.rpcUrl, config.fallbackRpcUrls, V4_POOL_KEY);
+            const out = ethOutFor(BigInt(Math.floor(amt * 1e18)), s);
+            swapEstimate.textContent =
+              `ETH out: ≈${fmtDeep(Number(out) / 1e18)} ETH`
+              + ' (spot price — the hook fee and slippage will make this lower)';
+          } catch (e) {
+            swapEstimate.textContent = 'ETH out: estimate unavailable — '
+              + String(e?.message || e).slice(0, 90);
+          }
+        }, 400);
+      }
     });
 
     swapClose.addEventListener('click', (e) => { e.stopPropagation(); closeSwapDialog(); });
 
     swapExecute.addEventListener('click', async (e) => {
       e.stopPropagation();
-      const ethStr = swapEth.value.trim();
-      if (!ethStr) { swapErr.textContent = 'Enter an ETH amount.'; return; }
-      const eth = parseFloat(ethStr);
-      if (!eth || eth <= 0) { swapErr.textContent = 'Enter a valid amount.'; return; }
+      const amtStr = swapEth.value.trim();
+      if (!amtStr) { swapErr.textContent = 'Enter an amount.'; return; }
+      const amt = parseFloat(amtStr);
+      if (!amt || amt <= 0) { swapErr.textContent = 'Enter a valid amount.'; return; }
       const st = getState();
       if (!st.account) { swapErr.textContent = 'Connect a wallet first.'; return; }
       if (!st.rightChain) { swapErr.textContent = 'Switch to Robinhood Testnet first.'; openSwitchChainDialog(); return; }
+      if (swapDir === 'sell') await runSellSwap(amt, st);
+      else await runBuySwap(amt, st);
+    });
 
+    // BUY: ETH -> $DeepWood. Proven on-chain path — do not alter the calldata
+    // builder or the gas estimation (pinned by src/v4swap.test.mjs).
+    async function runBuySwap(eth, st) {
       // Re-read the live ETH balance right before the check. sync() was
       // fired when the dialog opened but is async; reading again avoids the
       // stale-0 balance that made every swap fail with "have 0.0000".
@@ -1534,7 +1596,98 @@
       } finally {
         btn.disabled = false;
       }
-    });
+    }
+
+    // SELL: $DeepWood -> ETH. Same Universal Router V4_SWAP path as buy, but
+    // zeroForOne=false, SETTLE_ALL on the token, TAKE_ALL on ETH. The token
+    // settle goes through Permit2, so two one-time approvals are ensured
+    // first: ERC20 approve(PERMIT2, max) and Permit2 approve(token, UR,
+    // maxUint160, +30d) — exactly the flow the launchpad UI uses.
+    async function runSellSwap(deep, st) {
+      const { sendTo, estimateTxGas, ethCall, waitForTx } = await import('/src/wallet.js');
+      const { poolSlot0, ethOutFor, V4_POOL_KEY, V4_DEEPWOOD_TOKEN, argAddr } = await import('/src/chain.js');
+      const { config } = await import('/src/config.js');
+
+      const deepIn = BigInt(Math.floor(deep * 1e18));
+
+      // Live token balance check (balanceOf via eth_call — never trust a
+      // cached balance here).
+      const balHex = await ethCall(V4_DEEPWOOD_TOKEN, SEL_BALANCE_OF + argAddr(st.account));
+      const haveDeep = BigInt(balHex);
+      if (haveDeep < deepIn) {
+        swapErr.textContent = `Not enough $DeepWood (have ${(Number(haveDeep) / 1e18).toFixed(2)}).`;
+        return;
+      }
+
+      closeSwapDialog();
+
+      // Spot-price minOut with a 50% buffer (thin testnet pool), same policy
+      // as the buy side.
+      let minEth = 0n;
+      let estEth = null;
+      try {
+        const s = await poolSlot0(config.rpcUrl, config.fallbackRpcUrls, V4_POOL_KEY);
+        estEth = ethOutFor(deepIn, s);
+        minEth = estEth * 50n / 100n;
+      } catch { /* minEth stays 0 */ }
+
+      btn.disabled = true;
+      try {
+        // 1) ERC20 approve(PERMIT2, maxUint256) if the allowance is short.
+        const allowHex = await ethCall(V4_DEEPWOOD_TOKEN, SEL_ERC20_ALLOWANCE + argAddr(st.account) + argAddr(V4_PERMIT2));
+        if (BigInt(allowHex) < deepIn) {
+          setPending('Approving $DeepWood spend…');
+          const apData = buildErc20ApproveCalldata(V4_PERMIT2, MAX_UINT256);
+          const apEst = await estimateTxGas(V4_DEEPWOOD_TOKEN, apData, {});
+          const r1 = await sendTo(V4_DEEPWOOD_TOKEN, apData, { gasLimit: apEst.ok ? Number(apEst.gas) : 100000 });
+          if (!r1.ok) { swapErr.textContent = 'Approve failed: ' + r1.reason; openSwapDialog(); return; }
+          const w1 = await waitForTx(r1.hash);
+          if (!w1.ok) { swapErr.textContent = 'Approve tx reverted: ' + r1.hash.slice(0, 10) + '…'; openSwapDialog(); return; }
+        }
+        // 2) Permit2 approve(token, UR, maxUint160, now+30d) if short/expired.
+        //    Returns (uint160 amount, uint48 expiration) in two words.
+        const pHex = await ethCall(V4_PERMIT2, SEL_PERMIT2_ALLOWANCE + argAddr(st.account) + argAddr(V4_DEEPWOOD_TOKEN) + argAddr(V4_UNIVERSAL_ROUTER));
+        const pAmt = BigInt('0x' + pHex.slice(2, 66));
+        const pExp = BigInt('0x' + pHex.slice(66, 130));
+        const now = BigInt(Math.floor(Date.now() / 1000));
+        if (pAmt < deepIn || pExp <= now) {
+          setPending('Authorizing router…');
+          const exp = now + 30n * 24n * 3600n;
+          const pData = buildPermit2ApproveCalldata(V4_DEEPWOOD_TOKEN, V4_UNIVERSAL_ROUTER, MAX_UINT160, exp);
+          const pEst = await estimateTxGas(V4_PERMIT2, pData, {});
+          const r2 = await sendTo(V4_PERMIT2, pData, { gasLimit: pEst.ok ? Number(pEst.gas) : 100000 });
+          if (!r2.ok) { swapErr.textContent = 'Permit2 approval failed: ' + r2.reason; openSwapDialog(); return; }
+          const w2 = await waitForTx(r2.hash);
+          if (!w2.ok) { swapErr.textContent = 'Permit2 approval tx reverted: ' + r2.hash.slice(0, 10) + '…'; openSwapDialog(); return; }
+        }
+        // 3) The sell swap itself — estimated gas, never a hardcoded cap.
+        const data = buildURV4SwapDeepwoodToEth(deepIn, minEth, st.account);
+        setPending('Selling $DeepWood…');
+        const est = await estimateTxGas(V4_UNIVERSAL_ROUTER, data, {});
+        const gasLimit = est.ok ? Number(est.gas) : 400000;
+        const r = await sendTo(V4_UNIVERSAL_ROUTER, data, { gasLimit });
+        if (r.ok) {
+          setPending('Swap submitted: ' + r.hash.slice(0, 10) + '…');
+          render();
+          // Onscreen confirmation after every swap (sell direction).
+          try {
+            const { showSwapToast } = await import('/src/toasts.js');
+            showSwapToast({ dir: 'sell', tokenInWei: deepIn, estEthWei: estEth, hash: r.hash });
+          } catch { /* toast is best-effort */ }
+          window.deepwoodFlash?.(`Sold ${(Number(deepIn) / 1e18).toFixed(2)} $DEEPWOOD → ETH`);
+          await new Promise((r2) => setTimeout(r2, 3000));
+          await window.__scene?.refreshChainBalance?.();
+        } else {
+          swapErr.textContent = 'Swap failed: ' + r.reason;
+          openSwapDialog();
+        }
+      } catch (err) {
+        swapErr.textContent = 'Swap error: ' + String(err?.message || err);
+        openSwapDialog();
+      } finally {
+        btn.disabled = false;
+      }
+    }
 
     // Provider events (accountsChanged / chainChanged / disconnect) keep the
     // button honest without a reload.

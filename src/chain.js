@@ -1172,3 +1172,13 @@ export function deepwoodOutFor(ethAmountWei, slot0) {
   const price = poolPriceRatio(slot0); // DeepWood wei per ETH wei
   return BigInt(ethAmountWei) * price / 10n ** 18n;
 }
+
+/**
+ * Approximate ETH out (wei) for a DeepWood input — the inverse of
+ * deepwoodOutFor, for the SELL direction. Spot price only, same caveats.
+ */
+export function ethOutFor(deepwoodAmount, slot0) {
+  const price = poolPriceRatio(slot0); // DeepWood wei per ETH wei
+  if (price === 0n) return 0n;
+  return (BigInt(deepwoodAmount) * 10n ** 18n) / price;
+}

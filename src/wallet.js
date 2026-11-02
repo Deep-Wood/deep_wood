@@ -936,6 +936,35 @@ export async function estimateTxGas(to, data, { valueWei } = {}) {
 }
 
 /**
+ * Read-only eth_call through the wallet provider (Privy forwards it to the
+ * RPC). Used for balanceOf / allowance checks before sending approval txs.
+ * Returns the raw 0x-prefixed result, or throws.
+ */
+export async function ethCall(to, data, { from } = {}) {
+  return getProvider().request({
+    method: "eth_call",
+    params: [{ from: from || state.account, to, data: data.startsWith("0x") ? data : "0x" + data }, "latest"],
+  });
+}
+
+/**
+ * Poll eth_getTransactionReceipt until the tx is mined (or timeout).
+ * Returns { ok: true, receipt } with receipt.status === '0x1' meaning success,
+ * or { ok: false, reason } on timeout.
+ */
+export async function waitForTx(hash, { timeoutMs = 120000, pollMs = 2000 } = {}) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < timeoutMs) {
+    try {
+      const r = await getProvider().request({ method: "eth_getTransactionReceipt", params: [hash] });
+      if (r) return { ok: r.status === "0x1", receipt: r };
+    } catch { /* next poll */ }
+    await new Promise((res) => setTimeout(res, pollMs));
+  }
+  return { ok: false, reason: "timeout waiting for " + hash };
+}
+
+/**
  * Buy the ONE tool, or upgrade it to the next tier. Costs DEEPWOOD tokens.
  *
  * V6: buyTool(uint8,uint256) is NOT payable. It pulls DEEPWOOD via

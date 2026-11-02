@@ -120,3 +120,78 @@ test('router + pool constants are the verified on-chain addresses', () => {
   assert.equal(DEEPWOOD_POOL.hooks, '0xa5e27e3e54739162fe52c2c48e55b6dd6572e8ec');
   assert.equal(DEEPWOOD_POOL.tickSpacing, 60);
 });
+
+// ---------------------------------------------------------------------------
+// SELL builder — must mirror the proven viem encodeSell byte-for-byte.
+// ---------------------------------------------------------------------------
+import { buildURV4SwapDeepwoodToEth, buildErc20ApproveCalldata, buildPermit2ApproveCalldata, V4_PERMIT2, MAX_UINT160 } from './v4swap.js';
+
+const DEEP_IN = 25_000_000_000_000_000_000n; // 25 DEEPWOOD
+const MIN_ETH = 1_000_000_000_000_000n; // 0.001 ETH min out
+
+function sellWords() {
+  return words(buildURV4SwapDeepwoodToEth(DEEP_IN, MIN_ETH, RECIPIENT, DEADLINE).slice(10));
+}
+
+test('sell: same execute shell — selector, 0x10 commands tail, one input of len 0x360', () => {
+  const d = buildURV4SwapDeepwoodToEth(DEEP_IN, MIN_ETH, RECIPIENT, DEADLINE);
+  assert.equal(d.slice(0, 10), '0x3593564c');
+  const aw = words(d.slice(10));
+  assert.equal(BigInt('0x' + aw[0]), 0x60n);
+  assert.equal(BigInt('0x' + aw[1]), 0xa0n);
+  assert.equal(BigInt('0x' + aw[2]), BigInt(DEADLINE));
+  const arr = aw.slice(5);
+  assert.equal(BigInt('0x' + arr[0]), 1n);
+  const inp = arr.slice(2);
+  assert.equal(BigInt('0x' + inp[0]), 0x360n, 'input[0] length 864');
+  const body = inp.slice(1);
+  assert.equal(BigInt('0x' + body[0]), 0x40n);
+  assert.ok(body[3].startsWith('060c0f'), 'actions 0x060c0f');
+});
+
+test('sell: zeroForOne=false, amountIn=DEEP_IN, amountOutMin=MIN_ETH', () => {
+  const params = sellWords().slice(5).slice(2).slice(1).slice(4); // aw -> arr -> inp -> body -> params
+  const off0 = Number(BigInt('0x' + params[1])) / 32;
+  const sc = params.slice(1 + off0).slice(1); // [len][tuple...]
+  const t = sc.slice(1);
+  assert.equal(BigInt('0x' + t[5]), 0n, 'zeroForOne = FALSE (token -> ETH)');
+  assert.equal(BigInt('0x' + t[6]), DEEP_IN, 'amountIn = DEEP_IN');
+  assert.equal(BigInt('0x' + t[7]), MIN_ETH, 'amountOutMin = MIN_ETH');
+  assert.equal(BigInt('0x' + t[8]), 0n, 'minHopPriceX36 = 0');
+});
+
+test('sell: settleAll = (DEEPWOOD, DEEP_IN), takeAll = (ETH zero, MIN_ETH)', () => {
+  const params = sellWords().slice(5).slice(2).slice(1).slice(4);
+  const off1 = Number(BigInt('0x' + params[2])) / 32;
+  const off2 = Number(BigInt('0x' + params[3])) / 32;
+  const p1 = params.slice(1 + off1);
+  const p2 = params.slice(1 + off2);
+  assert.ok(p1[1].endsWith(DEEPWOOD_POOL.currency1.slice(2).toLowerCase()), 'settle currency = DEEPWOOD');
+  assert.equal(BigInt('0x' + p1[2]), DEEP_IN, 'settle amount = DEEP_IN');
+  assert.equal(BigInt('0x' + p2[1]), 0n, 'take currency = ETH (address zero)');
+  assert.equal(BigInt('0x' + p2[2]), MIN_ETH, 'take min = MIN_ETH');
+});
+
+test('sell: buy builder output is unchanged by the sell addition (regression pin)', () => {
+  const d = buildURV4SwapEthToDeepwood(ETH_IN, MIN_OUT, RECIPIENT, DEADLINE);
+  const aw = words(d.slice(10));
+  const params = aw.slice(5).slice(2).slice(1).slice(4);
+  const off0 = Number(BigInt('0x' + params[1])) / 32;
+  const t = params.slice(1 + off0).slice(1).slice(1);
+  assert.equal(BigInt('0x' + t[5]), 1n, 'buy stays zeroForOne=true');
+});
+
+test('approval calldata: ERC20 approve and Permit2 approve (uint160, NOT uint256)', () => {
+  const ap = buildErc20ApproveCalldata(V4_PERMIT2, (1n << 256n) - 1n);
+  assert.equal(ap.slice(0, 10), '0x095ea7b3');
+  assert.ok(ap.slice(10 + 64).startsWith('f' + 'f'.repeat(63)), 'amount = maxUint256 fills the word');
+  const pp = buildPermit2ApproveCalldata(DEEPWOOD_POOL.currency1, V4_UNIVERSAL_ROUTER, MAX_UINT160, 1893456000);
+  assert.equal(pp.slice(0, 10), '0x87517c45');
+  // 4 args x 32 bytes: token, spender, amount(uint160), expiration(uint48)
+  assert.equal((pp.length - 10) / 64, 4, 'exactly 4 words after selector');
+  const amtWord = pp.slice(10 + 128, 10 + 192);
+  assert.equal(BigInt('0x' + amtWord), MAX_UINT160, 'amount = maxUint160 ((1<<160)-1), NOT maxUint256');
+  assert.ok(amtWord.length === 64 && amtWord.startsWith('0'.repeat(64 - 40)), 'uint160 right-aligned in word');
+  const expWord = pp.slice(10 + 192);
+  assert.equal(BigInt('0x' + expWord), 1893456000n, 'expiration');
+});
