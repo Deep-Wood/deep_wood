@@ -2351,6 +2351,15 @@ export class ForestScene extends Phaser.Scene {
       this.tokenAddress,
       account
     );
+    // Show the quote BEFORE anything else — even when the balance is short,
+    // the player must see the total cost first and accept it; only after
+    // Accept do we check funds / approve / send.
+    const shortToken = (Number(tokenCost) / 1e18).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    const accepted = await this.showQuoteDialog(tier, shortToken, 30);
+    if (!accepted) {
+      this.beltMsg('Quote cancelled', 'bad');
+      return;
+    }
     if (tokenBalance < tokenCost) {
       this.beltMsg(`Not enough $DEEPWOOD (need ${(Number(tokenCost)/1e18).toFixed(2)}, have ${(Number(tokenBalance)/1e18).toFixed(2)})`, 'bad');
       return;
@@ -2385,13 +2394,7 @@ export class ForestScene extends Phaser.Scene {
       await new Promise(r => setTimeout(r, 2000));
     }
 
-    // Show quote to user
-    const shortToken = (Number(tokenCost) / 1e18).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-    const accepted = await this.showQuoteDialog(tier, shortToken, 30);
-    if (!accepted) {
-      this.beltMsg('Quote cancelled', 'bad');
-      return;
-    }
+    // Quote was already shown and accepted above (before the balance check).
 
     // Send transaction
     this.beltMsg('Confirm in wallet…', 'busy');
@@ -2497,11 +2500,26 @@ export class ForestScene extends Phaser.Scene {
       return;
     }
 
+    // Show the TOTAL cost and require an explicit Accept FIRST — before the
+    // balance guard — so the quote comes up even when the wallet is short.
+    // Only after Accept do we check funds and submit.
+    const shortCost = (Number(cost) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 0 });
+    const ethValue = 5_000_000_000_000_000n; // 0.005 ETH
+    const accepted = await this.showQuoteDialog(tier, fmtEth(ethValue), 30, {
+      currency: 'ETH',
+      heading: `${buyOrUpgradeLabel(p)} ${toolName(tier)} with ETH`,
+      costLabel: 'You send',
+      extra: `<p>On-chain tool price: <strong>${shortCost} $DEEPWOOD</strong> — the tx auto-swaps your ETH to $DEEPWOOD and buys the tool in one call; it reverts if the swap cannot cover the price.</p>`,
+    });
+    if (!accepted) {
+      this.beltMsg('Quote cancelled', 'bad');
+      return;
+    }
+
     // Read the REAL balance BEFORE the local mirror is touched
     await this.refreshChainBalance();
 
     // Build the tx: buyToolWithEth(tier, hookData, minTokens)
-    // hookData is empty bytes (the pool hook doesn't need extra data)
     // minTokens is 0 (slippage is absorbed by the game per spec)
     const { buyToolWithEthTx } = await import('./chain.js');
     const before = await reader.toolOf(account);
@@ -2518,7 +2536,6 @@ export class ForestScene extends Phaser.Scene {
     // ETH→DEEPWOOD rate on this thin testnet pool. Do not hardcode 0.1 ETH —
     // a player with 0.01 ETH cannot cover it, and Privy won't surface a
     // signing popup for an underfunded transaction.
-    const ethValue = 5_000_000_000_000_000n; // 0.005 ETH
 
     // Guard: don't send a tx the wallet can't cover.
     const haveEth = this.chainBalanceWei ?? 0n;
@@ -2527,21 +2544,6 @@ export class ForestScene extends Phaser.Scene {
         `Not enough ETH (need 0.005, have ${(Number(haveEth) / 1e18).toFixed(4)}). Use 'Claim faucet' in the wallet menu, or pay with $DEEPWOOD tokens instead.`,
         'bad',
       );
-      return;
-    }
-
-    // Show the TOTAL cost and require an explicit Accept BEFORE the tx is
-    // submitted — same gate as the token path. Without this the only prompt
-    // was the wallet's own signing popup, with no in-game cost breakdown.
-    const shortCost = (Number(cost) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 0 });
-    const accepted = await this.showQuoteDialog(tier, fmtEth(ethValue), 30, {
-      currency: 'ETH',
-      heading: `${buyOrUpgradeLabel(p)} ${toolName(tier)} with ETH`,
-      costLabel: 'You send',
-      extra: `<p>On-chain tool price: <strong>${shortCost} $DEEPWOOD</strong> — the tx auto-swaps your ETH to $DEEPWOOD and buys the tool in one call; it reverts if the swap cannot cover the price.</p>`,
-    });
-    if (!accepted) {
-      this.beltMsg('Quote cancelled', 'bad');
       return;
     }
 
@@ -3514,8 +3516,19 @@ export class ForestScene extends Phaser.Scene {
     this.updateHud();
   }
 
-  /** A one-line status under the claim button. */
+  /** A one-line status under the claim button.
+   *
+   * Long messages are truncated and shown as a CENTRE-SCREEN flash (the same
+   * deepwoodFlash the signing prompt and swap confirmations use) instead of
+   * the belt line, so no long text ever sits under the claim button. Short
+   * messages keep the belt row as before.
+   */
   beltMsg(text, kind = '') {
+    if (text && text.length > 60) {
+      const short = text.slice(0, 57).trimEnd() + '…';
+      if (typeof window.deepwoodFlash === 'function') window.deepwoodFlash(short);
+      text = '';
+    }
     const el = document.getElementById('belt-msg');
     if (!el) return;
     el.textContent = text;
