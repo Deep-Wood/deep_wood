@@ -1947,6 +1947,12 @@ button.chip { position: relative; }
   color: #1a1206;
   box-shadow: 0 2px 0 rgba(0, 0, 0, .4), inset 0 1px 0 rgba(255, 255, 255, .3);
 }
+.swap-balance {
+  text-align: right;
+  font-size: 11px;
+  color: rgba(159, 232, 180, .85);
+  margin-top: calc(var(--s2) * -0.5);
+}
 
 
 /* ===========================================================================

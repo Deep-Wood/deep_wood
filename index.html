@@ -294,6 +294,7 @@
         </div>
         <div class="redeem-label" id="swap-input-label">Swap ETH for $DeepWood via Uniswap V4 (pool: ETH/DeepWood, 0% fee)</div>
         <input class="redeem-input" id="swap-eth-amount" type="number" step="any" min="0" placeholder="0.005" />
+        <div class="redeem-label swap-balance" id="swap-balance"></div>
         <div class="redeem-label" id="swap-estimate">DeepWood out: —</div>
         <button type="button" class="redeem-btn" id="swap-execute">Swap</button>
         <div id="swap-err" class="privy-err" role="alert"></div>
@@ -1062,6 +1063,7 @@
             ? '<button class="wm-item wm-copy" type="button">Copy address</button>'
             : '') +
         '<div class="wm-box">' +
+          '<button class="wm-item" type="button" id="wm-swap">Swap</button>' +
           '<button class="wm-item" type="button" id="wm-leaderboard">Leaderboard</button>' +
           '<button class="wm-item" type="button" id="wm-camp">Camp</button>' +
           '<button class="wm-item" type="button" id="wm-redeem">Redeem gems</button>' +
@@ -1086,6 +1088,16 @@
       btn.dataset.open = '1';
       document.addEventListener('click', outsideClose, true);
       document.addEventListener('keydown', escClose, true);
+
+      // Swap — opens the swap dialog (Buy $DeepWood / Sell $DeepWood). Lives in
+      // the wallet menu per user request; it used to sit in the buy/upgrade
+      // tool button's dropdown. openSwapDialog is a top-level function in this
+      // module (hoisted), so it is callable directly here.
+      walletMenu.querySelector('#wm-swap').addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeWalletMenu();
+        openSwapDialog();
+      });
 
       // Leaderboard — opens the leaderboard panel. Moved from the right rail
       // into the wallet dropdown per user request.
@@ -1414,7 +1426,36 @@
     const swapInputLabel = document.getElementById('swap-input-label');
     const swapDirBuy = document.getElementById('swap-dir-buy');
     const swapDirSell = document.getElementById('swap-dir-sell');
+    const swapBalance = document.getElementById('swap-balance');
     let swapDir = 'buy'; // 'buy' = ETH -> DeepWood, 'sell' = DeepWood -> ETH
+
+    // Show the spendable balance for the ACTIVE direction: ETH when buying,
+    // $DEEPWOOD when selling. Read on-chain (never a cached value).
+    async function refreshSwapBalance() {
+      if (!swapBalance) return;
+      const st = getState();
+      if (!st.account) { swapBalance.textContent = ''; return; }
+      if (swapDir === 'buy') {
+        swapBalance.textContent = 'Available: … ETH';
+        try {
+          const bal = await walletBalanceWeiOnchain();
+          setChainBalanceWei(bal);
+          swapBalance.textContent = `Available: ${(Number(getState().chainBalanceWei ?? bal) / 1e18).toFixed(4)} ETH`;
+        } catch {
+          swapBalance.textContent = `Available: ${(Number(getState().chainBalanceWei ?? 0n) / 1e18).toFixed(4)} ETH`;
+        }
+      } else {
+        swapBalance.textContent = 'Available: … $DEEPWOOD';
+        try {
+          const { ethCall } = await import('/src/wallet.js');
+          const { V4_DEEPWOOD_TOKEN, argAddr } = await import('/src/chain.js');
+          const hex = await ethCall(V4_DEEPWOOD_TOKEN, SEL_BALANCE_OF + argAddr(st.account));
+          swapBalance.textContent = `Available: ${fmtDeep(Number(BigInt(hex)) / 1e18)} $DEEPWOOD`;
+        } catch {
+          swapBalance.textContent = 'Available: — $DEEPWOOD';
+        }
+      }
+    }
 
     const estPlaceholder = () => (swapDir === 'buy' ? 'DeepWood out: —' : 'ETH out: —');
     function setSwapDir(dir) {
@@ -1429,6 +1470,7 @@
         : 'Swap $DeepWood for ETH via Uniswap V4 (pool: ETH/DeepWood, 0% fee)';
       swapEth.placeholder = dir === 'buy' ? '0.005' : '10';
       swapEstimate.textContent = estPlaceholder();
+      refreshSwapBalance();
     }
     swapDirBuy.addEventListener('click', (e) => { e.stopPropagation(); setSwapDir('buy'); });
     swapDirSell.addEventListener('click', (e) => { e.stopPropagation(); setSwapDir('sell'); });
@@ -1439,6 +1481,7 @@
       swapEth.value = ''; swapEstimate.textContent = estPlaceholder(); swapErr.textContent = '';
       swapEth.disabled = false; swapExecute.disabled = false;
       swapCard.classList.remove('hidden');
+      refreshSwapBalance();
       if (st.account && !st.rightChain) {
         swapEth.disabled = true; swapExecute.disabled = true;
         swapEstimate.textContent = 'Switch to Robinhood Testnet first — your ETH is on chain ' + st.chainId + '.';
@@ -1465,6 +1508,7 @@
       } else {
         swapEth.disabled = false; swapExecute.disabled = false;
         if (!swapEth.value) swapEstimate.textContent = estPlaceholder();
+        refreshSwapBalance();
       }
     });
 

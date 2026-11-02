@@ -1601,20 +1601,24 @@ export class ForestScene extends Phaser.Scene {
         const box = document.createElement('div');
         box.className = 'wm-box';
 
-        // Row builder: pay button on the left, external link on the right.
+        // Row builder: pay button on the left, optional external link on the
+        // right. The old "buy DeepWood" external hyperlink (vibevibe.fun) was
+        // removed per user request — swapping happens in the wallet menu now.
         const mkRow = (btn, linkText, linkHref, linkTitle) => {
           const row = document.createElement('div');
           row.className = 'pay-row';
           row.appendChild(btn);
-          const a = document.createElement('a');
-          a.className = 'pay-link';
-          a.href = linkHref;
-          a.target = '_blank';
-          a.rel = 'noopener noreferrer';
-          a.title = linkTitle;
-          a.textContent = linkText;
-          a.onclick = (e) => e.stopPropagation();
-          row.appendChild(a);
+          if (linkText) {
+            const a = document.createElement('a');
+            a.className = 'pay-link';
+            a.href = linkHref;
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            a.title = linkTitle;
+            a.textContent = linkText;
+            a.onclick = (e) => e.stopPropagation();
+            row.appendChild(a);
+          }
           return row;
         };
 
@@ -1654,33 +1658,11 @@ export class ForestScene extends Phaser.Scene {
           this.doBuyToolWithToken(nt);
         };
 
-        const optSwap = document.createElement('button');
-        optSwap.className = 'wm-item';
-        optSwap.type = 'button';
-        optSwap.textContent = 'Swap ETH → DeepWood';
-        optSwap.title = 'Swap ETH for $DeepWood tokens via Uniswap V4';
-        optSwap.onclick = async (e) => {
-          e.stopPropagation(); closeBuyDropdown();
-          // Wait up to ~5s for the deferred module to expose openSwapDialog.
-          // On reload the module may not have run yet; polling keeps the
-          // swap working instead of a dead-end "not ready" message.
-          let ready = typeof window.openSwapDialog === 'function';
-          let waited = 0;
-          while (!ready && waited < 5000) {
-            await new Promise(r => setTimeout(r, 100));
-            ready = typeof window.openSwapDialog === 'function';
-            waited += 100;
-          }
-          if (ready) {
-            window.openSwapDialog();
-          } else {
-            this.beltMsg('Swap dialog not loaded. Reload the page and try again.', 'bad');
-          }
-        };
-        box.appendChild(optSwap);
-
+        // The "Swap" entry moved OUT of this dropdown into the wallet menu
+        // (labeled just "Swap") per user request — see openWalletMenu() in
+        // index.html (#wm-swap).
         box.appendChild(mkRow(optEth, 'claim faucet', 'https://faucet.testnet.chain.robinhood.com', 'Get free Robinhood testnet ETH'));
-        box.appendChild(mkRow(optToken, 'buy DeepWood', 'https://testnet.vibevibe.fun/token/0xF049d0076c2f25A763551beD760aB55e905ea831', 'Buy $DEEPWOOD on vibevibe.fun'));
+        box.appendChild(mkRow(optToken));
         dd.appendChild(box);
 
         // Position the dropdown below the button. The button is inside
