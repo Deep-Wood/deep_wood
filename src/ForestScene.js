@@ -2524,9 +2524,24 @@ export class ForestScene extends Phaser.Scene {
     const haveEth = this.chainBalanceWei ?? 0n;
     if (haveEth < ethValue) {
       this.beltMsg(
-        `Not enough ETH (need 0.005, have ${(Number(haveEth) / 1e18).toFixed(4)}). Claim testnet ETH at the faucet link in the buy menu, or pay with $DEEPWOOD tokens instead.`,
+        `Not enough ETH (need 0.005, have ${(Number(haveEth) / 1e18).toFixed(4)}). Use 'Claim faucet' in the wallet menu, or pay with $DEEPWOOD tokens instead.`,
         'bad',
       );
+      return;
+    }
+
+    // Show the TOTAL cost and require an explicit Accept BEFORE the tx is
+    // submitted — same gate as the token path. Without this the only prompt
+    // was the wallet's own signing popup, with no in-game cost breakdown.
+    const shortCost = (Number(cost) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 0 });
+    const accepted = await this.showQuoteDialog(tier, fmtEth(ethValue), 30, {
+      currency: 'ETH',
+      heading: `${buyOrUpgradeLabel(p)} ${toolName(tier)} with ETH`,
+      costLabel: 'You send',
+      extra: `<p>On-chain tool price: <strong>${shortCost} $DEEPWOOD</strong> — the tx auto-swaps your ETH to $DEEPWOOD and buys the tool in one call; it reverts if the swap cannot cover the price.</p>`,
+    });
+    if (!accepted) {
+      this.beltMsg('Quote cancelled', 'bad');
       return;
     }
 
@@ -2574,15 +2589,19 @@ export class ForestScene extends Phaser.Scene {
    * Show a quote dialog and wait for user acceptance.
    * Returns true if accepted, false if cancelled.
    */
-  async showQuoteDialog(tier, tokenCost, expiresIn) {
+  async showQuoteDialog(tier, costText, expiresIn, opts = {}) {
+    const currency = opts.currency || '$DEEPWOOD';
+    const heading = opts.heading || `Buy ${toolName(tier)} with ${currency}`;
+    const costLabel = opts.costLabel || 'Total cost';
+    const extra = opts.extra || '<p>Discount: <strong>10% off</strong></p>';
     return new Promise((resolve) => {
       const el = document.createElement('div');
       el.className = 'quote-dialog';
       el.innerHTML = `
         <div class="quote-card">
-          <h3>Buy ${toolName(tier)} with $DEEPWOOD</h3>
-          <p>Token cost: <strong>${tokenCost} $DEEPWOOD</strong></p>
-          <p>Discount: <strong>10% off</strong></p>
+          <h3>${heading}</h3>
+          <p>${costLabel}: <strong>${costText} ${currency}</strong></p>
+          ${extra}
           <p>Quote expires in: <strong>${expiresIn}s</strong></p>
           <div class="quote-actions">
             <button class="chip btn act" id="quote-accept">Accept</button>
@@ -2661,6 +2680,13 @@ export class ForestScene extends Phaser.Scene {
     // status 0x1, so a hash proves nothing -- the gate in onchain.js polls
     // `toolOf` until the tier actually moves, and only then do we believe it.
     const cost = toolPrice(tier);
+    // Show the total cost and require an explicit Accept before submission
+    // (same gate as the ETH and token-discount paths).
+    const accepted = await this.showQuoteDialog(tier, (Number(cost) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 0 }), 30);
+    if (!accepted) {
+      this.beltMsg('Quote cancelled', 'bad');
+      return;
+    }
     this.beltMsg('Confirm the purchase in your wallet\u2026', 'busy');
     // Read the REAL balance BEFORE the local mirror is touched. The mirror step
     // sizes itself against walletBalanceWei(), and on a first purchase that
