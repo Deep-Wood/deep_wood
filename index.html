@@ -1064,6 +1064,7 @@
             : '') +
         '<div class="wm-box">' +
           '<button class="wm-item" type="button" id="wm-swap">Swap</button>' +
+          '<button class="wm-item" type="button" id="wm-faucet">Claim faucet</button>' +
           '<button class="wm-item" type="button" id="wm-leaderboard">Leaderboard</button>' +
           '<button class="wm-item" type="button" id="wm-camp">Camp</button>' +
           '<button class="wm-item" type="button" id="wm-redeem">Redeem gems</button>' +
@@ -1097,6 +1098,14 @@
         e.stopPropagation();
         closeWalletMenu();
         openSwapDialog();
+      });
+
+      // Claim faucet — opens the Robinhood testnet ETH faucet in a new tab.
+      // Moved here from the buy/upgrade dropdown per user request.
+      walletMenu.querySelector('#wm-faucet').addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeWalletMenu();
+        window.open('https://faucet.testnet.chain.robinhood.com', '_blank', 'noopener');
       });
 
       // Leaderboard — opens the leaderboard panel. Moved from the right rail

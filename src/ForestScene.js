@@ -1658,10 +1658,10 @@ export class ForestScene extends Phaser.Scene {
           this.doBuyToolWithToken(nt);
         };
 
-        // The "Swap" entry moved OUT of this dropdown into the wallet menu
-        // (labeled just "Swap") per user request — see openWalletMenu() in
-        // index.html (#wm-swap).
-        box.appendChild(mkRow(optEth, 'claim faucet', 'https://faucet.testnet.chain.robinhood.com', 'Get free Robinhood testnet ETH'));
+        // The "Swap" entry and the faucet link moved OUT of this dropdown into
+        // the wallet menu per user request — see openWalletMenu() in
+        // index.html (#wm-swap, #wm-faucet).
+        box.appendChild(mkRow(optEth));
         box.appendChild(mkRow(optToken));
         dd.appendChild(box);
 
