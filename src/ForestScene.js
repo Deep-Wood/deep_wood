@@ -2503,13 +2503,11 @@ export class ForestScene extends Phaser.Scene {
     // Show the TOTAL cost and require an explicit Accept FIRST — before the
     // balance guard — so the quote comes up even when the wallet is short.
     // Only after Accept do we check funds and submit.
-    const shortCost = (Number(cost) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 0 });
     const ethValue = 5_000_000_000_000_000n; // 0.005 ETH
     const accepted = await this.showQuoteDialog(tier, fmtEth(ethValue), 30, {
       currency: 'ETH',
       heading: `${buyOrUpgradeLabel(p)} ${toolName(tier)} with ETH`,
       costLabel: 'You send',
-      extra: `<p>On-chain tool price: <strong>${shortCost} $DEEPWOOD</strong> — the tx auto-swaps your ETH to $DEEPWOOD and buys the tool in one call; it reverts if the swap cannot cover the price.</p>`,
     });
     if (!accepted) {
       this.beltMsg('Quote cancelled', 'bad');
@@ -2595,16 +2593,14 @@ export class ForestScene extends Phaser.Scene {
     const currency = opts.currency || '$DEEPWOOD';
     const heading = opts.heading || `Buy ${toolName(tier)} with ${currency}`;
     const costLabel = opts.costLabel || 'Total cost';
-    const extra = opts.extra || '<p>Discount: <strong>10% off</strong></p>';
     return new Promise((resolve) => {
       const el = document.createElement('div');
       el.className = 'quote-dialog';
+      // Keep it to two short lines: what you're buying, what you pay.
       el.innerHTML = `
         <div class="quote-card">
           <h3>${heading}</h3>
           <p>${costLabel}: <strong>${costText} ${currency}</strong></p>
-          ${extra}
-          <p>Quote expires in: <strong>${expiresIn}s</strong></p>
           <div class="quote-actions">
             <button class="chip btn act" id="quote-accept">Accept</button>
             <button class="chip btn" id="quote-cancel">Cancel</button>

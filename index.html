@@ -292,7 +292,7 @@
           <button type="button" class="swap-dir-btn active" id="swap-dir-buy" role="tab" aria-selected="true">Buy $DeepWood</button>
           <button type="button" class="swap-dir-btn" id="swap-dir-sell" role="tab" aria-selected="false">Sell $DeepWood</button>
         </div>
-        <div class="redeem-label" id="swap-input-label">Swap ETH for $DeepWood via Uniswap V4 (pool: ETH/DeepWood, 0% fee)</div>
+        <div class="redeem-label" id="swap-input-label">Via Uniswap V4 · ETH/$DeepWood pool · 0% fee</div>
         <input class="redeem-input" id="swap-eth-amount" type="number" step="any" min="0" placeholder="0.005" />
         <div class="redeem-label swap-balance" id="swap-balance"></div>
         <div class="redeem-label" id="swap-estimate">DeepWood out: —</div>
@@ -1475,8 +1475,8 @@
       swapDirSell.setAttribute('aria-selected', String(dir === 'sell'));
       swapTitle.textContent = dir === 'buy' ? 'Swap ETH → DeepWood' : 'Swap DeepWood → ETH';
       swapInputLabel.textContent = dir === 'buy'
-        ? 'Swap ETH for $DeepWood via Uniswap V4 (pool: ETH/DeepWood, 0% fee)'
-        : 'Swap $DeepWood for ETH via Uniswap V4 (pool: ETH/DeepWood, 0% fee)';
+        ? 'Via Uniswap V4 · ETH/$DeepWood pool · 0% fee'
+        : 'Via Uniswap V4 · ETH/$DeepWood pool · 0% fee';
       swapEth.placeholder = dir === 'buy' ? '0.005' : '10';
       swapEstimate.textContent = estPlaceholder();
       refreshSwapBalance();
@@ -1543,7 +1543,7 @@
             const out = deepwoodOutFor(BigInt(Math.floor(amt * 1e18)), s);
             swapEstimate.textContent =
               `DeepWood out: ≈${fmtDeep(Number(out) / 1e18)} $DeepWood`
-              + ' (spot price — the hook fee and slippage will make this lower)';
+              + ' (spot price)';
           } catch (e) {
             swapEstimate.textContent = 'DeepWood out: estimate unavailable — '
               + String(e?.message || e).slice(0, 90);
@@ -1559,7 +1559,7 @@
             const out = ethOutFor(BigInt(Math.floor(amt * 1e18)), s);
             swapEstimate.textContent =
               `ETH out: ≈${fmtDeep(Number(out) / 1e18)} ETH`
-              + ' (spot price — the hook fee and slippage will make this lower)';
+              + ' (spot price)';
           } catch (e) {
             swapEstimate.textContent = 'ETH out: estimate unavailable — '
               + String(e?.message || e).slice(0, 90);
