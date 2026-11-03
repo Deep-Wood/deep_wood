@@ -1397,20 +1397,34 @@ export class ForestScene extends Phaser.Scene {
     if (mineRow) top10.push(mineRow);
 
     const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-    const short = (a) => a === '0xplayer' ? 'you (not connected)' : `${a.slice(0, 6)}…${a.slice(-4)}`;
     const roiTxt = (r) => {
       if (!r.onBoard) return '--';
-      // roi is 1e18 fixed point straight from the contract's roi() -- format
-      // the multiple, not the raw integer (0n used to render as "0x").
-      const v = Number(r.roi) / 1e18;
+      // The contract's roi() = (seasonScore * 1e18) / totalTokenSpent uses
+      // integer division: totalTokenSpent is 18-decimal wei (~1e7x larger than
+      // the numerator), so the chain value truncates to 0 for every realistic
+      // player and the board showed "0.00x" for everyone. When the chain read
+      // is 0, fall back to the exact ratio from the same two inputs
+      // (seasonScore / tokenSpent) computed in float -- no truncation.
+      // Unit: rarity-weight earned per whole DEEPWOOD spent.
+      const chainV = Number(r.roi) / 1e18;
+      const exactV = r.tokenSpent > 0n
+        ? Number(r.score) / (Number(r.tokenSpent) / 1e18)
+        : 0;
+      const v = chainV > 0 ? chainV : exactV;
+      if (!isFinite(v) || v <= 0) return '0x';
       if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}Mx`;
       if (v >= 10_000) return `${(v / 1_000).toFixed(1)}Kx`;
       if (v >= 1000) return `${v.toFixed(0)}x`;
       if (v >= 10) return `${v.toFixed(1)}x`;
-      return `${v.toFixed(2)}x`;
+      if (v >= 1) return `${v.toFixed(2)}x`;
+      // Small ratios are real (weight per whole DEEPWOOD sits around 1e-4) --
+      // 3 significant digits so a real number never collapses to "0.00x".
+      return `${v.toPrecision(3)}x`;
     };
     const bestTxt = (r) => seasonEth(r.bestWei);
-    const shortAddr = (a) => a === '0xplayer' ? 'YOU' : `${a.slice(0, 6)}…${a.slice(-4)}`;
+    // Full 42-char address, never truncated -- .lb-addr wraps (hud.css), so
+    // the whole string stays visible even in a narrow cell.
+    const shortAddr = (a) => a === '0xplayer' ? 'YOU' : a;
     const medal = (rank) => {
       if (rank === 1) return '<span class="lb-medal gold">🥇</span>';
       if (rank === 2) return '<span class="lb-medal silver">🥈</span>';
