@@ -323,14 +323,15 @@ test('a rejected argument never becomes calldata', () => {
 });
 
 // ---------------------------------------------------------------------------
-// No-provider path. Node has no window, so this is the real default.
+// Injected wallet (window.ethereum) is DISABLED program-wide: social login
+// only. A bare connect() must be refused before window.ethereum is consulted.
 // ---------------------------------------------------------------------------
-test('no provider installed', async (t) => {
-  await t.test('connect reports it instead of throwing', async () => {
+test('injected wallet login is disabled', async (t) => {
+  await t.test('bare connect() is refused instead of touching window.ethereum', async () => {
     const r = await connect();
     assert.equal(r.ok, false);
-    assert.equal(r.code, 'no-provider');
-    assert.match(r.reason, /EIP-1193/);
+    assert.equal(r.code, 'wallet-login-disabled');
+    assert.match(r.reason, /Email Login/);
   });
 
   await t.test('state is disconnected, not half-connected', () => {
@@ -358,12 +359,12 @@ test('no provider installed', async (t) => {
     assert.equal(installListeners(null), false);
   });
 
-  await t.test('a bogus window.ethereum is still "no provider"', async () => {
+  await t.test('a present-but-bogus window.ethereum is still refused', async () => {
     globalThis.window = { ethereum: {} };
     try {
       const r = await connect();
       assert.equal(r.ok, false);
-      assert.equal(r.code, 'no-provider');
+      assert.equal(r.code, 'wallet-login-disabled');
     } finally {
       delete globalThis.window;
     }

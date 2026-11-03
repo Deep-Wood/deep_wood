@@ -34,7 +34,9 @@
  * takes on the read side, because reading the right address on the wrong
  * chain produces valid-looking garbage.
  *
- *   const r = await connect();
+ *   const r = await connect({ provider }); // Privy embedded wallet only —
+ *   // a bare connect() is refused with code 'wallet-login-disabled':
+ *   // injected wallets are disabled program-wide (social login only).
  *   if (r.ok && r.wrongChain) await switchToGameChain();
  *   const tx = await claimTool(1);
  */
@@ -640,6 +642,17 @@ function errDetail(e) {
  *                             i.e. do not open the wallet's connect prompt
  */
 export async function connect({ provider, silent = false } = {}) {
+  // Social-login-only (program requirement): the injected window.ethereum
+  // path is DISABLED. Only an explicit provider -- the Privy embedded wallet
+  // handed over by the email login dialog -- may connect. A bare connect()
+  // never touches window.ethereum anymore, prompt or silent.
+  if (!provider) {
+    return {
+      ok: false,
+      code: "wallet-login-disabled",
+      reason: "Wallet login is disabled — use Email Login (social sign-in).",
+    };
+  }
   const p = getProvider(provider);
   if (!p || typeof p.request !== "function") {
     return {

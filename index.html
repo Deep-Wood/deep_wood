@@ -431,7 +431,7 @@
          always has. Circular, matching the reference art's round controls.
          The glyph is a proper Web3 WALLET (card in a fold-over case with a
          card slot), not a padlock -- a lock reads as 'locked' not 'connect'. -->
-    <button class="icon-btn" id="connect" aria-label="Connect wallet" title="Connect wallet">
+    <button class="icon-btn" id="connect" aria-label="Log in" title="Log in">
       <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
         <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H17a2 2 0 0 1 2 2v.5H8.5A2.5 2.5 0 0 0 6 10v6.5A2.5 2.5 0 0 1 3.5 14v-6.5Z" fill="currentColor"/>
         <path d="M8.5 9h11a2 2 0 0 1 2 2v6.5a2.5 2.5 0 0 1-2.5 2.5H9A2.5 2.5 0 0 1 6.5 17.5v-6A2.5 2.5 0 0 1 9 9h-.5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
@@ -973,51 +973,6 @@
       noteWallet(pendingMsg || 'Off-chain preview. Connect a wallet to buy a tool and sell gems.');
     }
 
-    /**
-     * Connect, and switch network in the SAME click.
-     *
-     * This used to check for a wrong chain BEFORE connecting and only then
-     * switch, so the very first click on a wallet sitting on mainnet just
-     * discovered the mismatch, changed the button to "Switch to chain 46630",
-     * and did nothing else. The player had to click a second time to be
-     * anywhere -- and since the button had visibly changed and looked live,
-     * the first click read as "connect is broken" rather than "one step of a
-     * two-step flow".
-     *
-     * Now: connect, and if that lands on the wrong chain, switch immediately.
-     * One click, or one clear error.
-     */
-    async function doConnect() {
-      btn.disabled = true;
-      try {
-        const r = await connect();
-
-        if (!r.ok && r.code === 'wrong-chain') {
-          // The account is real and approved. Just on the wrong network --
-          // finish the job rather than bouncing the player back.
-          const sw = await switchToGameChain();
-          if (sw.ok) {
-            render();
-            return;
-          }
-          setPending('Connected, but could not switch to chain ' + GAME_CHAIN_ID
-            + ' (' + switchReasonText(sw, r.chainId) + ').');
-          render();
-          return;
-        }
-
-        if (!r.ok) {
-          // Rejections and missing-provider cases are worth saying out loud.
-          setPending(r.code === 'rejected' ? 'Connection rejected in the wallet.'
-            : r.code === 'no-provider' ? 'No wallet detected. Install an EIP-1193 wallet to play onchain.'
-            : 'Connect failed: ' + r.reason);
-        }
-        render();
-      } finally {
-        btn.disabled = false;
-      }
-    }
-
     btn.addEventListener('click', () => {
       // The menu opens whether or not a wallet is connected: Leaderboard,
       // Camp, About and Redeem are all reachable in preview, and the bottom
@@ -1074,8 +1029,9 @@
         // The bottom section flips with the session.
         (s.connected
           ? '<button class="wm-item wm-disconnect" type="button">Disconnect</button>'
-          : '<button class="wm-item wm-connect" type="button">Connect Wallet</button>' +
-            '<button class="wm-item wm-privy" type="button">Email Login</button>');
+          // Social login only (program requirement): no "Connect Wallet" item.
+          // The injected EIP-1193 path is disabled in wallet.js connect().
+          : '<button class="wm-item wm-privy" type="button">Email Login</button>');
       // Append the menu to the button and DO NOT touch its position.
       //
       // The button is already `position: absolute` (top-right corner, from
@@ -1173,16 +1129,6 @@
         } else {
           setPending('Fusion is not ready yet — try again in a moment.');
         }
-      });
-
-      // Connect wallet (EIP-1193) — the bottom item when there is no session. Runs the
-      // same connect-and-switch flow the button itself used to fire directly.
-      walletMenu.querySelectorAll('.wm-connect').forEach((item) => {
-        item.addEventListener('click', (e) => {
-          e.stopPropagation();
-          closeWalletMenu();
-          doConnect();
-        });
       });
 
       // Connect with Privy (email/social -> embedded wallet). The button
@@ -1746,27 +1692,11 @@
     // button honest without a reload.
     onWallet(render);
 
-    // RECONNECT ON BOOT.
-    //
-    // The app only ever connected when the player CLICKED, so a returning
-    // visitor whose wallet was already authorised for this site booted into
-    // PREVIEW with an empty local mirror: the card read "no tool - buy Wood"
-    // and "no gems yet" for a wallet the chain reports as tier 1, 20/20, not
-    // broken. Nothing was wrong with the reconciliation code -- it was never
-    // invoked, because the only caller was the button.
-    //
-    // `silent: true` uses eth_accounts, which cannot open a wallet prompt, so
-    // a returning player is reconnected without being nagged. A first-time
-    // visitor has no authorised account, gets an empty list, and the button
-    // still works as the way to connect.
-    //
-    // Swallowed deliberately: a wallet-less browser, or a wallet that throws
-    // on eth_accounts, must not surface as a connection error the player did
-    // not cause.
-    Promise.resolve()
-      .then(() => connect({ silent: true }))
-      .then((r) => { if (r && r.ok) render(); })
-      .catch(() => {});
+    // RECONNECT ON BOOT — social (Privy) only. The old injected-wallet silent
+    // reconnect (connect({ silent: true }) over window.ethereum) is removed:
+    // traditional wallet login is disabled program-wide, so there is nothing
+    // to silently re-attach. Returning players are restored by the Privy
+    // boot block below instead.
 
     // PRIVY BOOT RESTORE — re-attach a returning embedded-wallet user without
     // re-prompting for email / OTP. Same silent-swallow stance as the
