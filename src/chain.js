@@ -225,6 +225,11 @@ export async function ethGetLogsChunked(rpcUrl, fallbackRpcUrls, filter, {
       cached.block = Math.max(cached.block, end);
     }
   }
+  // Store the ACCUMULATED logs back into the cache entry. `all` is a slice of
+  // cached.logs, so without this the cache remembered the block height but
+  // forgot every log -- a second call found no new blocks, scanned nothing,
+  // and returned [] (the reopen-shows-empty-board bug).
+  cached.logs = all;
   __logCache.set(key, cached);
   return all;
 }
