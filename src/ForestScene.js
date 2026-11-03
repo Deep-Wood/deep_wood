@@ -1335,7 +1335,7 @@ export class ForestScene extends Phaser.Scene {
 
     // Data: chain first, local mirror as fallback. Both paths hand the same
     // shape to the painter below, so the layout never forks.
-    let rows = [], rankNote = null, phaseLabel = null;
+    let rows = [], rankNote = null, phaseLabel = null, chainFailed = false;
     try {
       const { getReader } = await import('./onchain.js');
       const r = await getReader();
@@ -1353,12 +1353,26 @@ export class ForestScene extends Phaser.Scene {
           : lb.phase === 2 ? 'Season closed'
           : null;
         rankNote = `${lb.playerCount} player(s) settled on-chain`;
+        // Remember the last successful read: a reopen whose RPC scan gets
+        // rate-limited must not claim the board is empty.
+        this.lbCache = { rows, phaseLabel, rankNote };
       }
     } catch {
-      rows = [];   // chain read failed -- show empty state
+      // Chain read failed (RPC drop/429 on the log scan). "No one has
+      // settled a hunt yet" is only honest when the chain ANSWERED with zero
+      // rows -- on a failed read, fall back to the last good board instead of
+      // showing the empty state.
+      chainFailed = true;
+      if (this.lbCache) {
+        rows = this.lbCache.rows;
+        phaseLabel = this.lbCache.phaseLabel;
+        rankNote = `${this.lbCache.rankNote} (stale — refresh failed)`;
+        chainFailed = false;
+      }
     }
-    // No local fallback: chain-only. If the chain read fails or returns no
-    // rows, the panel shows the empty state below.
+    // No local fallback: chain-only. A successful-but-empty read shows the
+    // empty state below; a failed read shows the error state (or the cached
+    // board above).
 
     if (gen !== undefined && gen !== this.lbGen) return;  // discarded by a newer close/open
 
@@ -1422,9 +1436,10 @@ export class ForestScene extends Phaser.Scene {
       return `${v.toPrecision(3)}x`;
     };
     const bestTxt = (r) => seasonEth(r.bestWei);
-    // Full 42-char address, never truncated -- .lb-addr wraps (hud.css), so
-    // the whole string stays visible even in a narrow cell.
-    const shortAddr = (a) => a === '0xplayer' ? 'YOU' : a;
+    // Truncated address on purpose (user preference): 0x1234…abcd. The other
+    // columns still render in full -- cells wrap instead of ellipsizing
+    // (hud.css), so no figure is ever cut short.
+    const shortAddr = (a) => a === '0xplayer' ? 'YOU' : `${a.slice(0, 6)}…${a.slice(-4)}`;
     const medal = (rank) => {
       if (rank === 1) return '<span class="lb-medal gold">🥇</span>';
       if (rank === 2) return '<span class="lb-medal silver">🥈</span>';
@@ -1461,7 +1476,7 @@ export class ForestScene extends Phaser.Scene {
             <tr><th>#</th><th>Hunter</th><th>ROI</th><th>Best find</th></tr>
           </thead>
           <tbody class="lb-rows-t">
-            ${top10.length ? top10.map(rowHtml).join('') : '<tr><td colspan="4" class="lb-empty">No one has settled a hunt yet. Be the first.</td></tr>'}
+            ${top10.length ? top10.map(rowHtml).join('') : `<tr><td colspan="4" class="lb-empty">${chainFailed ? 'Couldn’t reach the chain — close and reopen to retry.' : 'No one has settled a hunt yet. Be the first.'}</td></tr>`}
          </tbody>
         </table>
         </div>

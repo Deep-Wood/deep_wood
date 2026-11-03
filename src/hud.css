@@ -1339,19 +1339,12 @@ button.chip { position: relative; }
      1px line instead of doubling to 2px. */
   border-right: 1px solid rgba(124, 58, 237, 0.35);
   border-bottom: 1px solid rgba(124, 58, 237, 0.25);
-  /* Cells WRAP instead of clipping: a long address or figure drops to the
-     next line inside its own cell rather than rendering as "...". */
+  /* Cells WRAP instead of clipping: a long figure drops to the next line
+     inside its own cell rather than rendering as "...". (The Hunter address
+     stays truncated by request; every other column shows in full.) */
   overflow-wrap: anywhere;
   white-space: normal;
   vertical-align: top;
-}
-/* Hunter column: full 42-char address at a smaller mono size, breaking
-   anywhere so it can never be ellipsized. */
-.lb-addr {
-  font-family: monospace;
-  font-size: 10px;
-  line-height: 1.4;
-  word-break: break-all;
 }
 .lb-roi, .lb-best { font-family: monospace; font-size: 11px; }
 .lb-table td:last-child { border-right: none; }
