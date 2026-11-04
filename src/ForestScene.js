@@ -818,12 +818,12 @@ export class ForestScene extends Phaser.Scene {
       const spot = epoch === 0 ? n : describeChunk(this.seasonSeed, cx, cy, epoch).nodes.find((q) => q.idx === n.idx);
       if (!spot) return;
 
-      // A dig site is a small MOUND of dug-up earth with a pulsing amber glow
-      // pooled on its crown -- not a stake, not a bare dot on flat ground.
-      // Depth = y at creation, so stack: shadow (back) -> mound -> glow (front).
-      // Identical on every site regardless of what is buried -- the rarity is
-      // only ever known after `reveal()` rolls it. Size jitter is seeded off
-      // the node index so chunk rebuilds don't reshuffle the field.
+      // A dig site is a pulsing amber glow pooled on the ground, with a contact
+      // shadow underneath -- no stake, no mound. Depth = y at creation, so
+      // stack: shadow (back) -> glow (front). Identical on every site regardless
+      // of what is buried -- the rarity is only ever known after `reveal()`
+      // rolls it. Size jitter is seeded off the node index so chunk rebuilds
+      // don't reshuffle the field.
       const h = (n.idx * 2654435761) >>> 0;
       const sizeJ = 1.6 + ((h % 100) / 100) * 0.6;
 
@@ -834,15 +834,6 @@ export class ForestScene extends Phaser.Scene {
         .setAlpha(0.55);
       shadow.setData('baseAlpha', 0.55);
       objs.push(shadow);
-
-      // The mound rises well ABOVE the glow's center line, so its lit crown
-      // shows as a band over the light pool and the dark base reads as the foot.
-      const mound = this.add.image(spot.x, spot.y - 16, 'mound')
-        .setOrigin(0.5, 0.5)
-        .setScale(sizeJ * 1.15, sizeJ * 1.0)
-        .setDepth(spot.y - 16);
-      mound.setData('baseAlpha', 1);
-      objs.push(mound);
 
       const marker = this.add.image(spot.x, spot.y - 1, 'glow')
         .setBlendMode(Phaser.BlendModes.ADD)
