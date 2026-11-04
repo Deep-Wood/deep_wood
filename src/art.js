@@ -1128,15 +1128,12 @@ export function makeGroundTexture(scene, worldW, worldH) {
   }
   ctx.globalAlpha = 1;
 
-  // pebbles and flowers
+  // pebbles only -- flower pixels removed: single bright white/yellow/pink
+  // pixels on the ground read as markers/dots, not scenery
   for (let i = 0; i < 56; i++) {
-    const r = rnd();
-    if (r > 0.82) {
+    if (rnd() > 0.82) {
       ctx.fillStyle = toCss(PAL.rockDark);
       ctx.fillRect(Math.floor(rnd() * W), Math.floor(rnd() * H), 2, 1);
-    } else {
-      ctx.fillStyle = toCss(PAL.flower[Math.floor(rnd() * PAL.flower.length)]);
-      ctx.fillRect(Math.floor(rnd() * W), Math.floor(rnd() * H), 1, 1);
     }
   }
 

@@ -188,7 +188,7 @@ export function describeChunk(seedHex, cx, cy, epoch = 0) {
     props.push({
       x: ox + rProps() * CHUNK,
       y: oy + rProps() * CHUNK,
-      k: Math.floor(rProps() * 4),
+      k: Math.floor(rProps() * 3), // kinds 0-2 only; kind 3 (flowers) removed -- its bright pixels read as UI markers
     });
   }
 
