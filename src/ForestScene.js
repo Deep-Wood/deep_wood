@@ -836,14 +836,14 @@ export class ForestScene extends Phaser.Scene {
       // reshuffle the field; the variation exists only so a row of sites
       // does not read as one stamped dot repeated.
       const h = (n.idx * 2654435761) >>> 0;
-      const sizeJ = 0.52 + ((h % 100) / 100) * 0.22;
+      const sizeJ = 0.68 + ((h % 100) / 100) * 0.30;
       const marker = this.add.image(spot.x, spot.y, 'glow')
         .setBlendMode(Phaser.BlendModes.ADD)
         .setOrigin(0.5, 0.5)
         // Flattened: light lying ON the ground, not a ball floating above it.
-        .setScale(sizeJ, sizeJ * 0.42)
-        .setAlpha(0.5);
-      marker.setData('baseAlpha', 0.5);
+        .setScale(sizeJ, sizeJ * 0.5)
+        .setAlpha(0.7);
+      marker.setData('baseAlpha', 0.7);
       marker.setData('idx', n.idx);
       marker.setData('epoch', epoch);
       marker.setData('cx', cx);
@@ -874,7 +874,7 @@ export class ForestScene extends Phaser.Scene {
       // The glow breathes. A per-site period keeps a field of sites from
       // pulsing in lockstep, which would read as one big blinking sign.
       this.tweens.add({
-        targets: marker, alpha: 0.74, duration: 900 + n.idx * 37,
+        targets: marker, alpha: 0.95, duration: 900 + n.idx * 37,
         yoyo: true, repeat: -1, ease: 'Sine.inOut',
       });
     });
