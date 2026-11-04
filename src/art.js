@@ -926,7 +926,7 @@ export function makeInsectTexture(scene) {
 
 
 /**
- * A chunky chevron for the off-screen beacon pointer.
+ * A chunky chevron for the off-screen dig-site pointer.
  *
  * Drawn pointing RIGHT (0 rad) so the sprite can simply be rotated to the target
  * bearing with `setRotation`. Origin (0.5, 0.5) keeps the rotation about the

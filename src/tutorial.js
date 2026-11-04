@@ -78,7 +78,7 @@ const STEPS = [
   },
   {
     title: "Watch the forest",
-    body: "Trees block your path and hide dig sites; deep water ends the world. Spend a moment learning the layout before you burn a pick's durability fighting an invisible boundary. Good hunting, hunter.",
+    body: "Dig sites show up as pulsing amber glows on the forest floor — follow the glow, tap it (or press SPACE) to hunt. Trees block your path and can hide a glow; deep water ends the world. Spend a moment learning the layout before you burn a pick's durability fighting an invisible boundary. Good hunting, hunter.",
     target: null,
   },
 ];

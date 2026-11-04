@@ -783,9 +783,9 @@ export class ForestScene extends Phaser.Scene {
     // looks like it is in front of him looks broken. Sort them like the trees.
     // Crystal decoration is RETIRED. 73 glowing emerald crystals were scattered
     // around the forest as scenery, and every one of them read as treasure
-    // lying about -- which quietly undid the whole beacon design. A beacon that
+    // lying about -- which quietly undid the whole dig-site design. A glow that
     // hides its rarity is pointless when the floor is littered with glowing
-    // gems. Crystals still exist in TWO places that matter: the beacon light
+    // gems. Crystals still exist in TWO places that matter: the site glow
     // (a cool cyan, not emerald) and the revealed gem sprites, which are the
     // only place the player should see a treasure colour.
     //
@@ -804,9 +804,9 @@ export class ForestScene extends Phaser.Scene {
     }
 
     const nodes = [];
-    // SCARCITY: a chunk whose site has been fully dug renders with NO beacon.
+    // SCARCITY: a chunk whose site has been fully dug renders with NO glow.
     // Previously the epoch bump alone respawned one at a fresh random spot the
-    // moment the chunk rebuilt, so claiming a gem put a new beacon under the
+    // moment the chunk rebuilt, so claiming a gem put a new glow under the
     // player's feet -- the opposite of scarce. The chunk keeps its trees,
     // props and ambience; only the treasure goes.
     const chunkSpent = isChunkSpent(this.epochByKey, cx, cy);
@@ -3833,9 +3833,9 @@ export class ForestScene extends Phaser.Scene {
       this.lantern.setAlpha(0.78 + Math.sin(t * 1.7) * 0.07);
     }
 
-    // Off-screen beacon pointer. Cheap: one pass over `nodes` (25 resident) and
-    // early-outs on the common case where a beacon IS on screen.
-    this.updateBeaconArrow();
+    // Off-screen dig-site pointer. Cheap: one pass over `nodes` (25 resident) and
+    // early-outs on the common case where a site IS on screen.
+    this.updateSiteArrow();
 
     const k = this.keys;
     const t = this.touchState || new TouchState();
@@ -4028,20 +4028,20 @@ export class ForestScene extends Phaser.Scene {
   }
 
   /**
-   * A screen-edge arrow pointing at the nearest beacon that is NOT visible.
+   * A screen-edge arrow pointing at the nearest dig site that is NOT visible.
    *
-   * Only RESIDENT beacons are candidates (`this.nodes`, ~25 of them). That is a
+   * Only RESIDENT sites are candidates (`this.nodes`, ~25 of them). That is a
    * deliberate limit rather than a shortcut: the resident set is exactly the
    * chunk the player can walk to next, so the arrow never points at something
    * two minutes away. Pointing at a truly global nearest would require
    * generating chunks ahead of the player, which is what the streaming radius
    * deliberately avoids.
    *
-   * Hidden when any beacon is on screen -- an arrow next to a beacon you can
+   * Hidden when any site is on screen -- an arrow next to a glow you can
    * already see is noise. It also hides while a dig is running, so it does not
    * swing around during the reveal.
    */
-  updateBeaconArrow() {
+  updateSiteArrow() {
     if (!this.has('arrow')) return;
     const cam = this.cameras.main;
     const view = cam.worldView;
@@ -4052,7 +4052,7 @@ export class ForestScene extends Phaser.Scene {
       if (!n.active || n.getData('used')) continue;
       const inside = n.x >= view.x && n.x <= view.x + w
                   && n.y >= view.y && n.y <= view.y + h;
-      if (inside) { best = null; break; }   // one visible beacon is enough
+      if (inside) { best = null; break; }   // one visible site is enough
       const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, n.x, n.y);
       if (d < bestD) { bestD = d; best = n; }
     }
@@ -4235,7 +4235,7 @@ export class ForestScene extends Phaser.Scene {
    * smoke environment a plain `this.time.delayedCall(300, ...)` never fires --
    * the scene clock is not advancing there -- so a delayedCall-driven dig cannot
    * be verified by the test suite at all, and `busy` would latch true forever.
-   * Tweens do advance (the walk cycle and every beacon animation depend on
+   * Tweens do advance (the walk cycle and every glow pulse depend on
    * them), so the whole dig is sequenced off chained tweens. That also means the
    * dig is driven by the same clock as the rest of the motion, which keeps it in
    * step with frame-rate compensation.
@@ -4272,7 +4272,7 @@ export class ForestScene extends Phaser.Scene {
       }).setOrigin(0.5).setDepth(node.depth + 2);
 
       // Face the site in the correct cardinal direction (down/left/right/up)
-      // so the hunter's body orientation matches the beacon's relative position.
+      // so the hunter's body orientation matches the site's relative position.
       const dx = node.x - this.player.x;
       const dy = node.y - this.player.y;
       let faceFrame;
@@ -4699,7 +4699,7 @@ export class ForestScene extends Phaser.Scene {
         // valueWei is REQUIRED below: the deepwood:find event and the find
         // ledger both read result.valueWei, and dropping it (the V6
         // migration) made reveal() throw mid-function -- the chunk rebuild
-        // that retires the beacon light never ran, so the light stayed
+        // that retires the site glow never ran, so the glow stayed
         // after the stake collapsed.
         valueWei: preview.bestSingleWei ?? 0n,
         pending: true,
@@ -4782,7 +4782,7 @@ export class ForestScene extends Phaser.Scene {
       // Depth must sit above SCENERY, not at 10. Trees are depth = world-y and
       // chunks put nodes at hundreds or thousands of pixels of world y, so a
       // tree at y=600 drew OVER the reveal pop (depth 10) and made the gem +
-      // count invisible on any beacon tucked behind trunks. UX_DEPTH (50000
+      // count invisible on any site tucked behind trunks. UX_DEPTH (50000
       // + 2) is above every scenery depth in the game but still below the
       // always-on-top HUD plane -- exactly where a floating reveal belongs,
       // because it is UI feedback about a click, not a world object that
@@ -4813,7 +4813,7 @@ export class ForestScene extends Phaser.Scene {
       });
       // Always label the pop, even when the haul is a single stone. The dig
       // otherwise looks like it produced nothing on a `count === 1` roll,
-      // which reads as a rendering fault to the player ("the first beacon
+      // which reads as a rendering fault to the player ("the first site
       // didn't show how many gems"). The fan-of-many case still gets 'xN'.
       if (s.count >= 1) {
         const label = this.add.text(baseX + i * GEM_STEP, node.y + 26, `x${s.count}`, {
@@ -4828,7 +4828,7 @@ export class ForestScene extends Phaser.Scene {
 
     // collapse the spent node. `node.destroy?.()` -- the dig flow can re-enter
     // reveal() while a previous collapse tween still holds the node (a fast
-    // double-dig on the same beacon), and the second destroy() on an
+    // double-dig on the same site), and the second destroy() on an
     // already-destroyed object threw "L.destroy is not a function", which
     // killed the rest of reveal() -- including the finds.push and the
     // deepwood:find dispatch the satchel reads. The dig then looked like it

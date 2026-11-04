@@ -95,7 +95,7 @@ export function epochFor(depleted, cx, cy, idx) {
 /**
  * True once a chunk's site has been dug OUT ENTIRELY.
  *
- * This is what makes beacons scarce. The epoch counter alone does the opposite
+ * This is what makes dig sites scarce. The epoch counter alone does the opposite
  * of what a player wants: digging bumped the epoch, `completeNodeDig()` rebuilt
  * the chunk, and `describeChunk(..., epoch+1)` produced a site at a NEW random
  * position -- so claiming one made another appear right where you were standing.
@@ -103,11 +103,11 @@ export function epochFor(depleted, cx, cy, idx) {
  *
  * So a dug site stays dug. The epoch still advances (the world keeps its
  * bookkeeping) but it is capped: once `RESPAWN_AFTER_EPOCHS` digs have happened
- * at this site, the site is retired for good and the chunk renders with NO beacon
+ * at this site, the site is retired for good and the chunk renders with NO glow
  * until the player walks far enough that a new chunk generates.
  *
  * The cap is what stops the world from becoming literally unplayable: the forest
- * is effectively unbounded, so retiring a site costs the player one beacon in
+ * is effectively unbounded, so retiring a site costs the player one glow in
  * one chunk rather than ending the hunt. A long enough walk always finds new
  * ground.
  */
@@ -124,7 +124,7 @@ export const RESPAWN_AFTER_EPOCHS = 1;
  * The key MUST come from `nodeKey()`, which formats `${cx}:${cy}:${idx}:${epoch}`
  * with COLONS. An earlier version inlined `` `${cx},${cy},0,0` `` with COMMAS,
  * which matched nothing -- every lookup missed, `isChunkSpent` was always
- * false, and beacons respawned exactly as before while the code looked correct.
+ * false, and sites respawned exactly as before while the code looked correct.
  * Never hand-build this key.
  */
 export function isChunkSpent(depleted, cx, cy) {

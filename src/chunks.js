@@ -32,7 +32,7 @@ export const PROPS_PER_CHUNK = 26;
 // One dig site per 512px chunk. Was 3, which with LOAD_RADIUS 1 put ~27 sites
 // on screen -- the forest read as littered rather than hunted, and a find cost
 // a few steps instead of a walk. At 1 it is ~9 visible, so travelling between
-// beacons is the cost of a gem.
+// glow markers is the cost of a gem.
 //
 // Placement maths is untouched (same seeded stream, same rejection sampling
 // against trees and other nodes), and settlement never depended on density:
@@ -49,7 +49,7 @@ export const UNDERGROWTH_PER_CHUNK = 34;
 // ~1850 of them.
 export const MUSHROOMS_PER_CHUNK = 26;
 // Was 4. Set to 0: these were pure decoration, but 73 glowing emeralds
-// scattered as scenery read as treasure and undermined the beacon mechanic,
+// scattered as scenery read as treasure and undermined the site-marker mechanic,
 // where the reward is supposed to be hidden until you dig. Zero here also
 // removes ~146 resident sprites (73 crystals + their halos), which is a real
 // mobile fill-rate saving on top of the read. Nothing about a hunt depended on
@@ -163,7 +163,7 @@ export function describeChunk(seedHex, cx, cy, epoch = 0) {
   const rNodes = makeRng(chunkSeed(seedHex, cx, cy) ^ (0x51ed270b + epoch * 0x9e3779b9));
   const nodes = [];
   // Retry budget per site. With NODES_PER_CHUNK = 1 a single rejection left the
-  // chunk with NO beacon at all -- and because the same seed reproduces it,
+  // chunk with NO glow at all -- and because the same seed reproduces it,
   // that chunk was permanently unhuntable at every epoch. Measured before this
   // fix: chunk(1,1) produced 0 nodes at epoch 0 AND at epoch 5, and chunk(2,2)
   // had one site at epoch 0 and none at epoch 5, i.e. digging emptied it forever.
