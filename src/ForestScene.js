@@ -807,13 +807,6 @@ export class ForestScene extends Phaser.Scene {
         img.setData('baseAlpha', 0.9);
         this.sortables.push(img);
         objs.push(img);
-        const halo = this.add.image(c.x, c.y, 'glow')
-          .setBlendMode(Phaser.BlendModes.ADD)
-          .setDepth(c.y - 7)
-          .setAlpha(0.22)
-          .setScale(0.9 * c.s);
-        halo.setData('baseAlpha', 0.22);
-        objs.push(halo);
       }
     }
 
@@ -870,15 +863,6 @@ export class ForestScene extends Phaser.Scene {
         objs.push(beam);
       }
 
-      // A tight hot core at the cap, so the source itself is the brightest
-      // point even when the beam points away.
-      const core = this.add.image(spot.x, capY, 'glow')
-        .setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.62).setScale(0.17);
-      core.setDepth(spot.y - 1);
-      core.setData('baseAlpha', 0.62);
-      this.sortables.push(core);
-      objs.push(core);
-
       // A dig site is marked by a BEACON, not by showing the gem. The node
       // texture is retained underneath (it is what the dig pulse animates and
       // what a dug-out site collapses into), but the beacon is what the player
@@ -913,15 +897,10 @@ export class ForestScene extends Phaser.Scene {
         }
       });
 
-      // The stake bobs. It no longer carries an alpha pulse of its own -- that
-      // duty belongs to the core and the beam now, and pulsing the whole sprite
-      // made the beacon read as blinking signage.
+      // The stake bobs. The beam carries the brightness pulse now; pulsing
+      // the whole sprite made the beacon read as blinking signage.
       this.tweens.add({
         targets: marker, y: spot.y - 3, duration: 900 + n.idx * 37,
-        yoyo: true, repeat: -1, ease: 'Sine.inOut',
-      });
-      this.tweens.add({
-        targets: core, alpha: 0.40, duration: 760 + n.idx * 41,
         yoyo: true, repeat: -1, ease: 'Sine.inOut',
       });
     });

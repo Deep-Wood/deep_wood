@@ -973,23 +973,6 @@ export function makeInsectTexture(scene) {
   g.destroy();
 }
 
-export function makeGlowTexture(scene) {
-  const key = 'glow';
-  if (scene.textures.exists(key)) return key;
-  const R = 96;
-  const t = scene.textures.createCanvas(key, R, R);
-  t.setFilter(Phaser.Textures.FilterMode.LINEAR);
-  const ctx = t.getContext();
-  const g = ctx.createRadialGradient(R / 2, R / 2, 0, R / 2, R / 2, R / 2);
-  g.addColorStop(0, 'rgba(190,255,240,0.55)');
-  g.addColorStop(0.35, 'rgba(150,235,215,0.20)');
-  g.addColorStop(1, 'rgba(120,220,200,0)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, R, R);
-  t.refresh();
-  return key;
-}
-
 /**
  * A rotating beacon light: a radial core with two opposed CONES, like a
  * lighthouse or a siren sweeping a beam.
@@ -1169,7 +1152,6 @@ export function buildAllTextures(scene, worldW = 1280, worldH = 960) {
   makeHunterTexture(scene);
   makeNodeTexture(scene);
   makeSparkTexture(scene);
-  makeGlowTexture(scene);
   // Bake the five drawn gems. Without this call makeGems() was dead code and
   // the reveal had nothing but the AI PNGs to draw -- which is how a "rectangle
   // of gem colour" ended up on screen. Keys 'gem0'..'gem4'.
