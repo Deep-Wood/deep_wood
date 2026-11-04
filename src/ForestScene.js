@@ -835,12 +835,12 @@ export class ForestScene extends Phaser.Scene {
       shadow.setData('baseAlpha', 0.55);
       objs.push(shadow);
 
-      // The mound rises ABOVE the glow's center line, so its lit crown shows
-      // around the light pool and the dark base reads as the foot of the bump.
-      const mound = this.add.image(spot.x, spot.y - 9, 'mound')
+      // The mound rises well ABOVE the glow's center line, so its lit crown
+      // shows as a band over the light pool and the dark base reads as the foot.
+      const mound = this.add.image(spot.x, spot.y - 16, 'mound')
         .setOrigin(0.5, 0.5)
-        .setScale(sizeJ * 1.15, sizeJ * 0.88)
-        .setDepth(spot.y - 9);
+        .setScale(sizeJ * 1.15, sizeJ * 1.0)
+        .setDepth(spot.y - 16);
       mound.setData('baseAlpha', 1);
       objs.push(mound);
 
