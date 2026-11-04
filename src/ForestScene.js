@@ -136,10 +136,6 @@ function addPanelBackdrop(scene, depth, px, py, pw, ph, onDismiss) {
 // approaching the edge of the loaded world.
 const FADE_ALPHA = 0.45;
 
-// The beacon is a marker on the forest floor, so it is drawn at ~0.34 of its
-// source height (232px -> ~79px), which keeps it clearly shorter than the
-// generated trees (~143px).
-const BEACON_SCALE = 0.22;
 // The revealed gem. Source art (art/gem-*.png) has its longest edge at 192px,
 // so 0.2 lands a gem at roughly 38px on screen: a touch smaller than the 42px
 // hunter. The gem is the PAYOUT, not the subject -- it sits on the ground at the
@@ -295,10 +291,8 @@ export class ForestScene extends Phaser.Scene {
     load('gen-mushroom', 'art/mushroom.png');
     load('gen-crystal', 'art/crystal.png');
     load('gen-hunter', 'art/hunter.png');
-    load('gen-beacon', 'art/beacon.png');
     // The five GENERATED cut gems, one per rarity. Keys are 'gen-gem-N' because
-    // these are painted assets, not baked pixel art -- same convention as the
-    // beacon, which loads fine from 'art/beacon.png'.
+    // these are painted assets, not baked pixel art.
     //
     // The runtime PNGs under public/art/ used to be flattened during asset prep:
     // alpha was dropped, corner alpha became 255, and the sprite rendered as a
@@ -790,9 +784,9 @@ export class ForestScene extends Phaser.Scene {
     // looks like it is in front of him looks broken. Sort them like the trees.
     // Crystal decoration is RETIRED. 73 glowing emerald crystals were scattered
     // around the forest as scenery, and every one of them read as treasure
-    // lying about -- which quietly undid the whole beacon design. A beacon that
-    // hides its rarity is pointless when the floor is littered with glowing
-    // gems. Crystals still exist in TWO places that matter: the beacon light
+    // lying about -- which quietly undid the whole dig-marker design. A marker
+    // that hides its rarity is pointless when the floor is littered with glowing
+    // gems. Crystals still exist in TWO places that matter: the dig-site glow
     // (a cool cyan, not emerald) and the revealed gem sprites, which are the
     // only place the player should see a treasure colour.
     //
@@ -818,9 +812,9 @@ export class ForestScene extends Phaser.Scene {
     }
 
     const nodes = [];
-    // SCARCITY: a chunk whose site has been fully dug renders with NO beacon.
+    // SCARCITY: a chunk whose site has been fully dug renders with NO glow.
     // Previously the epoch bump alone respawned one at a fresh random spot the
-    // moment the chunk rebuilt, so claiming a gem put a new beacon under the
+    // moment the chunk rebuilt, so claiming a gem put a new marker under the
     // player's feet -- the opposite of scarce. The chunk keeps its trees,
     // props and ambience; only the treasure goes.
     const chunkSpent = isChunkSpent(this.epochByKey, cx, cy);
@@ -832,66 +826,30 @@ export class ForestScene extends Phaser.Scene {
       const spot = epoch === 0 ? n : describeChunk(this.seasonSeed, cx, cy, epoch).nodes.find((q) => q.idx === n.idx);
       if (!spot) return;
 
-      // The beacon is a stake with a lamp on top, so the light lives at the CAP.
-      // BEACON_SCALE is 0.22 now: at 0.34 the AI beacon was ~79px, still taller
-      // than the hunter (68px) and half a tree, which kept reading as scenery
-      // rather than as a marker. At 0.22 it is ~51px -- shorter than the hunter,
-      // far below the smallest tree -- so the LIGHT draws the eye, not the
-      // silhouette. That is the intent: a stake should not compete with the
-      // trees, it should be findable.
-      const genBeacon = this.has('gen-beacon');
-      const beaconH = (genBeacon ? 232 : 64) * (genBeacon ? BEACON_SCALE : 1);
-      const capY = spot.y - beaconH * (genBeacon ? 0.72 : 0.25);
-
-      // SIREN: a rotating two-beam lamp instead of a symmetric blob. The beam
-      // sweeps around the cap continuously, which is what makes it read as an
-      // active beacon rather than a smudge of glow. Two copies at right angles
-      // would strobe; one copy rotating at a per-beacon phase offset looks like
-      // a field of independent lamps.
-      const hasSiren = this.has('siren');
-      if (hasSiren) {
-        const beam = this.add.image(spot.x, capY, 'siren')
-          .setBlendMode(Phaser.BlendModes.ADD)
-          .setAlpha(0.42)
-          .setScale(0.62);
-        beam.setDepth(spot.y - 1);
-        beam.setData('baseAlpha', 0.42);
-        this.tweens.add({
-          targets: beam, angle: 360, duration: 2600 + n.idx * 211,
-          repeat: -1, ease: 'Linear',
-        });
-        // Breathing brightness on top of the rotation: a lamp that only spins
-        // can still look painted. This is the pulse that sells it as a light.
-        this.tweens.add({
-          targets: beam, alpha: 0.62, duration: 900 + n.idx * 71,
-          yoyo: true, repeat: -1, ease: 'Sine.inOut',
-        });
-        this.sortables.push(beam);
-        objs.push(beam);
-      }
-
-      // A tight hot core at the cap, so the source itself is the brightest
-      // point even when the beam points away.
-      const core = this.add.image(spot.x, capY, 'glow')
-        .setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.62).setScale(0.17);
-      core.setDepth(spot.y - 1);
-      core.setData('baseAlpha', 0.62);
-      this.sortables.push(core);
-      objs.push(core);
-
-      // A dig site is marked by a BEACON, not by showing the gem. The node
-      // texture is retained underneath (it is what the dig pulse animates and
-      // what a dug-out site collapses into), but the beacon is what the player
-      // sees while hunting. Identical on every site regardless of what is
-      // buried -- the rarity is only ever known after `reveal()` rolls it.
-      const marker = this.add.image(spot.x, spot.y, genBeacon ? 'gen-beacon' : 'beacon')
-        .setOrigin(0.5, 0.85);
-      if (genBeacon) marker.setScale(BEACON_SCALE);
+      // GROUND GLOW: a dig site is marked by a soft pool of light lying on
+      // the forest floor -- no stake, no siren, nothing standing up. The
+      // glow is IDENTICAL on every site regardless of what is buried: it
+      // carries no rarity information, so the dig stays a gamble and the
+      // rarity is only ever known after `reveal()` rolls it. (The glow is
+      // cool cyan, not warm -- warm is reserved for revealed treasure.)
+      // Size varies per site, seeded off n.idx so a chunk rebuild does not
+      // reshuffle the field; the variation exists only so a row of sites
+      // does not read as one stamped dot repeated.
+      const h = (n.idx * 2654435761) >>> 0;
+      const sizeJ = 0.52 + ((h % 100) / 100) * 0.22;
+      const marker = this.add.image(spot.x, spot.y, 'glow')
+        .setBlendMode(Phaser.BlendModes.ADD)
+        .setOrigin(0.5, 0.5)
+        // Flattened: light lying ON the ground, not a ball floating above it.
+        .setScale(sizeJ, sizeJ * 0.42)
+        .setAlpha(0.5);
+      marker.setData('baseAlpha', 0.5);
       marker.setData('idx', n.idx);
       marker.setData('epoch', epoch);
       marker.setData('cx', cx);
       marker.setData('cy', cy);
-      marker.setDepth(spot.y);
+      // Just under the player's feet-depth so the hunter walks over the glow.
+      marker.setDepth(spot.y - 0.5);
       this.sortables.push(marker);
       this.nodes.push(marker);
       objs.push(marker);
@@ -913,15 +871,10 @@ export class ForestScene extends Phaser.Scene {
         }
       });
 
-      // The stake bobs. It no longer carries an alpha pulse of its own -- that
-      // duty belongs to the core and the beam now, and pulsing the whole sprite
-      // made the beacon read as blinking signage.
+      // The glow breathes. A per-site period keeps a field of sites from
+      // pulsing in lockstep, which would read as one big blinking sign.
       this.tweens.add({
-        targets: marker, y: spot.y - 3, duration: 900 + n.idx * 37,
-        yoyo: true, repeat: -1, ease: 'Sine.inOut',
-      });
-      this.tweens.add({
-        targets: core, alpha: 0.40, duration: 760 + n.idx * 41,
+        targets: marker, alpha: 0.74, duration: 900 + n.idx * 37,
         yoyo: true, repeat: -1, ease: 'Sine.inOut',
       });
     });

@@ -733,73 +733,6 @@ export function makeMushroomTexture(scene) {
 }
 
 /** A faceted emerald crystal, half-buried, with a baked inner glow. */
-/**
- * A beacon: the surveyor's mark planted at a dig site.
- *
- * Deliberately carries NO rarity information. Every beacon looks identical --
- * same shape, same cold bronze, same glow -- because if it hinted at the reward
- * the dig would stop being a gamble and become a formality, and the player
- * would be scanning for colour instead of exploring. The rarity is only ever
- * known once `reveal()` rolls it, which is why the five gem textures stay
- * separate and are chosen there.
- *
- * A pale ring on the ground reads as "marked, dig here" without advertising
- * what is underneath.
- */
-export function makeBeaconTexture(scene) {
-  const key = 'beacon';
-  if (scene.textures.exists(key)) return key;
-  const { ctx, done } = blank(scene, key);
-  const s = S * SCALE;
-  const cx = s / 2;
-
-  // NEAREST is right for this one: it is hard-edged pixel art, not downsampled
-  // generated art. The node texture needs LINEAR, this does not.
-  ctx.imageSmoothingEnabled = false;
-  ctx.clearRect(0, 0, s, s);
-
-  // --- ground ring: the "this is a marked site" cue ----------------------
-  // Two concentric arcs, brightest at the front so it reads as lit from below.
-  for (const [r, a, col] of [[0.40, 0.55, '144,192,176'], [0.30, 0.34, '120,170,158']]) {
-    ctx.strokeStyle = `rgba(${col},${a})`;
-    ctx.lineWidth = Math.max(1, s * 0.035);
-    ctx.beginPath();
-    ctx.ellipse(cx, s * 0.74, s * r, s * r * 0.42, 0, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-
-  // --- the post: a stake driven into the soil ---------------------------
-  const post = (x, w, y0, y1, col) => {
-    ctx.fillStyle = col; ctx.fillRect(x, y0, w, y1 - y0);
-  };
-  const px = Math.round(s * 0.44), pw = Math.max(2, Math.round(s * 0.055));
-  post(px, pw, Math.round(s * 0.30), Math.round(s * 0.76), '#6d7a72');
-  post(px + 1, Math.max(1, pw - 2), Math.round(s * 0.30), Math.round(s * 0.76), '#93a49a');
-  // cross-brace, so it reads as built rather than a bare stick
-  post(px - Math.round(s * 0.07), pw, Math.round(s * 0.42),
-    Math.round(s * 0.42) + Math.max(1, Math.round(s * 0.045)), '#6d7a72');
-
-  // --- bronze cap: the one warm accent, identical on every beacon --------
-  ctx.fillStyle = '#c79a4e';
-  ctx.fillRect(px - Math.round(s * 0.045), Math.round(s * 0.27),
-    pw + Math.round(s * 0.09), Math.max(2, Math.round(s * 0.07)));
-  ctx.fillStyle = '#e6c383';
-  ctx.fillRect(px - Math.round(s * 0.045), Math.round(s * 0.27),
-    pw + Math.round(s * 0.09), Math.max(1, Math.round(s * 0.028)));
-
-  // --- cold lantern glow at the cap -------------------------------------
-  // Cool on purpose. If this were warm it would be the only warm thing in the
-  // forest and would read as "treasure", which is the signal we are avoiding.
-  const gl = ctx.createRadialGradient(px + pw / 2, s * 0.30, 1, px + pw / 2, s * 0.30, s * 0.22);
-  gl.addColorStop(0, 'rgba(150,225,215,0.55)');
-  gl.addColorStop(1, 'rgba(150,225,215,0)');
-  ctx.fillStyle = gl;
-  ctx.fillRect(0, 0, s, s);
-
-  done();
-  return key;
-}
-
 export function makeCrystalTexture(scene) {
   if (scene.textures.exists('crystal')) return 'crystal';
   const g = scene.make.graphics({ add: false });
@@ -991,64 +924,7 @@ export function makeGlowTexture(scene) {
 }
 
 /**
- * A rotating beacon light: a radial core with two opposed CONES, like a
- * lighthouse or a siren sweeping a beam.
- *
- * The plain `glow` texture is a symmetric blob. Symmetric light does not read
- * as a beacon -- it reads as a smudge, which is exactly the complaint that the
- * beacons "don't glow". A real rotating light is asymmetric: bright where the
- * beam points, dark on the far side, and it visibly sweeps.
- *
- * So this bakes one frame of a rotating two-beam lamp. `ForestScene` rotates
- * copies of it, which is both cheaper and smoother than redrawing cones per
- * frame, and the core stays centred while the cones sweep.
- */
-export function makeSirenTexture(scene) {
-  const key = 'siren';
-  if (scene.textures.exists(key)) return key;
-  const R = 128;                       // texture is 256x256
-  const C = R;
-  const t = scene.textures.createCanvas(key, R * 2, R * 2);
-  t.setFilter(Phaser.Textures.FilterMode.LINEAR);
-  const ctx = t.getContext();
-  ctx.clearRect(0, 0, R * 2, R * 2);
-
-  // Two opposed beams. CONE_SPREAD is how wide each wedge opens; WEDGE_START
-  // fades the beam in from the core so it does not look like a hard triangle.
-  const CONE_SPREAD = 0.62;            // radians of half-width
-  const WEDGE_START = 0.06;
-  for (const dir of [0, Math.PI]) {
-    const g = ctx.createRadialGradient(C, C, WEDGE_START * R, C, C, R);
-    g.addColorStop(0.00, 'rgba(210,255,248,0.00)');
-    g.addColorStop(0.10, 'rgba(190,255,244,0.42)');
-    g.addColorStop(0.42, 'rgba(140,235,220,0.17)');
-    g.addColorStop(1.00, 'rgba(110,215,200,0.00)');
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(C, C);
-    // Draw the wedge rotated into place, clipped to the radial falloff above.
-    ctx.arc(C, C, R, dir - CONE_SPREAD, dir + CONE_SPREAD);
-    ctx.closePath();
-    ctx.fillStyle = g;
-    ctx.fill();
-    ctx.restore();
-  }
-
-  // The hot core, on top and full-circle so the source reads as the origin.
-  const core = ctx.createRadialGradient(C, C, 0, C, C, R * 0.42);
-  core.addColorStop(0.00, 'rgba(255,255,255,0.92)');
-  core.addColorStop(0.22, 'rgba(214,255,248,0.60)');
-  core.addColorStop(0.55, 'rgba(150,240,225,0.20)');
-  core.addColorStop(1.00, 'rgba(120,225,205,0.00)');
-  ctx.fillStyle = core;
-  ctx.fillRect(0, 0, R * 2, R * 2);
-
-  t.refresh();
-  return key;
-}
-
-/**
- * A chunky chevron for the off-screen beacon pointer.
+ * A chunky chevron for the off-screen dig-site pointer.
  *
  * Drawn pointing RIGHT (0 rad) so the sprite can simply be rotated to the target
  * bearing with `setRotation`. Origin (0.5, 0.5) keeps the rotation about the
@@ -1174,7 +1050,6 @@ export function buildAllTextures(scene, worldW = 1280, worldH = 960) {
   // the reveal had nothing but the AI PNGs to draw -- which is how a "rectangle
   // of gem colour" ended up on screen. Keys 'gem0'..'gem4'.
   makeGems(scene);
-  makeSirenTexture(scene);
   makeArrowTexture(scene);
   // Ambience sprites are built here too so there is exactly one place where
   // textures come into existence, and a missing one fails loudly at boot rather
@@ -1188,7 +1063,6 @@ export function buildAllTextures(scene, worldW = 1280, worldH = 960) {
   makeFireflyTexture(scene);
   makeStarTexture(scene);
   makeMoonTexture(scene);
-  makeBeaconTexture(scene);
   makeMushroomTexture(scene);
   makeCrystalTexture(scene);
   makePollenTexture(scene);
