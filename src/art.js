@@ -797,23 +797,29 @@ export function makeMoundTexture(scene) {
   ctx.clearRect(0, 0, W, H);
   // body: radial gradient biased UP, so the crown is lit and the base is dark
   const body = ctx.createRadialGradient(cx, cy - ry * 0.55, 2, cx, cy, ry * 1.9);
-  body.addColorStop(0, 'rgba(122,99,72,1)');
-  body.addColorStop(0.55, 'rgba(84,66,48,1)');
-  body.addColorStop(1, 'rgba(34,27,20,1)');
+  body.addColorStop(0, 'rgba(168,138,100,1)');
+  body.addColorStop(0.55, 'rgba(118,94,66,1)');
+  body.addColorStop(1, 'rgba(52,41,30,1)');
   ctx.fillStyle = body;
   ctx.beginPath();
   ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
   ctx.fill();
   // crown highlight (light from above catches the top of the bump)
   const hi = ctx.createRadialGradient(cx, cy - ry * 0.45, 1, cx, cy - ry * 0.45, rx * 0.75);
-  hi.addColorStop(0, 'rgba(168,140,102,0.85)');
-  hi.addColorStop(1, 'rgba(168,140,102,0)');
+  hi.addColorStop(0, 'rgba(214,180,132,0.95)');
+  hi.addColorStop(1, 'rgba(214,180,132,0)');
   ctx.save();
   ctx.beginPath();
   ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
   ctx.clip();
   ctx.fillStyle = hi;
   ctx.fillRect(0, 0, W, H);
+  // bright rim along the very top edge so the bump silhouette reads at night
+  ctx.strokeStyle = 'rgba(226,196,146,0.8)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx - 1, ry - 1, 0, Math.PI * 1.15, Math.PI * 1.85);
+  ctx.stroke();
   // dark contact rim along the bottom edge
   const rim = ctx.createLinearGradient(0, cy, 0, cy + ry);
   rim.addColorStop(0, 'rgba(10,8,6,0)');
