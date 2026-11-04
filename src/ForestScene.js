@@ -827,32 +827,34 @@ export class ForestScene extends Phaser.Scene {
       const h = (n.idx * 2654435761) >>> 0;
       const sizeJ = 1.6 + ((h % 100) / 100) * 0.6;
 
-      const shadow = this.add.image(spot.x, spot.y + 8, 'shadow')
+      const shadow = this.add.image(spot.x, spot.y + 10, 'shadow')
         .setOrigin(0.5, 0.5)
         .setScale(sizeJ * 1.35, sizeJ * 0.62)
-        .setDepth(spot.y - 8)
+        .setDepth(spot.y - 12)
         .setAlpha(0.55);
       shadow.setData('baseAlpha', 0.55);
       objs.push(shadow);
 
-      const mound = this.add.image(spot.x, spot.y - 4, 'mound')
+      // The mound rises ABOVE the glow's center line, so its lit crown shows
+      // around the light pool and the dark base reads as the foot of the bump.
+      const mound = this.add.image(spot.x, spot.y - 9, 'mound')
         .setOrigin(0.5, 0.5)
-        .setScale(sizeJ * 1.08, sizeJ * 0.66)
-        .setDepth(spot.y - 4);
+        .setScale(sizeJ * 1.15, sizeJ * 0.88)
+        .setDepth(spot.y - 9);
       mound.setData('baseAlpha', 1);
       objs.push(mound);
 
-      const marker = this.add.image(spot.x, spot.y + 2, 'glow')
+      const marker = this.add.image(spot.x, spot.y - 1, 'glow')
         .setBlendMode(Phaser.BlendModes.ADD)
         .setOrigin(0.5, 0.5)
-        .setScale(sizeJ, sizeJ * 0.5)
+        .setScale(sizeJ * 0.95, sizeJ * 0.42)
         .setAlpha(0.55);
       marker.setData('baseAlpha', 0.55);
       marker.setData('idx', n.idx);
       marker.setData('epoch', epoch);
       marker.setData('cx', cx);
       marker.setData('cy', cy);
-      marker.setDepth(spot.y + 2); // in front of the mound (depth = y)
+      marker.setDepth(spot.y - 1); // in front of the mound (depth = y)
       this.sortables.push(marker);
       this.nodes.push(marker);
       objs.push(marker);
@@ -883,7 +885,7 @@ export class ForestScene extends Phaser.Scene {
       });
       this.tweens.add({
         targets: marker,
-        scaleX: sizeJ * 1.25, scaleY: sizeJ * 0.5 * 1.25,
+        scaleX: sizeJ * 0.95 * 1.25, scaleY: sizeJ * 0.42 * 1.25,
         duration: 1100 + n.idx * 47,
         yoyo: true, repeat: -1, ease: 'Sine.inOut',
       });
