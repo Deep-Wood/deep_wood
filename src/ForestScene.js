@@ -818,15 +818,31 @@ export class ForestScene extends Phaser.Scene {
       const spot = epoch === 0 ? n : describeChunk(this.seasonSeed, cx, cy, epoch).nodes.find((q) => q.idx === n.idx);
       if (!spot) return;
 
-      // A dig site is marked by a pulsing GROUND GLOW, not by showing the gem
-      // and not by a stake: the glow lies flat on the floor (flattened ellipse,
-      // ADD blend) and breathes on two axes so it reads as light, not a dot.
+      // A dig site is a small MOUND of dug-up earth with a pulsing amber glow
+      // pooled on its crown -- not a stake, not a bare dot on flat ground.
+      // Depth = y at creation, so stack: shadow (back) -> mound -> glow (front).
       // Identical on every site regardless of what is buried -- the rarity is
       // only ever known after `reveal()` rolls it. Size jitter is seeded off
       // the node index so chunk rebuilds don't reshuffle the field.
       const h = (n.idx * 2654435761) >>> 0;
       const sizeJ = 1.6 + ((h % 100) / 100) * 0.6;
-      const marker = this.add.image(spot.x, spot.y, 'glow')
+
+      const shadow = this.add.image(spot.x, spot.y + 8, 'shadow')
+        .setOrigin(0.5, 0.5)
+        .setScale(sizeJ * 1.35, sizeJ * 0.62)
+        .setDepth(spot.y - 8)
+        .setAlpha(0.55);
+      shadow.setData('baseAlpha', 0.55);
+      objs.push(shadow);
+
+      const mound = this.add.image(spot.x, spot.y - 4, 'mound')
+        .setOrigin(0.5, 0.5)
+        .setScale(sizeJ * 1.08, sizeJ * 0.66)
+        .setDepth(spot.y - 4);
+      mound.setData('baseAlpha', 1);
+      objs.push(mound);
+
+      const marker = this.add.image(spot.x, spot.y + 2, 'glow')
         .setBlendMode(Phaser.BlendModes.ADD)
         .setOrigin(0.5, 0.5)
         .setScale(sizeJ, sizeJ * 0.5)
@@ -836,7 +852,7 @@ export class ForestScene extends Phaser.Scene {
       marker.setData('epoch', epoch);
       marker.setData('cx', cx);
       marker.setData('cy', cy);
-      marker.setDepth(spot.y);
+      marker.setDepth(spot.y + 2); // in front of the mound (depth = y)
       this.sortables.push(marker);
       this.nodes.push(marker);
       objs.push(marker);

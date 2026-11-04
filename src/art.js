@@ -782,6 +782,49 @@ export function makeGlowTexture(scene) {
   return key;
 }
 
+/**
+ * A small mound of dug-up earth that the glow sits on top of. Shaded so it
+ * reads as ELEVATED: lit crown up top, dark contact rim at the bottom edge.
+ */
+export function makeMoundTexture(scene) {
+  const key = 'mound';
+  if (scene.textures.exists(key)) return key;
+  const W = 96, H = 56;
+  const t = scene.textures.createCanvas(key, W, H);
+  t.setFilter(Phaser.Textures.FilterMode.LINEAR);
+  const ctx = t.getContext();
+  const cx = W / 2, cy = H * 0.56, rx = W * 0.46, ry = H * 0.40;
+  ctx.clearRect(0, 0, W, H);
+  // body: radial gradient biased UP, so the crown is lit and the base is dark
+  const body = ctx.createRadialGradient(cx, cy - ry * 0.55, 2, cx, cy, ry * 1.9);
+  body.addColorStop(0, 'rgba(122,99,72,1)');
+  body.addColorStop(0.55, 'rgba(84,66,48,1)');
+  body.addColorStop(1, 'rgba(34,27,20,1)');
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // crown highlight (light from above catches the top of the bump)
+  const hi = ctx.createRadialGradient(cx, cy - ry * 0.45, 1, cx, cy - ry * 0.45, rx * 0.75);
+  hi.addColorStop(0, 'rgba(168,140,102,0.85)');
+  hi.addColorStop(1, 'rgba(168,140,102,0)');
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+  ctx.clip();
+  ctx.fillStyle = hi;
+  ctx.fillRect(0, 0, W, H);
+  // dark contact rim along the bottom edge
+  const rim = ctx.createLinearGradient(0, cy, 0, cy + ry);
+  rim.addColorStop(0, 'rgba(10,8,6,0)');
+  rim.addColorStop(1, 'rgba(10,8,6,0.75)');
+  ctx.fillStyle = rim;
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+  t.refresh();
+  return key;
+}
+
 // --- ambience sprites ------------------------------------------------------
 // Three tiny textures for the camera-global layers. Each is deliberately a
 // couple of pixels: on a 390px phone screen anything larger stops reading as
@@ -1045,6 +1088,7 @@ export function buildAllTextures(scene, worldW = 1280, worldH = 960) {
   makeNodeTexture(scene);
   makeSparkTexture(scene);
   makeGlowTexture(scene);
+  makeMoundTexture(scene);
   // Bake the five drawn gems. Without this call makeGems() was dead code and
   // the reveal had nothing but the AI PNGs to draw -- which is how a "rectangle
   // of gem colour" ended up on screen. Keys 'gem0'..'gem4'.
