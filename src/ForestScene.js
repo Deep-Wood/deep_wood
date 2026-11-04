@@ -830,8 +830,8 @@ export class ForestScene extends Phaser.Scene {
         .setBlendMode(Phaser.BlendModes.ADD)
         .setOrigin(0.5, 0.5)
         .setScale(sizeJ, sizeJ * 0.5)
-        .setAlpha(0.85);
-      marker.setData('baseAlpha', 0.85);
+        .setAlpha(0.55);
+      marker.setData('baseAlpha', 0.55);
       marker.setData('idx', n.idx);
       marker.setData('epoch', epoch);
       marker.setData('cx', cx);
@@ -858,17 +858,17 @@ export class ForestScene extends Phaser.Scene {
         }
       });
 
-      // The glow breathes on TWO axes at different periods -- alpha AND scale
-      // -- so the pulse is visible as the pool swelling, not just brightening.
+      // The glow breathes hard on TWO axes at different periods -- alpha swings
+      // 0.55 -> 1.0 AND the pool swells 25% -- so the pulse is unmistakable.
       // Per-site periods keep a field of sites from pulsing in lockstep.
       this.tweens.add({
-        targets: marker, alpha: 1.0, duration: 900 + n.idx * 37,
+        targets: marker, alpha: 1.0, duration: 700 + n.idx * 31,
         yoyo: true, repeat: -1, ease: 'Sine.inOut',
       });
       this.tweens.add({
         targets: marker,
-        scaleX: sizeJ * 1.18, scaleY: sizeJ * 0.5 * 1.18,
-        duration: 1400 + n.idx * 53,
+        scaleX: sizeJ * 1.25, scaleY: sizeJ * 0.5 * 1.25,
+        duration: 1100 + n.idx * 47,
         yoyo: true, repeat: -1, ease: 'Sine.inOut',
       });
     });

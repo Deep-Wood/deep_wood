@@ -764,7 +764,7 @@ export function makeLanternTexture(scene) {
   return 'lantern';
 }
 
-/** Soft radial glow: the dig-site marker. Cool cyan so it never reads as treasure. */
+/** Soft radial glow: the dig-site marker. Amber, warm against the cool forest. */
 export function makeGlowTexture(scene) {
   const key = 'glow';
   if (scene.textures.exists(key)) return key;
@@ -773,9 +773,9 @@ export function makeGlowTexture(scene) {
   t.setFilter(Phaser.Textures.FilterMode.LINEAR);
   const ctx = t.getContext();
   const g = ctx.createRadialGradient(R / 2, R / 2, 0, R / 2, R / 2, R / 2);
-  g.addColorStop(0, 'rgba(190,255,240,0.55)');
-  g.addColorStop(0.35, 'rgba(150,235,215,0.20)');
-  g.addColorStop(1, 'rgba(120,220,200,0)');
+  g.addColorStop(0, 'rgba(255,232,175,0.90)');
+  g.addColorStop(0.35, 'rgba(255,190,95,0.38)');
+  g.addColorStop(1, 'rgba(255,160,50,0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, R, R);
   t.refresh();
