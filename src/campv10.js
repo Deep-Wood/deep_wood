@@ -83,7 +83,7 @@ export function createCampV10({ readPanel, onDescend, onStudy, onDone, onStatus 
       if (!res.ok) {
         onStatus?.(res.reason || 'Descend failed.', 'bad');
       } else {
-        onStatus?.('Descended \u2014 find weight raised permanently.', 'ok');
+        onStatus?.(`Descended — confirmed on-chain ✓${res.hash ? ` ${res.hash.slice(0, 8)}…${res.hash.slice(-4)}` : ''}`, 'ok');
         onDone?.();
       }
       refresh();
@@ -117,7 +117,7 @@ export function createCampV10({ readPanel, onDescend, onStudy, onDone, onStatus 
         if (!res.ok) {
           onStatus?.(res.reason || 'Study failed.', 'bad');
         } else {
-          onStatus?.('Studied \u2014 luck raised.', 'ok');
+          onStatus?.(`Studied — confirmed on-chain ✓${res.hash ? ` ${res.hash.slice(0, 8)}…${res.hash.slice(-4)}` : ''}`, 'ok');
           onDone?.();
         }
         refresh();

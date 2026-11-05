@@ -168,7 +168,7 @@ export function createFusionCard({ getBalances, readRates, onFuse, onDone, onSta
       return;
     }
     say(`Fused ${fmt(times)}\u00d7: ${fmt(BigInt(times) * BigInt(r.rate))} ${RARITY_NAMES[selected]} \u2192 ${fmt(times)} ${RARITY_NAMES[selected + 1]}.`, 'ok');
-    onStatus?.(`Fused into ${RARITY_NAMES[selected + 1]}.`, 'ok');
+    onStatus?.(`Fused into ${RARITY_NAMES[selected + 1]} — confirmed on-chain ✓${res.hash ? ` ${res.hash.slice(0, 8)}…${res.hash.slice(-4)}` : ''}`, 'ok');
     onDone?.();
     await refresh();
     times = 1;

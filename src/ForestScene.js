@@ -2445,6 +2445,7 @@ export class ForestScene extends Phaser.Scene {
     p.max = durabilityOf(tier);
     recordToolSpend(this.board, this.wallet ?? '0xplayer', cost);
     this.beltMsg(`Bought ${toolName(tier)} with $DEEPWOOD — ${p.left}/${p.max} uses`, 'ok');
+    this.txConfirmedFlash(`Bought ${toolName(tier)} with $DEEPWOOD`, r.hash);
     // The new pick invalidates any queued digs (rolls are tier-bound).
     this.clearDeadQueue();
     this.refreshBelt();
@@ -2587,6 +2588,7 @@ export class ForestScene extends Phaser.Scene {
     p.max = durabilityOf(tier);
     recordToolSpend(this.board, this.wallet ?? '0xplayer', cost);
     this.beltMsg(`Bought ${toolName(tier)} with ETH — ${p.left}/${p.max} uses`, 'ok');
+    this.txConfirmedFlash(`Bought ${toolName(tier)} with ETH`, r.hash);
     // The new pick invalidates any queued digs (rolls are tier-bound).
     this.clearDeadQueue();
     this.refreshBelt();
@@ -2747,6 +2749,7 @@ export class ForestScene extends Phaser.Scene {
       `${res.replaced ? 'Upgraded to' : 'Bought'} ${toolName(r.tier)} \u2014 ${r.durability}/${this.econ.max} uses`,
       'ok',
     );
+    this.txConfirmedFlash(`${res.replaced ? 'Upgraded to' : 'Bought'} ${toolName(r.tier)}`, r.hash);
     await this.refreshChainBalance();
     this.refreshBelt();
     window.renderGems?.(); window.renderHunter?.();
@@ -2754,7 +2757,7 @@ export class ForestScene extends Phaser.Scene {
   }
 
   /**
- * Mark a chain action as in-flight and say so ON THE BUTTON.
+   * Mark a chain action as in-flight and say so ON THE BUTTON.
  *
  * The message line was the only feedback during a wallet signature or a poll,
  * which made a pending action look identical to a dead button -- the player
@@ -2981,7 +2984,7 @@ export class ForestScene extends Phaser.Scene {
     this._queuePersisted = true;
     await this.refreshChainTool();
     this.beltMsg(`Banked ${n} hunt${n === 1 ? '' : 's'} \u2014 haul is on-chain.`, 'good');
-    this.flash(`Settled ${n} hunt${n === 1 ? '' : 's'} \u2014 the haul is banked.`);
+    this.txConfirmedFlash(`Settled ${n} hunt${n === 1 ? '' : 's'} \u2014 the haul is banked`, r.hash);
     // refreshChainTool covers tool durability and the chain satchel, but the
     // gem TILE counts (window.renderGems) only repaint when someone changes
     // them. Call it here so the satchel updates as soon as the batch lands
@@ -3016,6 +3019,12 @@ export class ForestScene extends Phaser.Scene {
   }
 
   async _doRepair() {
+    // Queued hunts must land on-chain first — the fix waits until the queue
+    // is empty, otherwise say so instead of opening the wallet.
+    if (this.queue && !this.queue.empty) {
+      this.flash('Settle queued hunts first.');
+      return;
+    }
     if (onchainActive()) {
       this.beltMsg('Confirm the repair in your wallet\u2026', 'busy');
       this.setTxPending('belt-repair', 'repairing');
@@ -3039,6 +3048,7 @@ export class ForestScene extends Phaser.Scene {
       window.renderGems?.(); window.renderHunter?.();
       this.updateHud();
       void this.engagementSync();
+      this.txConfirmedFlash(`Fixed ${toolName(this.econ.tier)}`, r.hash);
       return;
     }
 
@@ -3311,7 +3321,7 @@ export class ForestScene extends Phaser.Scene {
           return;
         }
         this.beltMsg('Progress carried over \u2014 welcome to the new cave.', 'good');
-        this.flash('Your V9 progress is now live on V10.');
+        this.flash('Your V9 progress is now live on V10 — confirmed on-chain ✓');
         await this.refreshChainTool();
         window.renderGems?.(); window.renderHunter?.();
         this.refreshBelt();
@@ -3401,6 +3411,7 @@ export class ForestScene extends Phaser.Scene {
           const { redeemGemsOnchain } = await import('./onchain.js');
           const res = await redeemGemsOnchain(rarity, typeof amount === 'bigint' ? amount : BigInt(amount));
           if (res.ok) {
+            this.txConfirmedFlash(`Redeemed ${amount} ${RARITY_NAMES[rarity]}`, res.hash);
             // The chain moved; pull the authoritative balances back so the
             // satchel, the strip and the card all agree with it.
             // refreshChainBalance only covers the WALLET (the payout side).
@@ -3435,6 +3446,7 @@ export class ForestScene extends Phaser.Scene {
       const res = await upgradeSkillOnchain(level, currentSkill);
       if (res.ok) {
         this.beltMsg(`You are now a ${skillName(level)} — ${skillSubtitle(level)}`, 'ok');
+        this.txConfirmedFlash(`Skill: ${skillName(level)}`, res.hash);
         // Skill folds sub-level rarities into Quartz, so queued rolls are
         // now stale: the same hunt index re-rolls different gems.
         this.clearDeadQueue();
@@ -3494,6 +3506,7 @@ export class ForestScene extends Phaser.Scene {
     // player is signing several they have already banked the small ones.
     let totalPayout = 0n;
     let totalSold = 0;
+    let lastHash = null;
     for (const rarity of held) {
       const count = BigInt(p.gems[rarity] ?? 0n);
       if (count <= 0n) continue;
@@ -3520,6 +3533,7 @@ export class ForestScene extends Phaser.Scene {
       }
       totalPayout += r.payoutWei ?? 0n;
       totalSold += Number(count); // display-only accumulator; count fits a double for sane balances
+      lastHash = r.hash ?? lastHash;
       // Zero it locally only once the chain has confirmed THAT rarity.
       p.gems[rarity] = 0n;
     }
@@ -3527,6 +3541,7 @@ export class ForestScene extends Phaser.Scene {
     if (totalSold > 0) {
       await this.refreshChainBalance();
       this.beltMsg(`Sold ${fmtGem(totalSold)} gems for ${fmtEth(totalPayout)}.`, 'ok');
+      this.txConfirmedFlash(`Sold ${fmtGem(totalSold)} gems`, lastHash);
     }
     this.refreshBelt();
     window.renderGems?.(); window.renderHunter?.();
@@ -4888,6 +4903,16 @@ export class ForestScene extends Phaser.Scene {
    * read without moving the eye. The offset is in world space, so it follows
    * the hunter as they walk and stays anchored while the camera tracks.
    */
+  /**
+   * Centre-screen flash for a write the CHAIN confirmed — the contract's own
+   * state moved, not just a hash (on 46630 a reverted tx still receipts 0x1).
+   * Short hash suffix so the tx can be matched in the explorer.
+   */
+  txConfirmedFlash(label, hash) {
+    const short = hash ? ` ${hash.slice(0, 8)}…${hash.slice(-4)}` : '';
+    this.flash(`${label} — confirmed on-chain ✓${short}`);
+  }
+
   flash(msg) {
     if (!this._toast) {
       const t = this.add.text(0, 0, '', {
