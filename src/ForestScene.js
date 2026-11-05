@@ -1391,7 +1391,17 @@ export class ForestScene extends Phaser.Scene {
       // 3 significant digits so a real number never collapses to "0.00x".
       return `${v.toPrecision(3)}x`;
     };
-    const bestTxt = (r) => seasonEth(r.bestWei);
+    // Best find shown AS A GEM, not a $DEEPWOOD amount: bestWei is the chain's
+    // bestSingleFindWei, which is exactly priceOf(r) of the single best gem,
+    // so playerRow matched it back to a rarity against the live prices.
+    // No match (0, or a legacy value from an older price table) falls back to
+    // the token amount / a dash rather than guessing a rarity.
+    const bestTxt = (r) => {
+      if (r.bestRarity != null && r.bestRarity >= 0) {
+        return `<span class="shift-gem g${r.bestRarity}">${RARITY_NAME[r.bestRarity]}</span>`;
+      }
+      return BigInt(r.bestWei ?? 0n) > 0n ? seasonEth(r.bestWei) : '—';
+    };
     // Truncated address on purpose (user preference): 0x1234…abcd. The other
     // columns still render in full -- cells wrap instead of ellipsizing
     // (hud.css), so no figure is ever cut short.

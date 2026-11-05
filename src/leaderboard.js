@@ -64,19 +64,33 @@ export async function enumeratePlayers(rpcUrl, fallbacks, gameAddress, deployBlo
  * CURRENT run -- it resets at startSeasonOne, so preseason cannot carry).
  * playerStats.tokenSpent is the denominator. ordering matches DeepWoodV3's
  * board logic: ROI, then best find, then legendary-equivalents.
+ *
+ * bestWei is the contract's bestSingleFindWei = priceOf(r) of the single best
+ * gem ever rolled, so it is matched back to a rarity against the LIVE
+ * priceOf(0..4) reads (never the local FACE_VALUE table -- the owner-settable
+ * chain prices are what settle validates against, and a stale local table
+ * would mislabel the gem). bestRarity is that index, or -1 when bestWei
+ * matches no live price (e.g. 0, or a legacy value from an older price table).
  */
 export async function playerRow(chain, player) {
-  const [stats, score, roi, onBoard] = await Promise.all([
+  const [stats, score, roi, onBoard, prices] = await Promise.all([
     chain.playerStats(player),
     chain.seasonScore(player),
     chain.roi(player).catch(() => 0n),
     chain.onRoiBoard(player).catch(() => false),
+    Promise.all([0, 1, 2, 3, 4].map((r) => chain.priceOf(r).catch(() => null))),
   ]);
+  const best = BigInt(stats.best);
+  let bestRarity = -1;
+  for (let r = 4; r >= 0; r--) {
+    if (prices[r] != null && BigInt(prices[r]) === best) { bestRarity = r; break; }
+  }
   return {
     address: player.toLowerCase(),
     tokenSpent: stats.tokenSpent,
     totalEarned: stats.totalEarned,
     bestWei: stats.best,
+    bestRarity,
     leq: stats.leq,
     hunts: stats.hunts,
     score,        // rarity-weight earned this season (ROI numerator)
