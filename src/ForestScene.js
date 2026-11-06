@@ -1398,7 +1398,7 @@ export class ForestScene extends Phaser.Scene {
     // the token amount / a dash rather than guessing a rarity.
     const bestTxt = (r) => {
       if (r.bestRarity != null && r.bestRarity >= 0) {
-        return `<span class="shift-gem g${r.bestRarity}">${RARITY_NAME[r.bestRarity]}</span>`;
+        return `<span class="shift-gem g${r.bestRarity}">${RARITY_SHORT[r.bestRarity]}</span>`;
       }
       return BigInt(r.bestWei ?? 0n) > 0n ? seasonEth(r.bestWei) : '—';
     };
