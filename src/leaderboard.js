@@ -102,16 +102,39 @@ export async function playerRow(chain, player) {
 /**
  * The ranked board.
  *
- * Order: roi desc, then best find desc, then leq desc -- the same three keys
- * season.js ranks the local mirror by, read straight from the contract so a
- * whale playing identically posts the same ROI as a small player. Players the
- * contract excludes (`onRoiBoard` false) rank after every ranked player, not
- * silently missing -- an honest "spent X, need Y more" beats an empty board.
+ * Order: onBoard first, then ROI desc, then best find desc, then leq desc.
+ *
+ * The ROI key is the SAME ratio the panel displays -- seasonScore per whole
+ * DEEPWOOD spent -- compared exactly with bigint cross-multiplication:
+ *   a.score / a.tokenSpent  vs  b.score / b.tokenSpent
+ *   <=>  a.score * b.tokenSpent  vs  b.score * a.tokenSpent
+ * The chain's own roi() is NOT used for ordering: it is
+ * (score * 1e18) / tokenSpent in integer division, and tokenSpent is
+ * 18-decimal wei while score is a small rarity weight, so it truncates to 0
+ * for every realistic player. Sorting by that 0 ranked everyone equal and
+ * silently fell through to the best-find tie-breaker (observed live
+ * 2026-11-05: trader2 ranked #1 on a Sapphire tie-break while his displayed
+ * ROI was the second-lowest). The panel shows chain roi only when it is
+ * non-zero, which is a floor() of this same ratio -- so exact-ratio ordering
+ * always agrees with the displayed column. Players the contract excludes
+ * (`onRoiBoard` false) rank after every ranked player, not silently missing.
  */
 export function rankRows(rows) {
+  const roiCmp = (a, b) => {
+    const ta = BigInt(a.tokenSpent ?? 0n), tb = BigInt(b.tokenSpent ?? 0n);
+    const sa = BigInt(a.score ?? 0n), sb = BigInt(b.score ?? 0n);
+    if (ta === 0n || tb === 0n) {
+      // No spend = ratio 0 (the panel shows '0x'): ranks below any real ratio.
+      if (ta === 0n && tb === 0n) return 0;
+      return ta === 0n ? 1 : -1;
+    }
+    const l = sa * tb, r = sb * ta;
+    return l > r ? -1 : l < r ? 1 : 0; // desc
+  };
   const sorted = [...rows].sort((a, b) => {
     if (a.onBoard !== b.onBoard) return a.onBoard ? -1 : 1;
-    if (a.roi !== b.roi) return a.roi > b.roi ? -1 : 1;
+    const c = roiCmp(a, b);
+    if (c !== 0) return c;
     if (a.bestWei !== b.bestWei) return a.bestWei > b.bestWei ? -1 : 1;
     if (a.leq !== b.leq) return a.leq > b.leq ? -1 : 1;
     return a.address < b.address ? -1 : 1;

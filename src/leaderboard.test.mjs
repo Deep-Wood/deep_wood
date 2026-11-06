@@ -55,15 +55,38 @@ test('a failed priceOf read degrades to -1 instead of throwing', async () => {
   assert.equal(row.bestRarity, -1);
 });
 
-test('rankRows still orders by bestWei (rarity order == wei order for a rising price table)', () => {
+test('rankRows orders by the exact displayed ROI (score per tokenSpent), not the truncated chain roi', () => {
+  // Live 2026-11-05 shape: chain roi() truncates to 0 for everyone, so the old
+  // sort fell through to bestWei and put trader2 (smaller ROI) at #1.
   const rows = [
-    { address: '0xa', bestWei: PRICES[1], roi: 1n, leq: 0n, onBoard: true },
-    { address: '0xb', bestWei: PRICES[4], roi: 1n, leq: 0n, onBoard: true },
-    { address: '0xc', bestWei: PRICES[2], roi: 1n, leq: 0n, onBoard: true },
+    { address: '0xd1bd', roi: 0n, score: 2211n, tokenSpent: 22500000n * 10n ** 18n, bestWei: 86n * 10n ** 21n, leq: 2216n, onBoard: true }, // exact 9.8e-5
+    { address: '0x89aa', roi: 0n, score: 981n, tokenSpent: 4700000n * 10n ** 18n, bestWei: 78n * 10n ** 20n, leq: 981n, onBoard: true },   // exact 2.1e-4
+    { address: '0xba85', roi: 0n, score: 7n, tokenSpent: 200000n * 10n ** 18n, bestWei: 4n * 10n ** 20n, leq: 7n, onBoard: true },          // exact 3.5e-5
   ];
   const ranked = rankRows(rows);
-  assert.deepEqual(ranked.map((r) => r.address), ['0xb', '0xc', '0xa']);
+  assert.deepEqual(ranked.map((r) => r.address), ['0x89aa', '0xd1bd', '0xba85']);
   assert.deepEqual(ranked.map((r) => r.rank), [1, 2, 3]);
+});
+
+test('rankRows still orders by bestWei when the exact ROIs tie, and keeps unranked last', () => {
+  const rows = [
+    { address: '0xa', roi: 0n, score: 10n, tokenSpent: 10n ** 18n, bestWei: PRICES[1], leq: 0n, onBoard: true },
+    { address: '0xb', roi: 0n, score: 10n, tokenSpent: 10n ** 18n, bestWei: PRICES[4], leq: 0n, onBoard: true },
+    { address: '0xc', roi: 0n, score: 10n, tokenSpent: 10n ** 18n, bestWei: PRICES[2], leq: 0n, onBoard: true },
+    { address: '0xoff', roi: 0n, score: 999n, tokenSpent: 10n ** 18n, bestWei: PRICES[4], leq: 0n, onBoard: false },
+  ];
+  const ranked = rankRows(rows);
+  assert.deepEqual(ranked.map((r) => r.address), ['0xb', '0xc', '0xa', '0xoff']);
+  assert.deepEqual(ranked.map((r) => r.rank), [1, 2, 3, 0]);
   // bestRarity rides through the spread untouched
   assert.equal(ranked[0].bestRarity, undefined); // rows built without the field stay pass-through
+});
+
+test('rankRows: zero-spend player (display 0x) ranks below any positive ratio', () => {
+  const rows = [
+    { address: '0xzero', roi: 0n, score: 5n, tokenSpent: 0n, bestWei: PRICES[4], leq: 0n, onBoard: true },
+    { address: '0xsome', roi: 0n, score: 1n, tokenSpent: 10n ** 30n, bestWei: PRICES[0], leq: 0n, onBoard: true },
+  ];
+  const ranked = rankRows(rows);
+  assert.deepEqual(ranked.map((r) => r.address), ['0xsome', '0xzero']);
 });
