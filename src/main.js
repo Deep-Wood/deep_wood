@@ -175,6 +175,8 @@ game.events.once('ready', () => {
     // runtime pin that used to override these was removed per user request:
     // the buttons stay exactly where they have always been.
     window.__syncBalance?.();
+    // 3D Camp view hook for e2e/smoke probes (read-only handle).
+    window.__openCamp3D = () => s.openCamp3D();
   };
   if (s.sys.settings.status >= Phaser.Scenes.RUNNING) publish();
   else s.events.once(Phaser.Scenes.Events.CREATE, publish);

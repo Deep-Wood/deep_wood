@@ -3319,6 +3319,41 @@ export class ForestScene extends Phaser.Scene {
     }
     this._campv10?.refresh();
     this._camp?.open();
+    // One-time wiring for the Camp card's 3D-view button.
+    const b3d = document.getElementById('camp-3d-btn');
+    if (b3d && !this._camp3dWired) {
+      this._camp3dWired = true;
+      b3d.addEventListener('click', () => { void this.openCamp3D(); });
+    }
+  }
+
+  /**
+   * Open the 3D Camp view (src/camp3d.js, lazy-loaded three.js). Biome and POI
+   * gates derive from the same season seed + player chunk as the 2D forest.
+   */
+  async openCamp3D() {
+    this._camp?.close();
+    const { openCamp3D } = await import('./camp3d.js');
+    import('./analytics.js').then(({ track }) => track('camp3d_open')).catch(() => {});
+    await openCamp3D({
+      seedHex: this.seasonSeed,
+      playerX: this.player.x,
+      playerY: this.player.y,
+      onEnterPOI: (poi) => this.focusPOI(poi),
+    });
+  }
+
+  /** Pan the 2D camera to a POI picked in the 3D view and name it in the hint. */
+  focusPOI(poi) {
+    if (!poi) return;
+    this.cameras.main.centerOn(poi.x, poi.y);
+    const hint = document.getElementById('hint');
+    if (hint) {
+      hint.textContent = `⛺ ${poi.name} — walk to a glowing vein and dig`;
+      hint.classList.add('gold', 'vein-pulse');
+      setTimeout(() => hint.classList.remove('gold', 'vein-pulse'), 6000);
+    }
+    import('./analytics.js').then(({ track }) => track('poi_enter', { name: poi.name })).catch(() => {});
   }
 
   /**
