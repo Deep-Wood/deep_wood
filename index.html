@@ -172,6 +172,9 @@
       <button type="button" class="chip migrate-chip hidden" id="migrate-chip" aria-label="Carry your progress from the previous cave into V10">
         <span class="dot good"></span>Carry your V9 progress over
       </button>
+      <button type="button" class="chip migrate-chip migrate-flash hidden" id="migrate-v10-chip" aria-label="Migrate your progress from V10 into V10.2">
+        <span class="dot good"></span>Migrate to V10.2
+      </button>
     </div>
 
     <!-- RIGHT: the toolbelt. Discrete tiles, no container -- the reference art
@@ -1733,6 +1736,7 @@
       // V9 -> V10: offer the one-shot carry-over when the connected wallet
       // still has unmigrated state on the legacy contract.
       window.__scene?.checkV9Migration?.();
+      window.__scene?.checkV10Migration?.();
       const b = await walletBalanceWeiOnchain();
       window.__scene?.setChainBalance?.(b);
       setChainBalanceWei(b);

@@ -311,6 +311,15 @@ export function calldataMigrateFromV9() {
 }
 
 /**
+ * `migrateFromV10()` -- self-serve, one-shot V10 -> V10.2 carry-over. Pulls
+ * satchel, tool, skill, lifetime stats, season score, research and prestige
+ * from the legacy V10 contract via its public views.
+ */
+export function calldataMigrateFromV10() {
+  return sel("migrateFromV10()").slice(2);
+}
+
+/**
  * `descend()` -- prestige. Wipes satchel, tool and skill for a permanent
  * find-weight multiplier derived from lifetime leq. Keeps research,
  * lifetime stats and board standing. Requires leq >= minLeqForDescend.
@@ -1039,6 +1048,10 @@ export async function redeemGems(rarity, count) {
  */
 export async function migrateFromV9() {
   return send(calldataMigrateFromV9());
+}
+
+export async function migrateFromV10() {
+  return send(calldataMigrateFromV10());
 }
 
 export async function descend() {

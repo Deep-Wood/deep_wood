@@ -91,6 +91,7 @@ export const ECONOMY_ABI = [
   'function prestigeCount(address) view returns (uint16)',
   'function prestigeBpsOf(uint256) view returns (uint256)',
   'function migratedV9(address) view returns (bool)',
+  'function migratedV10(address) view returns (bool)',
   'function fusionRates(uint256) view returns (uint256)',
   'function legacyV9() view returns (address)',
 ];
@@ -123,6 +124,7 @@ export const ACTION_ABI = [
   'function upgradeSkill(uint8) nonpayable returns ()',
   // --- V10 writes: migration, prestige, research, fusion ---
   'function migrateFromV9() nonpayable returns ()',
+  'function migrateFromV10() nonpayable returns ()',
   'function descend() nonpayable returns ()',
   'function study() nonpayable returns ()',
   'function fuse(uint8,uint8) nonpayable returns ()',
@@ -138,6 +140,7 @@ export const PLAYER_ACTIONS = [
   'upgradeSkill',
   'redeemGems',
   'migrateFromV9',
+  'migrateFromV10',
   'descend',
   'study',
   'fuse',

@@ -55,6 +55,7 @@ export const SIGS = {
   'HARD_MAX_SLOTS()': '0x2aece13f',
   'HUNTER_ROLE()': '0xa98e0bf4',
   'huntIndexOf(address)': '0xac3ab04f',
+  'legacyV10()': '0xd7593490',
   'legacyV9()': '0x5c55823d',
   'lifetimeScore(address)': '0x4e018248',
   'markGraduated()': '0x79e7acda',
@@ -67,6 +68,7 @@ export const SIGS = {
   'maxFindableRarity(address,uint8)': '0xa40bc926',
   'migratedV10(address)': '0xd6702e27',
   'migratedV9(address)': '0x9053c8f5',
+  'migrateFromV10()': '0x23aca1b4',
   'migrateFromV9()': '0x9726ef27',
   'minRedeemWei()': '0x011a4078',
   'mithrilCost()': '0xf7d49a64',
@@ -729,6 +731,7 @@ export async function connect({ rpcUrl, address, player, fallbackRpcUrls = [] })
     prestigeBpsOf: async (leq) => dUint(await rpc.call(to, sel('prestigeBpsOf(uint256)') + argUint(leq))),
     fusionRates: async (i) => dUint(await rpc.call(to, sel('fusionRates(uint256)') + argUint(i))),
     legacyV9: async () => dAddr(await rpc.call(to, sel('legacyV9()'))),
+    legacyV10: async () => dAddr(await rpc.call(to, sel('legacyV10()'))),
 
     /**
      * The UTC days ('YYYY-MM-DD') this player settled at least one batch in,

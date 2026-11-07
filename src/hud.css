@@ -2141,6 +2141,17 @@ button.chip { position: relative; }
 .migrate-chip:hover { background: rgba(123, 216, 138, 0.22); }
 .migrate-chip.hidden { display: none; }
 
+/* V10.2 migration flash: a beacon pulse -- crisp expanding outline ring and
+   a gentle scale beat, so a returning player's eye lands on it at login.
+   No blur/glow: beacons are the settled design, glows are not. */
+.migrate-flash {
+  animation: beacon-pulse 1.6s ease-in-out infinite;
+}
+@keyframes beacon-pulse {
+  0%, 100% { outline: 2px solid rgba(123, 216, 138, 0.0); outline-offset: 0px; transform: scale(1); }
+  50% { outline: 2px solid rgba(123, 216, 138, 0.95); outline-offset: 4px; transform: scale(1.06); }
+}
+
 /* ---- client-side juice: dig streak counter ---- */
 .dig-streak {
   display: inline-flex; align-items: center; justify-content: center;

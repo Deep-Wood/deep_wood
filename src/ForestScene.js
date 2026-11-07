@@ -3409,6 +3409,64 @@ export class ForestScene extends Phaser.Scene {
     chip.classList.toggle('hidden', !hasLegacy);
   }
 
+  /**
+   * V10 -> V10.2 migration: a FLASHING chip in the status row appears at
+   * login when the connected wallet has unmigrated state on the legacy V10
+   * contract. Clicking it runs the one-shot self-serve migration; once
+   * `migratedV10(player)` is true on-chain the chip never shows again.
+   * Callers: the wallet connect sync (index.html) and the chip's own click.
+   */
+  async checkV10Migration() {
+    const chip = document.getElementById('migrate-v10-chip');
+    if (!chip) return;
+    if (!chip.dataset.bound) {
+      chip.dataset.bound = '1';
+      chip.addEventListener('click', async () => {
+        chip.classList.add('hidden');
+        this.beltMsg('Confirm the migration in your wallet\u2026', 'busy');
+        const { migrateFromV10Onchain } = await import('./onchain.js');
+        const res = await migrateFromV10Onchain();
+        if (!res.ok) {
+          this.beltMsg(res.reason || 'Migration failed.', 'bad');
+          if (res.code !== 'already') chip.classList.remove('hidden');
+          return;
+        }
+        this.beltMsg('Progress migrated \u2014 welcome to V10.2.', 'good');
+        this.flash('Your V10 progress is now live on V10.2 — confirmed on-chain ✓');
+        await this.refreshChainTool();
+        window.renderGems?.(); window.renderHunter?.();
+        this.refreshBelt();
+      });
+    }
+    const { getReader } = await import('./onchain.js');
+    const { getState } = await import('./wallet.js');
+    const { account } = getState();
+    if (!account) { chip.classList.add('hidden'); return; }
+    const r = await getReader();
+    if (!r?.migratedV10 || !r?.legacyV10) return;
+    let migrated;
+    try { migrated = await r.migratedV10(account); } catch { return; }
+    if (migrated) { chip.classList.add('hidden'); return; }
+    // Only offer the carry when the legacy V10 contract actually holds state.
+    let hasLegacy = false;
+    try {
+      const legacy = await r.legacyV10();
+      if (legacy && /^0x[0-9a-fA-F]{40}$/.test(legacy) && BigInt(legacy) !== 0n) {
+        const { connect } = await import('./chain.js');
+        const { config } = await import('./config.js');
+        const v10 = await connect({
+          rpcUrl: config.rpcUrl, fallbackRpcUrls: config.fallbackRpcUrls,
+          address: legacy, player: account,
+        });
+        const [idx, g0, g1, tool] = await Promise.all([
+          v10.huntIndexOf(account), v10.gemsOf(account, 0), v10.gemsOf(account, 1), v10.toolOf(account),
+        ]);
+        hasLegacy = idx > 0n || g0 > 0n || g1 > 0n || Number(tool?.[0] ?? 0n) > 0;
+      }
+    } catch { /* legacy unreadable: keep the chip hidden */ }
+    chip.classList.toggle('hidden', !hasLegacy);
+  }
+
   openRedeemCard() {
     if (!this._redeemCard) {
       this._redeemCard = createRedeemCard({

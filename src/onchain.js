@@ -659,6 +659,38 @@ export async function migrateFromV9Onchain() {
 }
 
 /**
+ * Carry your V10 progress into V10.2. One-shot per player.
+ *
+ * Signal: `migratedV10(player)` flips to true on the live contract.
+ *
+ * @returns {Promise<{ok:boolean, hash?:string, code?:string, reason?:string}>}
+ */
+export async function migrateFromV10Onchain() {
+  const r = await getReader();
+  if (!r) return fail("not-configured", "GAME_ADDRESS not set - no contract to write to");
+  const { account } = getState();
+  let before;
+  try {
+    before = await r.migratedV10(account);
+  } catch {
+    return fail("read-failed", "could not read the migration flag");
+  }
+  if (before) return fail("already", "this wallet already carried its progress over");
+
+  const { migrateFromV10 } = await import("./wallet.js");
+  const sent = await migrateFromV10();
+  if (!sent.ok) return fail(sent.code || "send-failed", sent.reason || "transaction was not sent");
+
+  const after = await pollUntilChanged(() => r.migratedV10(account), before, (b, a) => a === true);
+  if (!after.changed) {
+    return fail("reverted", "contract did not apply the migration (it reverted)");
+  }
+  const { track } = await import('./analytics.js');
+  track('v10_migrate', {});
+  return { ok: true, hash: sent.hash, confirmed: true };
+}
+
+/**
  * Prestige: wipe satchel, tool and skill for a permanent find-weight
  * multiplier. Signal: `prestigeCount(player)` increments.
  *
