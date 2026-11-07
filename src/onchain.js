@@ -863,3 +863,129 @@ export async function priceFor(rarity) {
     return null;
   }
 }
+
+// ---------------------------------------------------------------------------
+// V10.2 reward claims: quest/trophy gems granted on-chain via claimReward().
+// The player sends the tx; the oracle (claim-sign endpoint) signs the grant.
+// ---------------------------------------------------------------------------
+
+/** Same-origin oracle endpoint: /collect -> /claim-sign (Vercel rewrite). */
+const CLAIM_SIGN_ENDPOINT =
+  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_ANALYTICS_URL
+    ? String(import.meta.env.VITE_ANALYTICS_URL).replace(/\/collect\/?$/, '/claim-sign')
+    : null);
+
+/** Ask the reward oracle to sign a claim. Returns { ok, sig } or { ok:false, code, reason }. */
+export async function requestClaimSignature(player, rewardId, day) {
+  if (!CLAIM_SIGN_ENDPOINT) {
+    return fail('not-configured', 'no oracle endpoint configured (VITE_ANALYTICS_URL unset)');
+  }
+  try {
+    const res = await fetch(CLAIM_SIGN_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ player, id: rewardId, day }),
+    });
+    const j = await res.json().catch(() => null);
+    if (!res.ok || !j || typeof j.sig !== 'string') {
+      return fail(j?.code || 'sign-failed', j?.error || `oracle returned HTTP ${res.status}`);
+    }
+    return { ok: true, sig: j.sig };
+  } catch (e) {
+    return fail('sign-failed', String(e?.message || e));
+  }
+}
+
+/**
+ * Claim a tabled reward for an engagement id (quest / badge / streak tier).
+ * Confirm discipline matches every other write: poll the gem balance until
+ * the tabled amounts actually land -- a receipt alone is not proof.
+ *
+ * @param {string} engagementId  e.g. 'warm-pick', 'hot-streak', 'streak-7'
+ * @returns {Promise<{ok:boolean, hash?:string, code?:string, reason?:string,
+ *                    rewardId?:string, day?:number, amounts?:bigint[]}>}
+ */
+export async function claimRewardOnchain(engagementId) {
+  const r = await getReader();
+  if (!r) return fail('not-configured', 'GAME_ADDRESS not set - no contract to write to');
+  const { account } = getState();
+  if (!account) return fail('no-wallet', 'connect a wallet first');
+
+  const R = await import('./rewards.js');
+  R.assertTableValid();
+  const rewardId = R.rewardIdFor(engagementId);
+  const def = R.REWARDS[rewardId];
+  if (!def) return fail('unknown-reward', `no reward tabled for "${engagementId}"`);
+
+  const { utcDay } = await import('./engagement.js');
+  const day = R.claimDayFor(rewardId, utcDay());
+  const idHex = R.rewardIdHex(rewardId);
+  const key = R.claimKeyHex(account, idHex, day);
+
+  try {
+    if (await r.claimed(key)) return fail('already-claimed', 'this reward is already claimed');
+    if (!(await r.rewardActive(idHex))) return fail('unknown-reward', 'the contract has no such reward tabled');
+  } catch {
+    return fail('read-failed', 'could not read the reward state');
+  }
+
+  const sigRes = await requestClaimSignature(account, rewardId, day);
+  if (!sigRes.ok) return fail(sigRes.code, sigRes.reason);
+
+  let before;
+  try {
+    const gems = await Promise.all(ALL_RARITIES.map((i) => r.gemsOf(account, i)));
+    before = gems.reduce((a, b) => a + b, 0n);
+  } catch {
+    return fail('read-failed', 'could not read the gem balance');
+  }
+
+  const { claimReward } = await import('./wallet.js');
+  const sent = await claimReward(idHex, day, sigRes.sig);
+  if (!sent.ok) return fail(sent.code || 'send-failed', sent.reason || 'transaction was not sent');
+
+  const want = before + R.rewardTotal(def.amounts);
+  const after = await pollUntilChanged(
+    async () => {
+      const gems = await Promise.all(ALL_RARITIES.map((i) => r.gemsOf(account, i)));
+      return gems.reduce((a, b) => a + b, 0n);
+    },
+    before,
+    (b, a) => a >= want,
+  );
+  if (!after.changed) {
+    return fail('reverted', 'contract did not apply the reward (it reverted)');
+  }
+  const { track } = await import('./analytics.js');
+  track('reward_claimed', { id: rewardId, day });
+  return { ok: true, hash: sent.hash, confirmed: true, rewardId, day, amounts: def.amounts };
+}
+
+/**
+ * Claimed-state for every reward relevant right now (active quests, earned
+ * badges, reached streak tiers). Returns Map<rewardId, boolean> -- used to
+ * paint Claim buttons. Reads are cheap view calls; failures read as
+ * "unclaimed" so a flaky RPC never hides a claimable reward.
+ *
+ * @param {string[]} engagementIds
+ */
+export async function claimedRewardsFor(engagementIds) {
+  const out = new Map();
+  const r = await getReader();
+  const { account } = getState();
+  if (!r || !account) return out;
+  const R = await import('./rewards.js');
+  const { utcDay } = await import('./engagement.js');
+  const today = utcDay();
+  await Promise.all(engagementIds.map(async (eid) => {
+    const rewardId = R.rewardIdFor(eid);
+    if (!R.REWARDS[rewardId] || out.has(rewardId)) return;
+    const day = R.claimDayFor(rewardId, today);
+    try {
+      out.set(rewardId, await r.claimed(R.claimKeyHex(account, R.rewardIdHex(rewardId), day)));
+    } catch {
+      out.set(rewardId, false);
+    }
+  }));
+  return out;
+}

@@ -2150,13 +2150,27 @@ export class ForestScene extends Phaser.Scene {
       const { getState } = await import('./wallet.js');
       const {
         loadState, saveState, utcDay, markActive, currentStreak, deriveQuests,
-        evalBadges, streakTier, saturdayOf, earnedSkins, mergeSettleDays,
+        evalBadges, streakTier, saturdayOf, earnedSkins, mergeSettleDays, STREAK_TIERS,
       } = await import('./engagement.js');
       const { createCamp, badgeToast, streakToast } = await import('./camp.js');
       if (!this._camp) {
         this._camp = createCamp({
           readEngagement: () => this._eng,
           readBadges: () => this._eng?.badges ?? [],
+          readClaimed: (eid) => {
+            const rid = this._rewardIdFor ? this._rewardIdFor(eid) : eid;
+            return this._eng?.claimed?.get(rid) ?? false;
+          },
+          onClaim: async (eid) => {
+            const { claimRewardOnchain } = await import('./onchain.js');
+            const res = await claimRewardOnchain(eid);
+            if (res?.ok && this._eng?.claimed) {
+              this._eng.claimed.set(res.rewardId, true);
+              this.refreshBelt();
+              window.renderHunter?.();
+            }
+            return res;
+          },
           onOpen: () => { import('./analytics.js').then(({ track }) => track('camp_open')); },
         });
       }
@@ -2270,6 +2284,21 @@ export class ForestScene extends Phaser.Scene {
         deltas: { digs, amber: amberToday, burned: burnedToday, weekendDigs },
         baselineDay: today,
       };
+      // V10.2 reward claim state: one cheap view call per relevant reward id,
+      // so the camp can paint Claim buttons against the chain, not a guess.
+      try {
+        const { claimedRewardsFor } = await import('./onchain.js');
+        const R = await import('./rewards.js');
+        this._rewardIdFor = R.rewardIdFor;
+        const ids = [
+          ...this._eng.quests.map((x) => x.id),
+          ...badges,
+          ...STREAK_TIERS.filter((t) => streak >= t.d).map((t) => `streak-${t.d}`),
+        ];
+        this._eng.claimed = await claimedRewardsFor(ids);
+      } catch {
+        this._eng.claimed = this._eng.claimed ?? new Map();
+      }
       this._camp?.render?.();
       // Skins may have been (un)earned by this sync: repaint the strip avatar.
       window.renderHunter?.();
@@ -3241,6 +3270,20 @@ export class ForestScene extends Phaser.Scene {
       this._camp = createCamp({
         readEngagement: () => this._eng,
         readBadges: () => this._eng?.badges ?? [],
+        readClaimed: (eid) => {
+          const rid = this._rewardIdFor ? this._rewardIdFor(eid) : eid;
+          return this._eng?.claimed?.get(rid) ?? false;
+        },
+        onClaim: async (eid) => {
+          const { claimRewardOnchain } = await import('./onchain.js');
+          const res = await claimRewardOnchain(eid);
+          if (res?.ok && this._eng?.claimed) {
+            this._eng.claimed.set(res.rewardId, true);
+            this.refreshBelt();
+            window.renderHunter?.();
+          }
+          return res;
+        },
         onOpen: () => { import('./analytics.js').then(({ track }) => track('camp_open')); },
       });
     }

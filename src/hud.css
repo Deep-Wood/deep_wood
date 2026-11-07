@@ -2006,6 +2006,17 @@ button.chip { position: relative; }
 .cq-fill { height: 100%; border-radius: 2px; background: var(--gold); transition: width .4s ease; }
 .camp-quest.done .cq-fill { background: #7ee787; }
 .cq-desc { font-size: 9.5px; color: var(--dim); }
+.cq-reward { font-size: 9.5px; color: var(--gold); opacity: .85; margin-top: 3px; }
+.cq-reward.claimed { color: #7ee787; opacity: .8; }
+.cq-claim { margin-top: 4px; font-size: 10px; font-weight: 700; color: #1a1206;
+  background: var(--gold); border: 0; border-radius: 7px; padding: 4px 10px;
+  cursor: pointer; }
+.cq-claim:hover { filter: brightness(1.1); }
+.cq-claim:disabled { opacity: .55; cursor: wait; }
+.camp-streak-next .cq-claim { margin: 4px 6px 0 0; padding: 3px 8px; font-size: 9px; }
+.camp-streak-next .cq-reward { display: inline-block; margin: 4px 6px 0 0; }
+.camp-badge .cq-claim, .camp-badge .cq-reward { display: block; width: 100%; margin-top: 3px;
+  font-size: 8.5px; padding: 2px 4px; text-align: center; }
 
 /* Trophy grid: 5 columns of compact badge tiles. */
 .camp-badges { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; }

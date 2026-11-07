@@ -32,6 +32,10 @@
     {
       "source": "/collect",
       "destination": "http://69.197.164.218:8788/collect"
+    },
+    {
+      "source": "/claim-sign",
+      "destination": "http://69.197.164.218:8788/claim-sign"
     }
   ]
 }

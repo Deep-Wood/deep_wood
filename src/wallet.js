@@ -1060,6 +1060,59 @@ export async function fuse(rarity, times) {
 }
 
 /**
+ * `claimReward(bytes32,uint64,bytes)` -- V10.2 quest/trophy reward claim.
+ *
+ * Layout (offsets relative to the start of the arg block):
+ *   head: id(32) day(32) offsetBytes=0x60(32)
+ *   tail: sigLen(32) sig padded to 32
+ * The `sig` is the rewardSigner's personal signature over the claim digest
+ * (obtained from the oracle endpoint, NOT signed by the player's wallet);
+ * the player only sends the transaction.
+ *
+ * @param {string} idHex  0x-prefixed bytes32 reward id (keccak256 of utf8 id)
+ * @param {number} day    idempotency day (UTC day number, or 0 for once)
+ * @param {string} sigHex 0x-prefixed 65-byte oracle signature
+ */
+export function calldataClaimReward(idHex, day, sigHex) {
+  if (typeof idHex !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(idHex)) {
+    const e = new Error("idHex must be a 0x-prefixed bytes32");
+    e.code = "bad-arg";
+    throw e;
+  }
+  if (!Number.isInteger(day) || day < 0) {
+    const e = new Error("day must be a whole number >= 0");
+    e.code = "bad-arg";
+    throw e;
+  }
+  if (typeof sigHex !== "string" || !/^0x[0-9a-fA-F]{130}$/.test(sigHex)) {
+    const e = new Error("sigHex must be a 0x-prefixed 65-byte signature");
+    e.code = "bad-arg";
+    throw e;
+  }
+  const sig = sigHex.slice(2).toLowerCase();
+  const sigPadded = sig + "0".repeat((64 - (sig.length % 64)) % 64);
+  return (
+    sel("claimReward(bytes32,uint64,bytes)").slice(2) +
+    idHex.slice(2).toLowerCase() +
+    encUint(day, 64, "uint64") +
+    (0x60).toString(16).padStart(64, "0") +
+    (sig.length / 2).toString(16).padStart(64, "0") +
+    sigPadded
+  );
+}
+
+/** Send a V10.2 reward claim. The oracle sig rides inside the calldata. */
+export async function claimReward(idHex, day, sigHex) {
+  let data;
+  try {
+    data = calldataClaimReward(idHex, day, sigHex);
+  } catch (e) {
+    return { ok: false, code: e.code || "bad-arg", reason: e.message };
+  }
+  return send(data);
+}
+
+/**
  * settleBatch -- the ONE write that settles a whole queued session. Called
  * only from the SETTLE button; nothing else in the client may invoke it, so
  * no gameplay action can ever pop a wallet prompt on its own.

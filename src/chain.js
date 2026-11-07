@@ -28,6 +28,8 @@ export const SIGS = {
   'buyTool(uint8,uint256)': '0x798588fc',
   'buyToolWithEth(uint8,bytes,uint256)': '0xdba8dc9d',
   'buyToolWithToken(uint8,uint256)': '0x8fb21f44',
+  'claimReward(bytes32,uint64,bytes)': '0x1735867a',
+  'claimed(bytes32)': '0xcc3c0f06',
   'closeSeason()': '0xbbc67395',
   'commitSeason(bytes32)': '0x4937e907',
   'commitSeed(bytes32)': '0x3ffc6f9c',
@@ -63,6 +65,7 @@ export const SIGS = {
   'MAX_TIER()': '0xaf3a19c7',
   'maxBatch()': '0x67765b87',
   'maxFindableRarity(address,uint8)': '0xa40bc926',
+  'migratedV10(address)': '0xd6702e27',
   'migratedV9(address)': '0x9053c8f5',
   'migrateFromV9()': '0x9726ef27',
   'minRedeemWei()': '0x011a4078',
@@ -94,6 +97,9 @@ export const SIGS = {
   'repairNeedsOf(address)': '0x3230c11b',
   'repairTool()': '0xb86b99c4',
   'researchOf(address)': '0x815c67fa',
+  'rewardActive(bytes32)': '0x993d136e',
+  'rewardOf(bytes32)': '0x12eac87e',
+  'rewardSigner()': '0x323f24ab',
   'resumePre()': '0x3d6b2e86',
   'roi(address)': '0x3ade7ed7',
   'sapphirePrice()': '0x6f358b3d',
@@ -392,6 +398,11 @@ export function argAddr(a) {
 /** Encode a `uint256` arg (offsets, amounts) as a 64-byte word. */
 export function argUint(n) {
   return BigInt(n).toString(16).padStart(64, '0');
+}
+
+/** Encode a `bytes32` arg (reward ids, claim keys) as a 64-char word. */
+export function argBytes32(h) {
+  return h.replace(/^0x/, '').padStart(64, '0').slice(-64).toLowerCase();
 }
 
 /** Decode a single `address` return (right-aligned in the last 20 bytes). */
@@ -707,6 +718,12 @@ export async function connect({ rpcUrl, address, player, fallbackRpcUrls = [] })
     researchOf: async (p = player) => dUint(await rpc.call(to, sel('researchOf(address)') + argAddr(p))),
     prestigeCount: async (p = player) => dUint(await rpc.call(to, sel('prestigeCount(address)') + argAddr(p))),
     migratedV9: async (p = player) => dBool(await rpc.call(to, sel('migratedV9(address)') + argAddr(p))),
+    // --- V10.2: oracle-signed gem rewards ---
+    migratedV10: async (p = player) => dBool(await rpc.call(to, sel('migratedV10(address)') + argAddr(p))),
+    rewardSigner: async () => dAddr(await rpc.call(to, sel('rewardSigner()'))),
+    rewardActive: async (idHex) => dBool(await rpc.call(to, sel('rewardActive(bytes32)') + argBytes32(idHex))),
+    rewardOf: async (idHex) => wordsOf(await rpc.call(to, sel('rewardOf(bytes32)') + argBytes32(idHex))),
+    claimed: async (keyHex) => dBool(await rpc.call(to, sel('claimed(bytes32)') + argBytes32(keyHex))),
     // Pure on-chain curve: bps = 10_000 + coeff*sqrt(leq), cap. One call,
     // always faithful -- the client never re-implements the sqrt.
     prestigeBpsOf: async (leq) => dUint(await rpc.call(to, sel('prestigeBpsOf(uint256)') + argUint(leq))),

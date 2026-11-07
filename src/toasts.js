@@ -62,10 +62,32 @@ export async function shareHaul(canvas, title = 'DeepWood haul') {
   } catch { /* user cancelled */ }
 }
 
+/**
+ * Flash shown when a quest/trophy reward claim is CONFIRMED on-chain (the
+ * gem balance moved by exactly the tabled amounts). Includes the tx link.
+ */
+export function showRewardToast({ amounts, hash }) {
+  const wrap = document.getElementById('badge-toasts') || document.body;
+  const el = document.createElement('div');
+  el.className = 'badge-toast reward-toast';
+  const NAMES = ['Quartz', 'Amber', 'Sapphire', 'Ruby', 'Diamond'];
+  const parts = (amounts || [])
+    .map((a, i) => (BigInt(a) > 0n ? `${BigInt(a)} ${NAMES[i]}` : null))
+    .filter(Boolean)
+    .join(' + ');
+  el.innerHTML = `
+    <div class="bt-text">
+      <b>Reward claimed ✓</b>
+      <span>${parts || 'gems'}</span>
+      ${hash ? `<a href="https://explorer.testnet.chain.robinhood.com/tx/${hash}" target="_blank" rel="noopener" style="color:var(--gold);text-decoration:underline">View tx →</a>` : ''}
+    </div>`;
+  wrap.appendChild(el);
+  haptic(60);
+  setTimeout(() => { el.classList.add('gone'); setTimeout(() => el.remove(), 600); }, 10000);
+}
+
 /** Transient recovery card shown when settle reverts. Dismissible, auto-removes after 10s. */
 export function showSettleRecovery(reason) {
-  const el = document.createElement('div');
-  el.className = 'recovery-card';
   el.innerHTML = `
     <b>Settle didn't go through</b>
     <p>${reason || 'Your digs are still queued.'}</p>

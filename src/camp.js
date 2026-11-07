@@ -7,8 +7,9 @@
 import {
   STREAK_TIERS, streakTier, nextTierAt, BADGES, SKINS, chooseSkin,
 } from './engagement.js';
+import { REWARDS, rewardIdFor, formatReward } from './rewards.js';
 import { toolAvatarSkinned } from './economy.js';
-import { haptic } from './toasts.js';
+import { haptic, showRewardToast } from './toasts.js';
 
 const GEM_COLORS = ['#cfd6dd', '#d9a441', '#3a6fd8', '#d83a5a', '#8a3ad8'];
 const GEM_NAMES = ['Quartz', 'Amber', 'Sapphire', 'Ruby', 'Diamond'];
@@ -25,9 +26,11 @@ const q = (id) => document.getElementById(id);
  * @param {() => {streak:number, quests:object[], baselineDay:string, deltas:object}} o.readEngagement
  *        Live engagement view computed by ForestScene (pure reads, cheap).
  * @param {() => string[]} o.readBadges  IDs of unlocked badges (on-chain facts).
+ * @param {(engagementId:string) => boolean} [o.readClaimed]  on-chain claimed state per reward.
+ * @param {(engagementId:string) => Promise<object>} [o.onClaim]  sends the V10.2 claimReward tx.
  * @param {() => void} [o.onOpen]        fires when the card opens (analytics).
  */
-export function createCamp({ readEngagement, readBadges, onOpen }) {
+export function createCamp({ readEngagement, readBadges, readClaimed, onClaim, onOpen }) {
   const card = q('camp-card');
   if (!card) return null;
   // The camp is opened from the wallet menu now; there is no launcher chip.
@@ -46,6 +49,21 @@ export function createCamp({ readEngagement, readBadges, onOpen }) {
   const elClose = q('camp-close');
   const elDescendPreview = q('camp-descend-preview');
 
+  /** Reward chip for an engagement id: hint always, Claim button when done+unclaimed. */
+  function rewardChip(eid, done) {
+    const rid = rewardIdFor(eid);
+    const def = REWARDS[rid];
+    if (!def) return '';
+    const claimed = readClaimed?.(eid) ?? false;
+    if (done && claimed) {
+      return `<div class="cq-reward claimed">✓ ${formatReward(def.amounts)} claimed</div>`;
+    }
+    if (done) {
+      return `<button type="button" class="cq-claim" data-claim="${eid}" title="Claim on-chain">Claim ${formatReward(def.amounts)}</button>`;
+    }
+    return `<div class="cq-reward">reward: ${formatReward(def.amounts)}</div>`;
+  }
+
   function render() {
     const eng = readEngagement() ?? {};
     const { streak, quests, deltas } = eng;
@@ -59,9 +77,13 @@ export function createCamp({ readEngagement, readBadges, onOpen }) {
     // title says it is building instead of denying it exists.
     elStreakTitle.textContent = tier ? tier.title : (streak > 0 ? 'Streak building' : 'No streak yet');
     const nextAt = nextTierAt(streak);
-    elStreakNext.textContent = nextAt
+    const tierBtns = STREAK_TIERS
+      .filter((t) => streak >= t.d)
+      .map((t) => rewardChip(`streak-${t.d}`, true))
+      .join('');
+    elStreakNext.innerHTML = (nextAt
       ? `Next honor at ${nextAt} day${nextAt === 1 ? '' : 's'} — settle at least one dig a day, UTC.`
-      : 'Every honor is held. A missed day resets the count — best is kept.';
+      : 'Every honor is held. A missed day resets the count — best is kept.') + tierBtns;
 
     elQuests.innerHTML = quests.map((r) => {
       const pct = r.goal > 0 ? Math.round((r.progress / r.goal) * 100) : 0;
@@ -70,6 +92,7 @@ export function createCamp({ readEngagement, readBadges, onOpen }) {
           <span class="cq-count">${r.progress}/${r.goal}</span></div>
         <div class="cq-bar"><div class="cq-fill" style="width:${pct}%"></div></div>
         <div class="cq-desc">${r.desc}</div>
+        ${rewardChip(r.id, r.done)}
       </div>`;
     }).join('');
 
@@ -82,6 +105,7 @@ export function createCamp({ readEngagement, readBadges, onOpen }) {
         <span class="cb-glyph" style="--bc:${badgeColor(b.id)}">${badgeGlyph(b.id)}</span>
         <span class="cb-name">${b.name}</span>
         <span class="cb-how">${has ? 'Earned' : b.how}</span>
+        ${has ? rewardChip(b.id, true) : ''}
       </div>`;
     }).join('');
     elBadgeCount.textContent = `${unlocked.length}/${BADGES.length}`;
@@ -144,6 +168,24 @@ export function createCamp({ readEngagement, readBadges, onOpen }) {
   elClose.addEventListener('click', close);
   backdrop.addEventListener('click', close);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && isOpen()) close(); });
+
+  // One delegated handler for every reward Claim button in the card.
+  card.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-claim]');
+    if (!b || !onClaim || b.disabled) return;
+    e.preventDefault();
+    b.disabled = true;
+    try {
+      const res = await onClaim(b.dataset.claim);
+      if (res?.ok) showRewardToast({ amounts: res.amounts, hash: res.hash });
+      else if (res?.reason) b.title = String(res.reason);
+    } catch (err) {
+      b.title = String(err?.message || err);
+    } finally {
+      b.disabled = false;
+      render();
+    }
+  });
 
   return { open, close, isOpen, render };
 }
