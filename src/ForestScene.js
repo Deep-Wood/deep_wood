@@ -3287,37 +3287,6 @@ export class ForestScene extends Phaser.Scene {
         onOpen: () => { import('./analytics.js').then(({ track }) => track('camp_open')); },
       });
     }
-    // V10 sections (Descend + Research) live in the same card; their
-    // numbers are live reads, so refresh them on every open.
-    if (!this._campv10) {
-      const { createCampV10 } = await import('./campv10.js');
-      const { readV10Panels } = await import('./v10.js');
-      const { getReader, descendOnchain, studyOnchain } = await import('./onchain.js');
-      const { getState } = await import('./wallet.js');
-      this._campv10 = createCampV10({
-        readPanel: async () => {
-          const r = await getReader();
-          const { account } = getState();
-          if (!r || !account) return null;
-          try {
-            const p = await readV10Panels(r, account);
-            return { ...p, prestigeBps: await r.prestigeBpsOf(p.leq) };
-          } catch { return null; }
-        },
-        onDescend: () => descendOnchain(),
-        onStudy: () => studyOnchain(),
-        onDone: async () => {
-          await this.refreshChainTool();
-          window.renderGems?.(); window.renderHunter?.();
-          this.refreshBelt();
-          // Descend/study change the roll multiplier: force the next dig
-          // to re-read it (stale cached value reverts queued batches).
-          this._v10FindWeight = undefined;
-        },
-        onStatus: (m, k) => this.flash(m, k),
-      });
-    }
-    this._campv10?.refresh();
     this._camp?.open();
     /* DISABLED 2026-11-07: 3D camp view deferred, integrate later. Re-enable by uncommenting.
     const b3d = document.getElementById('camp-3d-btn');

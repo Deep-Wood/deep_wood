@@ -47,7 +47,6 @@ export function createCamp({ readEngagement, readBadges, readClaimed, onClaim, o
   const elBadgeCount = q('camp-badge-count');
   const elSkins = q('camp-skins');
   const elClose = q('camp-close');
-  const elDescendPreview = q('camp-descend-preview');
 
   /** Reward chip for an engagement id: hint always, Claim button when done+unclaimed. */
   function rewardChip(eid, done) {
@@ -109,15 +108,6 @@ export function createCamp({ readEngagement, readBadges, readClaimed, onClaim, o
       </div>`;
     }).join('');
     elBadgeCount.textContent = `${unlocked.length}/${BADGES.length}`;
-    // Descend preview: client estimate of the next Descend's find-weight bonus.
-    const leq = eng.leq ?? 0;
-    const bps = Math.min(30000, 10000 + 2500 * Math.sqrt(leq));
-    const pct = ((bps - 10000) / 100).toFixed(0);
-    if (elDescendPreview) {
-      elDescendPreview.textContent = leq > 0
-        ? `You have ${leq} leq — next Descend would give ~+${pct}% find weight.`
-        : 'Find a legendary gem to unlock Descend.';
-    }
     void deltas;
   }
 
