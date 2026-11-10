@@ -68,9 +68,9 @@ export function nextTier(p) {
   return p.tier === 0 ? 1 : p.tier + 1;
 }
 
-/** `buy tool` for the first one, `upgrade tool` thereafter (SPEC section 4). */
+/** `claim tool` for the first one (free), `upgrade tool` thereafter. */
 export function buyOrUpgradeLabel(p) {
-  return p.tier === 0 ? 'buy tool' : 'upgrade tool';
+  return p.tier === 0 ? 'claim tool' : 'upgrade tool';
 }
 
 /**

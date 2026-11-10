@@ -2190,6 +2190,20 @@ button.chip { position: relative; }
   line-height: 1.4;
 }
 
+/* ---- Free-claim gas guidance: DOM centre toast with a real link
+   (deepwoodFlash is Phaser text and cannot carry a click target). ---- */
+.flash-action {
+  position: fixed; left: 50%; top: 42%; transform: translate(-50%, -50%);
+  background: #0d1a10ee; border: 1px solid #2a4a33; border-radius: 12px;
+  padding: 14px 18px; z-index: 120; text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px;
+  color: #fff8d0; box-shadow: var(--shadow);
+}
+.flash-action a {
+  display: inline-block; margin-top: 8px; color: #9fe870;
+  font-weight: 700; text-decoration: underline; cursor: pointer;
+}
+
 /* ---- Mobile ---- */
 @media (max-width: 480px) {
   #gemstrip { overflow-x: auto; -webkit-overflow-scrolling: touch; }

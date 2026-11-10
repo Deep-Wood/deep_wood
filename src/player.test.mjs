@@ -53,9 +53,9 @@ test('a new player has no gems', () => {
   assert.deepEqual(newPlayer().gems, [0, 0, 0, 0, 0]);
 });
 
-test('the first action is labelled "buy tool", later ones "upgrade tool"', () => {
+test('the first action is labelled "claim tool" (free), later ones "upgrade tool"', () => {
   const p = newPlayer();
-  assert.equal(buyOrUpgradeLabel(p), 'buy tool');
+  assert.equal(buyOrUpgradeLabel(p), 'claim tool');
   assert.equal(nextTier(p), 1);
   buyTool(p, 1, RICH);
   assert.equal(buyOrUpgradeLabel(p), 'upgrade tool');

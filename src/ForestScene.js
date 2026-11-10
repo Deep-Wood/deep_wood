@@ -1580,7 +1580,7 @@ export class ForestScene extends Phaser.Scene {
       const cost = toolPrice(nt);
       const chk = canBuyTool(p, nt, balance);
       const shortLabel = `${buyOrUpgradeLabel(p)} ${toolName(nt)} ${fmtEth(cost)}`;
-      const verb = buyOrUpgradeLabel(p).startsWith('upgrade') ? 'upgrade' : 'buy';
+      const verb = buyOrUpgradeLabel(p).startsWith('upgrade') ? 'upgrade' : 'claim';
       const nm = toolName(nt);
       buy.innerHTML = UPGRADE_GLYPH;
       buy.setAttribute('aria-label', `${verb} ${nm}`);
@@ -1672,7 +1672,11 @@ export class ForestScene extends Phaser.Scene {
               optToken.textContent = 'FREE';
               optToken.title = 'claim it free — costs 0 $DEEPWOOD';
               optEth.closest('.pay-row')?.remove();
-              if (!buy.disabled) buy.title = `${buyOrUpgradeLabel(p)} ${toolName(nt)} — FREE`;
+              // A free tier must never be balance-gated in the UI: a brand-new
+              // wallet has 0 ETH, and canBuyTool disables the button on
+              // "Need 0.005 ETH". Gas is checked at claim time instead.
+              buy.disabled = false;
+              buy.title = `claim ${toolName(nt)} — FREE`;
             } else {
               const s = (Number(liveCost) / 1e18).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
               optToken.title = `pay ~${s} $DEEPWOOD (10% discount)`;
@@ -1722,7 +1726,7 @@ export class ForestScene extends Phaser.Scene {
 
         el.appendChild(dd);
 
-        buy.onclick = (e) => {
+        buy.onclick = async (e) => {
           e.stopPropagation();
           // An upgrade attempt while the current tool still has uses. Shown in
           // the GAME AREA (the centre toast), not the belt: this is feedback
@@ -1732,6 +1736,18 @@ export class ForestScene extends Phaser.Scene {
           if (!chk.ok && chk.reason && chk.reason.startsWith('Use up your')) {
             window.deepwoodFlash?.(chk.reason);
             return;
+          }
+          // Free tier (live on-chain price 0): claim DIRECTLY — no dropdown,
+          // no quote dialog. The wallet's signature prompt is the only step.
+          // A transient misread of 0 falls through to the normal flow, where
+          // the real price is re-read before anything is signed.
+          if (onchainActive()) {
+            const liveCost = await this.estimateTokenCost(nt);
+            if (liveCost === 0n) {
+              closeBuyDropdown();
+              await this.directClaimFree(nt);
+              return;
+            }
           }
           const isOpen = dd.classList.contains('open');
           closeBuyDropdown();
@@ -1777,7 +1793,7 @@ export class ForestScene extends Phaser.Scene {
     // The icon + label go into the column wrapper; the wrapper goes into the rail.
     const blbl = document.createElement('span');
     blbl.className = 'rail-action-label';
-    blbl.textContent = nt > 5 ? 'max tier' : (buyOrUpgradeLabel(p).startsWith('upgrade') ? 'upgrade tool' : 'buy tool');
+    blbl.textContent = nt > 5 ? 'max tier' : (buyOrUpgradeLabel(p).startsWith('upgrade') ? 'upgrade tool' : 'claim tool');
     bwrap.appendChild(buy);
     bwrap.appendChild(blbl);
     el.appendChild(bwrap);
@@ -2421,18 +2437,21 @@ export class ForestScene extends Phaser.Scene {
       this.tokenAddress,
       account
     );
-    // Show the quote BEFORE anything else — even when the balance is short,
-    // the player must see the total cost first and accept it; only after
-    // Accept do we check funds / approve / send.
-    const shortToken = (Number(tokenCost) / 1e18).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-    const accepted = await this.showQuoteDialog(tier, shortToken, 30);
-    if (!accepted) {
-      this.beltMsg('Quote cancelled', 'bad');
-      return;
-    }
-    if (tokenBalance < tokenCost) {
-      window.deepwoodFlash?.(`Not enough $DEEPWOOD (have ${(Number(tokenBalance)/1e18).toFixed(2)})`);
-      return;
+    // Free tier (price 0): no quote dialog, no balance sheet — the click
+    // already committed to claiming, and the wallet signature is the only
+    // confirm. Paid tiers keep the explicit Accept: the player must see the
+    // total cost before any funds move.
+    if (tokenCost > 0n) {
+      const shortToken = (Number(tokenCost) / 1e18).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      const accepted = await this.showQuoteDialog(tier, shortToken, 30);
+      if (!accepted) {
+        this.beltMsg('Quote cancelled', 'bad');
+        return;
+      }
+      if (tokenBalance < tokenCost) {
+        window.deepwoodFlash?.(`Not enough $DEEPWOOD (have ${(Number(tokenBalance)/1e18).toFixed(2)})`);
+        return;
+      }
     }
 
     // Check allowance — if insufficient, approve first
@@ -2509,6 +2528,66 @@ export class ForestScene extends Phaser.Scene {
     this.refreshBelt();
     window.renderGems?.(); window.renderHunter?.();
     this.updateHud();
+  }
+
+  /**
+   * Free-tier claim (e.g. the Wood tool at price 0): no dropdown, no quote
+   * dialog — straight to the signature. The only thing that can block a
+   * first-timer here is gas: an empty wallet cannot sign ANY transaction, so
+   * the flash offers the faucet link and copies the wallet address to the
+   * clipboard on the way out, so the faucet page is a single paste.
+   */
+  async directClaimFree(tier) {
+    if (!onchainActive()) {
+      this.beltMsg('Claiming needs a wallet — use Email Login', 'bad');
+      return;
+    }
+    const { getState } = await import('./wallet.js');
+    const { account } = getState();
+    await this.refreshChainBalance();
+    const have = this.chainBalanceWei ?? 0n;
+    if (have === 0n) {
+      this.flashAction('Insufficient balance for gas', {
+        linkText: 'Claim faucet',
+        href: 'https://faucet.testnet.chain.robinhood.com',
+        onOpen: () => {
+          // Copy the address with the click gesture this link IS. Any
+          // clipboard failure (permissions, insecure context) must never
+          // block opening the faucet.
+          try { navigator.clipboard.writeText(account ?? '').catch(() => {}); } catch { /* ignore */ }
+        },
+      });
+      return;
+    }
+    await this.doBuyToolWithToken(tier);
+  }
+
+  /**
+   * DOM centre toast with one action link. deepwoodFlash is Phaser text and
+   * cannot carry a click target; gas/refill guidance needs a real link.
+   * One at a time: a new message replaces a lingering one.
+   */
+  flashAction(msg, { linkText, href, onOpen } = {}) {
+    document.querySelector('.flash-action')?.remove();
+    const el = document.createElement('div');
+    el.className = 'flash-action';
+    const text = document.createElement('div');
+    text.textContent = msg;
+    el.appendChild(text);
+    if (linkText && href) {
+      const a = document.createElement('a');
+      a.textContent = linkText;
+      a.href = href;
+      a.onclick = (e) => {
+        e.preventDefault();
+        try { onOpen?.(); } catch { /* ignore */ }
+        window.open(href, '_blank', 'noopener');
+        el.remove();
+      };
+      el.appendChild(a);
+    }
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 8000);
   }
 
   /**
@@ -4298,7 +4377,7 @@ export class ForestScene extends Phaser.Scene {
         this._brokenAt = now;
         this.openBelt();
         this.flash(this.econ.tier === 0
-          ? 'No tool yet\nbuy your first tool to start hunting.'
+          ? 'No tool yet\nclaim your first tool — it is free — to start hunting.'
           : 'Pick broken \u2014 repair with gems or upgrade to keep hunting.');
       }
       return;

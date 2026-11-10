@@ -71,7 +71,10 @@ test('boots against the deployed contract', async () => {
     assert.ok(onChain.tiers[1].table[1] > 0n,
       'pre-redeploy fingerprint: tier 1 can drop Amber');
   } else {
-    assert.ok(onChain.tiers[1].cost > 0n, 'redeploy tier 1 must cost ETH');
+    // Free-Wood campaign (owner `setToolPrices` 2026-11-10): tier 1 is claimed
+    // for 0 $DEEPWOOD again — the reversal of the redesign this comment once
+    // anticipated. Tiers 2-5 stay priced. Wood drops Quartz only.
+    assert.equal(onChain.tiers[1].cost, 0n, 'campaign: tier 1 (Wood) is free');
     assert.equal(onChain.tiers[1].table[1], 0n, 'Wood drops Quartz only');
   }
 
