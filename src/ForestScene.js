@@ -1657,17 +1657,36 @@ export class ForestScene extends Phaser.Scene {
         const optToken = document.createElement('button');
         optToken.className = 'wm-item';
         optToken.type = 'button';
-        const tokenCost = this.estimateTokenCost(nt);
-        const shortToken = tokenCost > 0
-          ? (Number(tokenCost) / 1e18).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-          : '???';
         optToken.textContent = 'Pay DeepWood (10% off)';
-        optToken.title = `pay ~${shortToken} $DEEPWOOD (10% discount)`;
-        optToken.onclick = (e) => {
+        // The live token cost only resolves async. When the chain prices this
+        // tier at 0 (free-Wood campaign: owner set toolPrices[0] = 0), the row
+        // becomes FREE and the ETH row is removed — buyToolWithEth always sends
+        // a fixed 0.005 ETH, and nobody should pay real ETH for a free tool.
+        // A transient read failure briefly keeps both rows; the next HUD sync
+        // re-renders and corrects it. OFFLINE mode keeps both rows: the local
+        // sim economy still charges, so estimateTokenCost's 0n fallback must
+        // not be mistaken for a free tier.
+        if (onchainActive()) {
+          void this.estimateTokenCost(nt).then((liveCost) => {
+            if (liveCost === 0n) {
+              optToken.textContent = 'FREE';
+              optToken.title = 'claim it free — costs 0 $DEEPWOOD';
+              optEth.closest('.pay-row')?.remove();
+              if (!buy.disabled) buy.title = `${buyOrUpgradeLabel(p)} ${toolName(nt)} — FREE`;
+            } else {
+              const s = (Number(liveCost) / 1e18).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+              optToken.title = `pay ~${s} $DEEPWOOD (10% discount)`;
+            }
+          }).catch(() => {});
+        }
+        optToken.onclick = async (e) => {
           e.stopPropagation(); closeBuyDropdown();
-          const dwBalance = this._deepwoodBalance ?? 0n;
-          const dwCost = this.estimateTokenCost(nt);
-          if (dwBalance < dwCost) {
+          const dwCost = await this.estimateTokenCost(nt);
+          // Guard only when a REAL balance is known — _deepwoodBalance is
+          // often unset, and 0n < cost must not block a purchasable tool
+          // (the buy flow itself re-reads the live balance after the quote).
+          const dwBalance = this._deepwoodBalance;
+          if (dwCost > 0n && typeof dwBalance === 'bigint' && dwBalance < dwCost) {
             window.deepwoodFlash?.(`Not enough $DEEPWOOD (have ${(Number(dwBalance)/1e18).toFixed(2)})`);
             return;
           }
@@ -2545,6 +2564,16 @@ export class ForestScene extends Phaser.Scene {
     const reader = await getReader();
     if (!reader) { this.beltMsg('chain not configured', 'bad'); return; }
     const cost = await reader.toolCost(tier);
+
+    // Free tier (free-Wood campaign): on-chain token price is 0. The ETH path
+    // swaps a FIXED 0.005 ETH into tokens before buying — the player would pay
+    // real ETH for a free tool. Refuse and point at the token path, which
+    // charges 0. (Checked on the raw cost, not estimateTokenCost — that helper
+    // swallows RPC errors into 0n and must never block a priced ETH buy.)
+    if (cost === 0n) {
+      this.beltMsg(`${toolName(tier)} is free — pay 0 $DEEPWOOD instead`, 'ok');
+      return;
+    }
 
     const { account } = getState();
     if (!account) {
