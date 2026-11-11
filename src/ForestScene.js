@@ -2608,6 +2608,15 @@ export class ForestScene extends Phaser.Scene {
   async _doBuyToolWithEth(tier) {
     const p = this.econ;
 
+    // wallet.js is needed by BOTH branches below: getState() in the offline
+    // path, getState() + sendTo() on chain. Declare it ONCE here. A
+    // function-scoped `const getState` is hoisted-but-uninitialized for the
+    // whole body, so the later declaration this used to carry made the earlier
+    // offline read throw "Cannot access 'getState' before initialization" on
+    // every Pay-ETH click from a visitor with no wallet connected (prod,
+    // V10.2 bundle) -- the button did nothing.
+    const { getState, sendTo } = await import('./wallet.js');
+
     // OFFLINE: the local economy is authoritative and nothing leaves the page.
     if (!onchainActive()) {
       const st = getState();
@@ -2639,7 +2648,6 @@ export class ForestScene extends Phaser.Scene {
     // ON-CHAIN: read the real tool cost from the contract
     this.beltMsg('Reading tool price…', 'busy');
     const { getReader, pollUntilChanged } = await import('./onchain.js');
-    const { getState, sendTo } = await import('./wallet.js');
     const reader = await getReader();
     if (!reader) { this.beltMsg('chain not configured', 'bad'); return; }
     const cost = await reader.toolCost(tier);
